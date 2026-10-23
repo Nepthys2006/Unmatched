@@ -62,5 +62,13 @@
     "count": 3
    }
   }
+ },
+ "pandora": {
+  "cards": {
+   "10": {
+    "usedBy": "Any",
+    "fighters": []
+   }
+  }
  }
 }

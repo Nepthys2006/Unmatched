@@ -6,6 +6,7 @@ import 'amaze.dart';
 import 'bol1.dart';
 import 'bol2.dart';
 import 'bol3.dart';
+import 'bol_more.dart';
 import 'buffy.dart';
 import 'cobble.dart';
 import 'fables.dart';
@@ -66,6 +67,9 @@ final Map<String, HeroScript Function()> heroScripts = {
   'robert-muldoon': Muldoon.new,
   'dr-sattler': Sattler.new,
   't-rex': TRex.new,
+  'bloody-mary': BloodyMary.new,
+  'chupacabra': Chupacabra.new,
+  'pandora': Pandora.new,
 };
 
 /// Heroes whose ability and every card are scripted and tested.

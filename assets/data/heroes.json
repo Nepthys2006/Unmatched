@@ -8405,14 +8405,12 @@
     "value": 0,
     "boost": 3,
     "copies": 3,
-    "usedBy": "Pandora",
+    "usedBy": "Any",
     "text": {
      "immediately": "Cancel all effects on your opponent's card.",
      "after": "Pandora recovers 1 health for each revealed MISERY."
     },
-    "fighters": [
-     "pandora"
-    ]
+    "fighters": []
    },
    {
     "index": 11,
