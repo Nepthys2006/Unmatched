@@ -553,6 +553,7 @@ function sizePiece(p) {
 
 function disposePiece(p) {
   scene.remove(p.group);
+  if (p.tail) scene.remove(p.tail);
   p.group.traverse(o => {
     if (o.material) { if (o.material.map && o.material.map !== GLOW && o.material.map !== RETICLE) o.material.map.dispose(); o.material.dispose(); }
   });
@@ -561,6 +562,33 @@ function disposePiece(p) {
 function placePiece(p) {
   const s = spaces.get(p.space);
   if (s) p.group.position.set(s.x, s.top, s.z);
+}
+
+/** A large fighter in two spaces (T. Rex): a smaller orb on the back space, joined by a bar. */
+function placeTail(p) {
+  const t = p.tailSpace != null && !p.anim ? spaces.get(p.tailSpace) : null;
+  if (!t) { if (p.tail) p.tail.visible = false; return; }
+  if (!p.tail) {
+    const color = new THREE.Color(p.color);
+    p.tail = new THREE.Group();
+    const knob = new THREE.Mesh(orbGeo, new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: .35, roughness: .35 }));
+    knob.scale.setScalar(p.rad * .6);
+    knob.position.y = p.rad * .6 + .08;
+    const bar = new THREE.Mesh(new THREE.CylinderGeometry(.06, .06, 1, 10), basic(color, .6));
+    bar.name = 'bar';
+    p.tail.add(knob, bar);
+    scene.add(p.tail);
+  }
+  const head = spaces.get(p.space);
+  p.tail.visible = true;
+  p.tail.position.set(t.x, t.top, t.z);
+  const bar = p.tail.getObjectByName('bar');
+  const dx = head.x - t.x, dz = head.z - t.z, len = Math.hypot(dx, dz);
+  bar.scale.set(1, len, 1);
+  bar.position.set(dx / 2, .18, dz / 2);
+  bar.rotation.set(0, 0, 0);
+  bar.lookAt(new V3(t.x + dx, t.top + .18, t.z + dz));
+  bar.rotateX(Math.PI / 2);
 }
 
 /* ---------------------------------------------------------------- marks & tokens */
@@ -626,6 +654,7 @@ function buildMarks(m) {
 
 function buildTokens(tokens) {
   clearGroup(tokenGroup);
+  const shadowCount = {}, insightCount = {};
   for (const t of tokens || []) {
     if (t.kind === 'fog' && spaces.has(t.space)) {
       const c = at(t.space, .22);
@@ -635,6 +664,26 @@ function buildTokens(tokens) {
         sp.scale.setScalar(s);
         tokenGroup.add(sp);
       }
+    } else if (t.kind === 'trap' && spaces.has(t.space)) {
+      // Muldoon's traps: a dark steel ring with an orange rim, at the space's edge.
+      const c = at(t.space, .02);
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(.11, .035, 8, 20).rotateX(Math.PI / 2), new THREE.MeshStandardMaterial({ color: '#3a3a3a', metalness: .7, roughness: .35, emissive: '#f08a3c', emissiveIntensity: .35 }));
+      ring.position.set(c.x + .24, c.y + .03, c.z + .24);
+      tokenGroup.add(ring);
+    } else if (t.kind === 'insight' && spaces.has(t.space)) {
+      // Dr. Sattler's insight tokens: small amber gems, offset so several can share a space.
+      const n = (insightCount[t.space] = (insightCount[t.space] || 0) + 1) - 1;
+      const c = at(t.space, .02);
+      const gem = new THREE.Mesh(new THREE.OctahedronGeometry(.07, 0), new THREE.MeshStandardMaterial({ color: '#f2c14e', roughness: .3, emissive: '#f2c14e', emissiveIntensity: .4 }));
+      gem.position.set(c.x - .26 + n * .12, c.y + .07, c.z - .26);
+      tokenGroup.add(gem);
+    } else if (t.kind === 'shadow' && spaces.has(t.space)) {
+      // Spike's shadow tokens: dark discs with a violet rim, offset so several can share a space.
+      const n = (shadowCount[t.space] = (shadowCount[t.space] || 0) + 1) - 1;
+      const c = at(t.space, .02);
+      const disc = new THREE.Mesh(new THREE.CylinderGeometry(.13, .13, .03, 24), new THREE.MeshStandardMaterial({ color: '#1a0f24', roughness: .6, emissive: '#b04be0', emissiveIntensity: .35 }));
+      disc.position.set(c.x - .22 + n * .14, c.y + .015 + n * .03, c.z + .22);
+      tokenGroup.add(disc);
     } else if (t.a != null && spaces.has(t.a) && spaces.has(t.b)) {
       const m = at(t.a).lerp(at(t.b), .5);
       const d = new THREE.Mesh(new THREE.OctahedronGeometry(.15, 0), new THREE.MeshStandardMaterial({ color: '#1c1c1c', roughness: .5, emissive: '#c8352c', emissiveIntensity: .25 }));
@@ -666,7 +715,9 @@ function applyState(s) {
       drawLabel(p);
     }
     p.space = f.space;
+    p.tailSpace = f.tail;
     if (!p.anim) placePiece(p);
+    placeTail(p);
   }
   for (const [id, p] of pieces) if (!seen.has(id)) { disposePiece(p); pieces.delete(id); }
   marks = s.marks || {};

@@ -303,7 +303,7 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
       't': 'state',
       'fighters': [
         for (final f in game.fighters)
-          if (f.onBoard) {'id': f.uid, 'space': f.space, 'color': _hex(colorOf(f.owner)), 'hero': f.isHero, 'hp': f.hp, 'name': f.name},
+          if (f.onBoard) {'id': f.uid, 'space': f.space, 'tail': f.tail, 'color': _hex(colorOf(f.owner)), 'hero': f.isHero, 'hp': f.hp, 'name': f.name},
       ],
       'marks': {
         'select': [for (final f in _marks.select) f.uid],
@@ -321,8 +321,8 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
       },
       'tokens': [
         for (final t in game.board.tokens)
-          if (t.kind == 'fog' && t.space != null)
-            {'kind': 'fog', 'space': t.space}
+          if (t.space != null)
+            {'kind': t.kind, 'space': t.space}
           else if (t.path != null)
             {'kind': t.kind, 'a': t.path!.$1, 'b': t.path!.$2},
       ],

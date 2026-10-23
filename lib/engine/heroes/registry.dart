@@ -6,8 +6,11 @@ import 'amaze.dart';
 import 'bol1.dart';
 import 'bol2.dart';
 import 'bol3.dart';
+import 'buffy.dart';
 import 'cobble.dart';
 import 'fables.dart';
+import 'jurassic.dart';
+import 'legends.dart';
 import 'marvel_buffy.dart';
 import 'slings.dart';
 import 'tmnt.dart';
@@ -54,6 +57,15 @@ final Map<String, HeroScript Function()> heroScripts = {
   'krang': Krang.new,
   'loki': Loki.new,
   'blackbeard': Blackbeard.new,
+  'bruce-lee': BruceLee.new,
+  'muhammad-ali': MuhammadAli.new,
+  'angel': Angel.new,
+  'buffy': Buffy.new,
+  'spike': Spike.new,
+  'raptors': Raptors.new,
+  'robert-muldoon': Muldoon.new,
+  'dr-sattler': Sattler.new,
+  't-rex': TRex.new,
 };
 
 /// Heroes whose ability and every card are scripted and tested.

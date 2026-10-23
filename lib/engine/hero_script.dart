@@ -94,6 +94,13 @@ abstract class Mod {
 
   /// [f] finished moving along [path] (normal movement, not placement).
   Future<void> afterMove(Game g, Fighter f, List<int> path) async {}
+
+  /// Where a move along [path] must stop early, as an index into [path] (Muldoon's traps), or
+  /// null to let it finish.
+  int? stopMove(Game g, Fighter f, List<int> path) => null;
+
+  /// [f] arrived in [space] by moving, being placed or swapping (traps go off).
+  Future<void> entered(Game g, Fighter f, int space) async {}
 }
 
 /// A mod that lasts until the end of the current turn.
@@ -371,6 +378,9 @@ abstract class HeroScript extends Mod {
 
   /// Fighters that start off the board (Sun Wukong's Clones).
   bool startsInReserve(Fighter f) => false;
+
+  /// Large fighters (T. Rex) occupy their space and the one they last moved from.
+  bool isLarge(Fighter f) => false;
 
   /// Places sidekicks at the start of the game: in the hero's zone, one by one.
   Future<void> placeSidekicks() async {

@@ -28,6 +28,7 @@ class Card {
 }
 
 const _singular = {
+  'raptors': 'Raptor',
   'harpies': 'Harpy',
   'archers': 'Archer',
   'outlaws': 'Outlaw',
@@ -49,6 +50,10 @@ class Fighter {
   int hp;
   int maxHp;
   int? space;
+
+  /// Large fighters (T. Rex) may also occupy the space they last moved from (the back of their
+  /// base). Null for everyone else.
+  int? tail;
   bool defeated = false;
 
   /// Temporarily off the board but not defeated (Vanish, Vanish Into Murder).
@@ -61,6 +66,9 @@ class Fighter {
   bool get isSidekick => !def.isHero;
   bool get onBoard => !defeated && !offBoard && !reserve && space != null;
   bool get alive => !defeated && !reserve;
+
+  /// Every space this fighter occupies (two for a large fighter in two spaces).
+  Iterable<int> get spaces => onBoard ? [space!, ?tail] : const [];
   String get id => def.id;
   AttackType get attack => owner.script.attackTypeOf(this);
   bool get isRanged => attack == AttackType.ranged;
@@ -73,6 +81,8 @@ class Fighter {
 
   /// Name for one fighter: "Harpy" rather than "Harpies".
   String get name {
+    // A pack of heroes (the Raptors) are told apart by number.
+    if (isHero && def.count > 1) return '${_singular[def.name.toLowerCase()] ?? def.name} $ordinal';
     if (isHero) return owner.script.heroName;
     final base = _singular[def.name.toLowerCase()] ?? def.name;
     return def.count > 1 ? '$base $ordinal' : base;
@@ -116,10 +126,15 @@ class Player {
   String label = '';
   bool isAI = false;
 
-  Fighter get heroFighter => fighters.firstWhere((f) => f.isHero);
+  /// The hero (for a pack of heroes like the Raptors: the first one still standing).
+  Fighter get heroFighter => fighters.firstWhere((f) => f.isHero && !f.defeated, orElse: () => fighters.firstWhere((f) => f.isHero));
+
+  /// Every hero fighter (more than one only for the Raptors).
+  Iterable<Fighter> get heroes => fighters.where((f) => f.isHero);
   Iterable<Fighter> get onBoard => fighters.where((f) => f.onBoard);
   Iterable<Fighter> get alive => fighters.where((f) => f.alive);
-  bool get defeated => heroFighter.defeated;
+  /// A player is beaten when all of their heroes are defeated.
+  bool get defeated => heroes.every((f) => f.defeated);
   String get name => script.heroName;
 
   @override

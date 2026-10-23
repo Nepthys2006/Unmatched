@@ -195,6 +195,48 @@ class BoardLayerPainter extends CustomPainter {
         for (final o in const [Offset(-0.45, 0.1), Offset(0.4, 0.15), Offset(0, -0.2), Offset(0.05, 0.3)]) {
           canvas.drawCircle(c + o * r, r * 0.5, cloud);
         }
+      } else if (t.kind == 'trap' && t.space != null) {
+        // Muldoon's traps: a steel jaw (orange ring with teeth).
+        final c = geo.of(t.space!) + Offset(r * 0.55, r * 0.55);
+        final jaw = Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = r * 0.08
+          ..color = const Color(0xFFF08A3C);
+        canvas.drawCircle(c, r * 0.32, Paint()..color = const Color(0xE6202020));
+        canvas.drawCircle(c, r * 0.32, jaw);
+        for (var i = 0; i < 6; i++) {
+          final a = i * math.pi / 3;
+          final d = Offset(math.cos(a), math.sin(a));
+          canvas.drawLine(c + d * r * 0.12, c + d * r * 0.3, jaw);
+        }
+      } else if (t.kind == 'insight' && t.space != null) {
+        // Dr. Sattler's insight tokens: small amber gems (several can share a space).
+        final c = geo.of(t.space!);
+        final n = game.board.tokens.where((o) => o.kind == 'insight' && o.space == t.space).toList().indexOf(t);
+        final o = c + Offset(-r * 0.6 + n * r * 0.28, -r * 0.62);
+        canvas.drawCircle(o, r * 0.2, Paint()..color = const Color(0xFFF2C14E));
+        canvas.drawCircle(
+          o,
+          r * 0.2,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = r * 0.05
+            ..color = const Color(0xFF3A2A08),
+        );
+      } else if (t.kind == 'shadow' && t.space != null) {
+        // Spike's shadow tokens: a dark smoky disc (several can share a space).
+        final c = geo.of(t.space!);
+        final n = game.board.tokens.where((o) => o.kind == 'shadow' && o.space == t.space).toList().indexOf(t);
+        final o = c + Offset(-r * 0.55 + n * r * 0.3, r * 0.55);
+        canvas.drawCircle(o, r * 0.36, Paint()..color = const Color(0xE61A0F24));
+        canvas.drawCircle(
+          o,
+          r * 0.36,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = r * 0.07
+            ..color = const Color(0xFFB04BE0),
+        );
       } else if (t.path != null) {
         final a = geo.of(t.path!.$1), b = geo.of(t.path!.$2);
         final m = Offset.lerp(a, b, 0.5)!;
@@ -216,7 +258,22 @@ class BoardLayerPainter extends CustomPainter {
       }
     }
 
-    // Fighters.
+    // Fighters. A large fighter in two spaces (T. Rex) shows the back of her base as a band to a
+    // smaller orb on the second space.
+    for (final f in game.fighters) {
+      if (!f.onBoard || f.tail == null || move.value?.fighter == f) continue;
+      final a = geo.of(f.space!), b = geo.of(f.tail!);
+      final color = colorOf(f.owner);
+      canvas.drawLine(a, b, Paint()
+        ..color = color.withValues(alpha: 0.55)
+        ..strokeWidth = r * 0.9
+        ..strokeCap = StrokeCap.round);
+      canvas.drawCircle(b, r * 0.5, Paint()..color = Color.lerp(color, Colors.black, 0.3)!);
+      canvas.drawCircle(b, r * 0.5, Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = r * 0.06
+        ..color = Palette.bone.withValues(alpha: 0.7));
+    }
     for (final f in game.fighters) {
       if (!f.onBoard) continue;
       _orb(canvas, f, _posOf(f), r, glow, p);

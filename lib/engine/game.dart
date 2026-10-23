@@ -841,6 +841,7 @@ class Game {
     f.defeated = true;
     f.hp = 0;
     f.space = null;
+    f.tail = null;
     f.offBoard = false;
     await emit(Defeated(f));
     for (final m in allMods.toList()) {
@@ -1020,19 +1021,22 @@ class Game {
 
   Fighter? fighterAt(int space) {
     for (final f in fighters) {
-      if (f.onBoard && f.space == space) return f;
+      if (f.onBoard && (f.space == space || f.tail == space)) return f;
     }
     return null;
   }
 
   bool isEmpty(int space) => fighterAt(space) == null;
   Iterable<int> emptySpaces() => board.spaceIds.where(isEmpty);
-  bool adjacent(Fighter a, Fighter b) => a.onBoard && b.onBoard && board.adjacent(a.space!, b.space!);
-  bool sameZone(Fighter a, Fighter b) => a.onBoard && b.onBoard && board.sharesZone(a.space!, b.space!);
-  Iterable<Fighter> adjacentFighters(Fighter f) => f.onBoard ? onBoard.where((o) => board.adjacent(f.space!, o.space!)) : const [];
-  Iterable<Fighter> fightersInZoneOf(Fighter f) =>
-      f.onBoard ? onBoard.where((o) => board.sharesZone(f.space!, o.space!)) : const [];
-  Iterable<int> zoneSpaces(Fighter f) => f.onBoard ? board.zoneOf(f.space!) : const [];
+  // A large fighter in two spaces is adjacent to every space next to either, and in all zones
+  // of both (T. Rex); everyone else has a single space.
+  bool adjacent(Fighter a, Fighter b) =>
+      a != b && a.onBoard && b.onBoard && a.spaces.any((x) => b.spaces.any((y) => board.adjacent(x, y)));
+  bool sameZone(Fighter a, Fighter b) =>
+      a.onBoard && b.onBoard && a.spaces.any((x) => b.spaces.any((y) => board.sharesZone(x, y)));
+  Iterable<Fighter> adjacentFighters(Fighter f) => f.onBoard ? onBoard.where((o) => adjacent(f, o)) : const [];
+  Iterable<Fighter> fightersInZoneOf(Fighter f) => f.onBoard ? onBoard.where((o) => sameZone(f, o)) : const [];
+  Iterable<int> zoneSpaces(Fighter f) => f.onBoard ? {for (final s in f.spaces) ...board.zoneOf(s)} : const [];
   bool startedTurnElsewhere(Fighter f) => turn.startSpace.containsKey(f) && turn.startSpace[f] != f.space;
   bool cannotLeave(Fighter f) => allMods.any((m) => m.cannotLeave(this, f));
 
@@ -1040,7 +1044,26 @@ class Game {
   /// opposing fighters is allowed only with [throughOpp]; the path chosen passes through as many
   /// of them as possible (for "deal damage to each fighter moved through").
   Map<int, List<int>> reachable(Fighter f, int steps, {bool throughOpp = false}) {
-    final start = f.space!;
+    // A large fighter may start moving from either space she occupies.
+    if (f.tail != null && steps > 0 && !cannotLeave(f)) {
+      final fromTail = _reachableFrom(f, f.tail!, steps, throughOpp);
+      final fromFront = _reachableFrom(f, f.space!, steps, throughOpp);
+      final out = <int, List<int>>{...fromTail};
+      for (final e in fromFront.entries) {
+        final cur = out[e.key];
+        if (cur == null || e.value.length <= cur.length) out[e.key] = e.value;
+      }
+      return out;
+    }
+    return _reachableFrom(f, f.space!, steps, throughOpp);
+  }
+
+  Map<int, List<int>> _reachableFrom(Fighter f, int start, int steps, bool throughOpp) {
+    bool isEmpty(int s) {
+      final o = fighterAt(s);
+      return o == null || o == f;
+    }
+
     final out = <int, List<int>>{start: [start]};
     if (steps <= 0 || cannotLeave(f)) return out;
     bool enemyAt(int s) {
@@ -1114,13 +1137,25 @@ class Game {
     final dest = await chooseSpace(who, reach.keys, text ?? 'Move ${f.name} up to $upTo space${upTo == 1 ? '' : 's'}',
         intent: who == f.owner ? Intent.moveOwn : Intent.moveEnemy, subject: f, source: source);
     if (dest == null || dest == f.space) return [f.space!];
-    final path = reach[dest]!;
-    f.space = dest;
+    var path = reach[dest]!;
+    // Something along the way can stop the move early (a trap).
+    for (final m in allMods) {
+      final stop = m.stopMove(this, f, path);
+      if (stop != null && stop > 0 && stop < path.length - 1) path = path.sublist(0, stop + 1);
+    }
+    f.space = path.last;
+    if (f.owner.script.isLarge(f)) {
+      // The back of her base points at the space she just moved from.
+      final prev = path.length >= 2 ? path[path.length - 2] : null;
+      f.tail = prev != null && (fighterAt(prev) == null || fighterAt(prev) == f) && prev != f.space ? prev : f.tail;
+      if (f.tail == f.space) f.tail = null;
+    }
     turn.leftSpace.add(f);
     await emit(FighterMoved(f, path));
     for (final m in allMods.toList()) {
       await m.afterMove(this, f, path);
     }
+    await _entered(f);
     return path;
   }
 
@@ -1132,7 +1167,7 @@ class Game {
       await say("${f.name} can't leave their space.");
       return false;
     }
-    final options = spaces.where((s) => isEmpty(s) || s == f.space).toSet().toList();
+    final options = spaces.where((s) => isEmpty(s) || fighterAt(s) == f).toSet().toList();
     if (options.isEmpty) return false;
     final who = chooser ?? f.owner;
     final s = await chooseSpace(who, options, text ?? 'Place ${f.name}',
@@ -1140,13 +1175,34 @@ class Game {
     if (s == null || s == f.space) return false;
     final from = f.space!;
     f.space = s;
+    f.tail = null;
     turn.leftSpace.add(f);
     await emit(FighterMoved(f, [from, s], placed: true));
+    if (f.owner.script.isLarge(f)) await placeTail(f, who);
+    await _entered(f);
     return true;
+  }
+
+  /// A large fighter just placed: whoever placed her picks which adjacent empty space the back of
+  /// her base covers (none if there is no room).
+  Future<void> placeTail(Fighter f, Player who) async {
+    final room = board.neighbours(f.space!).where(isEmpty).toList();
+    if (room.isEmpty) return;
+    f.tail = await chooseSpace(who, room, 'Which space does the back of ${f.name} cover?', intent: Intent.none, subject: f);
+  }
+
+  Future<void> _entered(Fighter f) async {
+    if (!f.onBoard) return;
+    for (final m in allMods.toList()) {
+      if (f.onBoard) await m.entered(this, f, f.space!);
+    }
   }
 
   Future<bool> swap(Fighter a, Fighter b) async {
     if (!a.onBoard || !b.onBoard || cannotLeave(a) || cannotLeave(b)) return false;
+    // A large fighter swapping ends up in a single space.
+    a.tail = null;
+    b.tail = null;
     final s = a.space;
     a.space = b.space;
     b.space = s;
@@ -1154,6 +1210,8 @@ class Game {
       ..add(a)
       ..add(b);
     await emit(Swapped(a, b));
+    await _entered(a);
+    await _entered(b);
     return true;
   }
 

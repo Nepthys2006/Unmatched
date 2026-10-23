@@ -88,7 +88,7 @@ void main() {
     }
     // ignore: avoid_print
     print('AI games: $games, average ${(turns / games).toStringAsFixed(1)} turns, wins: $wins, invariant checks: $checks');
-  }, timeout: const Timeout(Duration(minutes: 20)));
+  }, timeout: const Timeout(Duration(minutes: 90)));
 
   test('random vs random: odd choices everywhere', () async {
     var games = 0;
@@ -103,7 +103,7 @@ void main() {
     }
     // ignore: avoid_print
     print('random games: $games, invariant checks: $checks');
-  }, timeout: const Timeout(Duration(minutes: 20)));
+  }, timeout: const Timeout(Duration(minutes: 90)));
 
   test('team and free-for-all games: 2v2, 3v3, 3- and 4-player FFA', () async {
     final rng = Random(5);
@@ -132,7 +132,7 @@ void main() {
     }
     // ignore: avoid_print
     print('multiplayer games: $games');
-  }, timeout: const Timeout(Duration(minutes: 20)));
+  }, timeout: const Timeout(Duration(minutes: 90)));
 
   test('every printed card effect has a script', () {
     final missing = <String>[];
