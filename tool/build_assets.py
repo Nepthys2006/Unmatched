@@ -47,7 +47,8 @@ def fighters_of(h):
 
 # Labels in ../heroes.json that are typos or forms of a fighter.
 ALIASES = {"allice": "alice", "thepotter": "theporter", "djkstra": "dijkstra", "harpy": "harpies",
-           "drjekyll": "jekyllhyde", "mrhyde": "jekyllhyde"}
+           "drjekyll": "jekyllhyde", "mrhyde": "jekyllhyde",
+           "ali": "muhammadali", "jilltrent": "drjilltrent"}
 
 
 def match_fighter(label, fighters):

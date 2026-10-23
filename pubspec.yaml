@@ -74,17 +74,31 @@ flutter:
     - assets/cards/achilles/
     - assets/cards/alice/
     - assets/cards/ancient-leshen/
+    - assets/cards/angel/
     - assets/cards/annie-christmas/
     - assets/cards/beowulf/
     - assets/cards/bigfoot/
+    - assets/cards/black-panther/
     - assets/cards/black-widow/
     - assets/cards/blackbeard/
+    - assets/cards/bloody-mary/
+    - assets/cards/bruce-lee/
+    - assets/cards/buffy/
+    - assets/cards/bullseye/
+    - assets/cards/chupacabra/
     - assets/cards/ciri/
+    - assets/cards/cloak-dagger/
+    - assets/cards/daredevil/
+    - assets/cards/deadpool/
     - assets/cards/doctor-strange/
     - assets/cards/donatello/
+    - assets/cards/dr-jill-trent/
+    - assets/cards/dr-sattler/
     - assets/cards/dracula/
+    - assets/cards/elektra/
     - assets/cards/eredin/
     - assets/cards/geralt-of-rivia/
+    - assets/cards/ghost-rider/
     - assets/cards/golden-bat/
     - assets/cards/hamlet/
     - assets/cards/harry-houdini/
@@ -95,35 +109,66 @@ flutter:
     - assets/cards/leonardo/
     - assets/cards/little-red/
     - assets/cards/loki/
+    - assets/cards/luke-cage/
     - assets/cards/medusa/
     - assets/cards/michelangelo/
     - assets/cards/moon-knight/
+    - assets/cards/ms-marvel/
+    - assets/cards/muhammad-ali/
     - assets/cards/nikola-tesla/
+    - assets/cards/oda-nobunaga/
+    - assets/cards/pandora/
     - assets/cards/philippa/
+    - assets/cards/raphael/
+    - assets/cards/raptors/
+    - assets/cards/robert-muldoon/
     - assets/cards/robin-hood/
+    - assets/cards/shakespeare/
+    - assets/cards/she-hulk/
     - assets/cards/sherlock-holmes/
     - assets/cards/shredder/
     - assets/cards/sinbad/
+    - assets/cards/spiderman/
+    - assets/cards/spike/
+    - assets/cards/squirrel-girl/
     - assets/cards/sun-wukong/
+    - assets/cards/t-rex/
     - assets/cards/the-genie/
+    - assets/cards/the-wayward-sisters/
     - assets/cards/titania/
+    - assets/cards/tomoe-gozen/
     - assets/cards/willow/
+    - assets/cards/winter-soldier/
     - assets/cards/yennefer-triss/
     - assets/cards/yennenga/
     - assets/heroes/achilles/
     - assets/heroes/alice/
     - assets/heroes/ancient-leshen/
+    - assets/heroes/angel/
     - assets/heroes/annie-christmas/
     - assets/heroes/beowulf/
     - assets/heroes/bigfoot/
+    - assets/heroes/black-panther/
     - assets/heroes/black-widow/
     - assets/heroes/blackbeard/
+    - assets/heroes/bloody-mary/
+    - assets/heroes/bruce-lee/
+    - assets/heroes/buffy/
+    - assets/heroes/bullseye/
+    - assets/heroes/chupacabra/
     - assets/heroes/ciri/
+    - assets/heroes/cloak-dagger/
+    - assets/heroes/daredevil/
+    - assets/heroes/deadpool/
     - assets/heroes/doctor-strange/
     - assets/heroes/donatello/
+    - assets/heroes/dr-jill-trent/
+    - assets/heroes/dr-sattler/
     - assets/heroes/dracula/
+    - assets/heroes/elektra/
     - assets/heroes/eredin/
     - assets/heroes/geralt-of-rivia/
+    - assets/heroes/ghost-rider/
     - assets/heroes/golden-bat/
     - assets/heroes/hamlet/
     - assets/heroes/harry-houdini/
@@ -134,19 +179,36 @@ flutter:
     - assets/heroes/leonardo/
     - assets/heroes/little-red/
     - assets/heroes/loki/
+    - assets/heroes/luke-cage/
     - assets/heroes/medusa/
     - assets/heroes/michelangelo/
     - assets/heroes/moon-knight/
+    - assets/heroes/ms-marvel/
+    - assets/heroes/muhammad-ali/
     - assets/heroes/nikola-tesla/
+    - assets/heroes/oda-nobunaga/
+    - assets/heroes/pandora/
     - assets/heroes/philippa/
+    - assets/heroes/raphael/
+    - assets/heroes/raptors/
+    - assets/heroes/robert-muldoon/
     - assets/heroes/robin-hood/
+    - assets/heroes/shakespeare/
+    - assets/heroes/she-hulk/
     - assets/heroes/sherlock-holmes/
     - assets/heroes/shredder/
     - assets/heroes/sinbad/
+    - assets/heroes/spiderman/
+    - assets/heroes/spike/
+    - assets/heroes/squirrel-girl/
     - assets/heroes/sun-wukong/
+    - assets/heroes/t-rex/
     - assets/heroes/the-genie/
+    - assets/heroes/the-wayward-sisters/
     - assets/heroes/titania/
+    - assets/heroes/tomoe-gozen/
     - assets/heroes/willow/
+    - assets/heroes/winter-soldier/
     - assets/heroes/yennefer-triss/
     - assets/heroes/yennenga/
   fonts:

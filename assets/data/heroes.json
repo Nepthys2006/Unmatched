@@ -12759,7 +12759,9 @@
     "text": {
      "after": "Draw 1 card. Gain 1 action. [Butterfly] Move your fighter up to 2 spaces."
     },
-    "fighters": []
+    "fighters": [
+     "muhammad-ali"
+    ]
    },
    {
     "index": 2,
@@ -12772,7 +12774,9 @@
     "text": {
      "effect": "Move Ali up to 3 spaces. Ali recovers 2 health. Gain 1 action."
     },
-    "fighters": []
+    "fighters": [
+     "muhammad-ali"
+    ]
    },
    {
     "index": 3,
@@ -12786,7 +12790,9 @@
      "during": "[Butterfly] The value of your opponent's card becomes its printed value and cannot change.",
      "after": "Deal 1 damage to an adjacent fighter."
     },
-    "fighters": []
+    "fighters": [
+     "muhammad-ali"
+    ]
    },
    {
     "index": 4,
@@ -12800,7 +12806,9 @@
      "during": "[Butterfly] You may BOOST this card.",
      "after": "If you won the combat, shuffle a non-scheme card from your discard pile into your deck."
     },
-    "fighters": []
+    "fighters": [
+     "muhammad-ali"
+    ]
    },
    {
     "index": 5,
@@ -12813,7 +12821,9 @@
     "text": {
      "immediately": "Place Ali adjacent to the opposing fighter. Neither fighter can leave their space this turn."
     },
-    "fighters": []
+    "fighters": [
+     "muhammad-ali"
+    ]
    },
    {
     "index": 6,
@@ -12826,7 +12836,9 @@
     "text": {
      "during": "If your fighter started this turn in a different space, this card's value is 5 instead."
     },
-    "fighters": []
+    "fighters": [
+     "muhammad-ali"
+    ]
    },
    {
     "index": 7,
@@ -12840,7 +12852,9 @@
      "immediately": "Move Ali up to 1 space.",
      "during": "If Ali shares no zones with the opposing fighter, ignore the value of the opponent's card."
     },
-    "fighters": []
+    "fighters": [
+     "muhammad-ali"
+    ]
    },
    {
     "index": 8,
@@ -12854,7 +12868,9 @@
      "during": "[Butterfly] Look at your opponent's hand.",
      "after": "Move Ali up to 2 spaces."
     },
-    "fighters": []
+    "fighters": [
+     "muhammad-ali"
+    ]
    },
    {
     "index": 9,
@@ -12867,7 +12883,9 @@
     "text": {
      "effect": "Ali recovers 1 health. Draw 2 cards. If you won a combat this turn, each opponent discards 1 random card."
     },
-    "fighters": []
+    "fighters": [
+     "muhammad-ali"
+    ]
    },
    {
     "index": 10,
@@ -12880,7 +12898,9 @@
     "text": {
      "after": "[Butterfly] If you lost the combat, Ali recovers 3 health."
     },
-    "fighters": []
+    "fighters": [
+     "muhammad-ali"
+    ]
    },
    {
     "index": 11,
@@ -12893,7 +12913,9 @@
     "text": {
      "after": "Move a fighter in the combat up to 2 spaces. [Butterfly] Draw 1 card."
     },
-    "fighters": []
+    "fighters": [
+     "muhammad-ali"
+    ]
    },
    {
     "index": 12,
@@ -12906,7 +12928,9 @@
     "text": {
      "after": "Look at your opponent's hand. If you won the combat, shuffle one of their cards into their deck."
     },
-    "fighters": []
+    "fighters": [
+     "muhammad-ali"
+    ]
    },
    {
     "index": 13,
@@ -12919,7 +12943,9 @@
     "text": {
      "after": "If you dealt 6 or more combat damage this turn, gain 2 actions."
     },
-    "fighters": []
+    "fighters": [
+     "muhammad-ali"
+    ]
    }
   ]
  },
@@ -14403,7 +14429,9 @@
     "text": {
      "after": "Reveal the top card of your deck and your opponent's deck. If your card has a higher BOOST value, deal 3 damage to the opposing fighter."
     },
-    "fighters": []
+    "fighters": [
+     "dr-jill-trent"
+    ]
    },
    {
     "index": 2,
@@ -14429,7 +14457,9 @@
     "text": {
      "immediately": "If your active gadget is Hypnoray Blaster, cancel all effects on your opponent's card."
     },
-    "fighters": []
+    "fighters": [
+     "dr-jill-trent"
+    ]
    },
    {
     "index": 4,
@@ -14442,7 +14472,9 @@
     "text": {
      "after": "Choose one: -Jill Trent recovers 1 health, -Move Jill Trent 1 space, -Draw 1 card"
     },
-    "fighters": []
+    "fighters": [
+     "dr-jill-trent"
+    ]
    },
    {
     "index": 5,

@@ -112,7 +112,10 @@ void main() {
       await pumpUntil(t, () => find.byType(MenuScreen).evaluate().isNotEmpty);
       expect(s.settings.username, 'Daryl');
       expect(find.text('PLAY VS AI'), findsOneWidget);
-      expect(find.text('COMING SOON'), findsNWidgets(2));
+      // LAN and Online are live (no "Coming soon" badge any more).
+      expect(find.text('LAN'), findsOneWidget);
+      expect(find.text('ONLINE'), findsOneWidget);
+      expect(find.text('COMING SOON'), findsNothing);
       await t.pump(const Duration(seconds: 1));
     });
 
