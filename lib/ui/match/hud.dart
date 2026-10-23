@@ -13,6 +13,7 @@ import '../../engine/state.dart';
 import '../shapes.dart';
 import '../theme.dart';
 import '../widgets.dart';
+import 'dials.dart';
 
 // ------------------------------------------------------------------------------- name plates
 
@@ -27,6 +28,7 @@ class PlayerPlate extends StatelessWidget {
     this.active = false,
     this.actionsLeft,
     this.onTap,
+    this.showHandBacks = false,
   });
 
   final Player player;
@@ -34,6 +36,9 @@ class PlayerPlate extends StatelessWidget {
   final String subtitle;
   final bool big;
   final bool active;
+
+  /// Opponents: their hand as card backs (you can see how many, never which).
+  final bool showHandBacks;
 
   /// Shown as pips while it is this player's turn.
   final int? actionsLeft;
@@ -76,10 +81,12 @@ class PlayerPlate extends StatelessWidget {
     final stats = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        HeartBadge(hero.hp, size: big ? 30 : 24),
-        const SizedBox(width: 6),
-        _Count(icon: Icons.style_rounded, value: player.hand.length, tooltip: 'Cards in hand', small: !big),
-        const SizedBox(width: 6),
+        FighterDials(player: player, color: color, heroSize: big ? 46 : 38, sidekickSize: big ? 28 : 24),
+        const SizedBox(width: 8),
+        if (!showHandBacks) ...[
+          _Count(icon: Icons.style_rounded, value: player.hand.length, tooltip: 'Cards in hand', small: !big),
+          const SizedBox(width: 6),
+        ],
         _Count(icon: Icons.layers_rounded, value: player.deck.length, tooltip: 'Cards left in deck', small: !big),
         if (actionsLeft != null) ...[
           const SizedBox(width: 10),
@@ -119,6 +126,10 @@ class PlayerPlate extends StatelessWidget {
                   plate,
                   const SizedBox(height: 3),
                   stats,
+                  if (showHandBacks && !out) ...[
+                    const SizedBox(height: 4),
+                    HandBacks(count: player.hand.length, back: player.hero.back, height: 28),
+                  ],
                   if (big && status.isNotEmpty) ...[
                     const SizedBox(height: 3),
                     Wrap(spacing: 4, children: [for (final s in status) _Chip(s)]),
@@ -515,7 +526,6 @@ class CombatView extends StatelessWidget {
     final mineWon = won.player.team == me.team, mineLost = lost.player.team == me.team;
     // From your side: VICTORY or DEFEAT when you (or your team) fought; otherwise who won.
     final verdict = mineWon && !mineLost ? 'VICTORY' : (mineLost && !mineWon ? 'DEFEAT' : '${won.fighter.name.toUpperCase()} WINS');
-    final verdictColor = mineWon && !mineLost ? Palette.good : (mineLost && !mineWon ? Palette.danger : Palette.bone);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -534,7 +544,10 @@ class CombatView extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.fromLTRB(8, 4, 8, 6),
               decoration: ShapeDecoration(
-                color: c.attackerWon ? Palette.attacker : Palette.defender,
+                // Green when you won the combat, dark red when you lost; otherwise the winner's role colour.
+                color: mineWon && !mineLost
+                    ? const Color(0xFF2F7A3A)
+                    : (mineLost && !mineWon ? const Color(0xFF8E1F1A) : (c.attackerWon ? Palette.attacker : Palette.defender)),
                 shape: const ChamferBorder(cut: 8, side: BorderSide(color: Palette.bone, width: 1.6)),
                 shadows: const [BoxShadow(color: Colors.black, blurRadius: 18)],
               ),
@@ -546,7 +559,7 @@ class CombatView extends StatelessWidget {
                     fit: BoxFit.scaleDown,
                     child: Text(
                       verdict,
-                      style: titleStyle(18, color: verdictColor == Palette.bone ? Colors.white : verdictColor, spacing: 1.4),
+                      style: titleStyle(20, color: Colors.white, spacing: 1.6),
                     ),
                   ),
                   Text(
@@ -1202,6 +1215,67 @@ class ResultView extends StatelessWidget {
 /// Whether an event's log line may be shown to [me] (an AI peeking at another AI's hand is
 /// private between them).
 bool logIsPublic(GameEvent e, Player me) {
-  if (e is Revealed && e.player != me && e.why.startsWith(' to ') && !e.why.startsWith(' to ${me.name}')) return false;
+  if (e is Revealed && e.viewer != null && e.viewer != me && e.player != me) return false;
   return e.log.trim().isNotEmpty;
+}
+
+// ------------------------------------------------------------------------------- reveals
+
+/// Cards shown to you: a hand you look at, or cards revealed to everyone. Tap a card to read
+/// it; OK (or tapping outside) closes the panel.
+class RevealView extends StatelessWidget {
+  const RevealView({super.key, required this.title, required this.images, required this.cardWidth, required this.onZoom, required this.onDone});
+  final String title;
+  final List<String> images;
+  final double cardWidth;
+  final void Function(int i) onZoom;
+  final VoidCallback onDone;
+
+  @override
+  Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    final w = images.length > 5 ? cardWidth * 0.8 : cardWidth;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onDone,
+      child: ColoredBox(
+        color: const Color(0x99000000),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: size.width - 40),
+            child: Panel(
+              padding: const EdgeInsets.all(16),
+              cut: 14,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(title.toUpperCase(), textAlign: TextAlign.center, style: titleStyle(19, spacing: 0.8)),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    height: w / cardAspect + 4,
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      scrollDirection: Axis.horizontal,
+                      itemCount: images.length,
+                      separatorBuilder: (_, _) => const SizedBox(width: 10),
+                      itemBuilder: (_, i) => GestureDetector(onTap: () => onZoom(i), child: CardImage(images[i], width: w)),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('Tap a card to read it', style: bodyStyle(12.5, color: Palette.muted)),
+                      const SizedBox(width: 14),
+                      PlateButton(label: 'OK', icon: Icons.check_rounded, style: PlateStyle.confirm, height: 44, fontSize: 16, onPressed: onDone),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }

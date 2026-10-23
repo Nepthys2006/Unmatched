@@ -30,6 +30,7 @@ import '../theme.dart';
 import '../widgets.dart';
 import 'agents.dart';
 import 'board_layer.dart';
+import 'dials.dart';
 import 'hud.dart';
 import 'match_config.dart';
 
@@ -82,6 +83,10 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
   Side? _resolving;
   String? _effectText;
   (Card, String)? _spot;
+
+  /// Cards shown to you (a hand you look at, cards revealed to everyone) until you tap OK.
+  ({String title, List<Card> cards, bool private})? _reveal;
+  Completer<void>? _revealDone;
   GameOver? _result;
   String _bannerTitle = '';
   String _bannerSub = '';
@@ -514,14 +519,33 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
         await _wait(card.owner == me ? 900 : 1900);
         _spot = null;
         _refresh();
-      case Boosted(:final player, :final card, :final blind):
-        if (player != me) {
-          _spot = (card, '${player.name} ${blind ? 'blind ' : ''}boosts with');
-          _refresh();
-          await _wait(1100);
-          _spot = null;
-        }
+      case Boosted():
+        // The boost card was already shown as it went to the discard pile (CardMoved).
         _refresh();
+      case CardMoved(:final card, :final from, :final to, :final reason, :final reveal)
+          when reveal && to == Zone.discard && (from == Zone.hand || reason.contains('blind boost')):
+        // Every discard is public: boosts (blind ones too), random discards, hand limit...
+        final who = card.owner == me ? 'You' : card.owner.name;
+        final what = switch (reason) {
+          final r when r.contains('blind boost') => '$who blind boost${card.owner == me ? '' : 's'} with',
+          final r when r.contains('boost') => '$who boost${card.owner == me ? '' : 's'} with',
+          final r when r.contains('random') => '$who discard${card.owner == me ? '' : 's'} at random',
+          final r when r.contains('hand limit') => '$who discard${card.owner == me ? '' : 's'} (hand limit)',
+          _ => '$who discard${card.owner == me ? '' : 's'}',
+        };
+        _spot = (card, what);
+        _s.audio.sfx(Sfx.card, volume: 0.5);
+        _refresh();
+        await _wait(card.owner == me ? 800 : 1300);
+        _spot = null;
+        _refresh();
+      case Revealed(:final player, :final cards, :final why, :final viewer) when cards.isNotEmpty && (viewer == null || viewer == me):
+        final private = viewer == me && player != me;
+        await _showReveal(
+          private ? '${player.name}\'s hand' : '${player == me ? 'You reveal' : '${player.name} reveals'}$why',
+          cards,
+          private: private,
+        );
       case CardsDrawn(:final player):
         if (player == me) _s.audio.sfx(Sfx.card, volume: 0.6);
         _refresh();
@@ -548,6 +572,22 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
       default:
         _refresh();
     }
+  }
+
+  /// Shows [cards] until the player taps OK (a hand being looked at) or a few seconds pass
+  /// (public reveals), so effects that look at or reveal cards are visible.
+  Future<void> _showReveal(String title, List<Card> cards, {required bool private}) async {
+    if (_speed <= 0) return; // tests run at instant speed
+    final done = _revealDone = Completer<void>();
+    _reveal = (title: title, cards: List.of(cards), private: private);
+    _s.audio.sfx(Sfx.reveal, volume: 0.6);
+    _refresh();
+    final limit = Duration(milliseconds: math.max(1500, ((private ? 9000 : 2600) * _speed).round()));
+    await Future.any([done.future, Future<void>.delayed(limit)]);
+    _reveal = null;
+    _revealDone = null;
+    if (_disposed) throw const _Abandoned();
+    _refresh();
   }
 
   Future<void> _burst(Fighter f, String text, Color color, {bool sparks = false, bool shake = false}) async {
@@ -1449,6 +1489,20 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
                   ),
                 ),
 
+              // Cards shown to you.
+              if (_reveal != null)
+                Positioned.fill(
+                  child: RevealView(
+                    title: _reveal!.title,
+                    images: [for (final c in _reveal!.cards) c.def.image],
+                    cardWidth: (size.height * 0.42 * cardAspect).clamp(80.0, 200.0),
+                    onZoom: (i) => showCardZoom<void>(context, _reveal!.cards[i].def.image),
+                    onDone: () {
+                      if (!(_revealDone?.isCompleted ?? true)) _revealDone!.complete();
+                    },
+                  ),
+                ),
+
               // Panels for choices that aren't on the board or in your hand.
               if (p != null) ?_choiceOverlay(p),
 
@@ -1655,6 +1709,7 @@ class _OpponentColumn extends StatelessWidget {
                   subtitle: '${o.team == me.team ? 'Ally · ' : ''}${o.label}',
                   active: active == o,
                   actionsLeft: active == o ? actions : null,
+                  showHandBacks: true,
                   onTap: () => onTap(o),
                 ),
         ),
@@ -1699,10 +1754,9 @@ class _MiniPlate extends StatelessWidget {
                 width: 76,
                 child: Text(player.name.toUpperCase(), maxLines: 1, overflow: TextOverflow.ellipsis, style: titleStyle(12, spacing: 0.4)),
               ),
-              HeartBadge(player.heroFighter.hp, size: 22),
-              const SizedBox(width: 4),
-              Icon(Icons.style_rounded, size: 12, color: Palette.boneDim),
-              Text('${player.hand.length}', style: titleStyle(12, weight: FontWeight.w700, spacing: 0)),
+              FighterDials(player: player, color: color, heroSize: 30, sidekickSize: 20),
+              const SizedBox(width: 6),
+              HandBacks(count: player.hand.length, back: player.hero.back, height: 22),
             ],
           ),
         ),

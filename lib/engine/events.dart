@@ -237,10 +237,13 @@ class Boosted extends GameEvent {
 }
 
 class Revealed extends GameEvent {
-  const Revealed(this.player, this.cards, this.why);
+  const Revealed(this.player, this.cards, this.why, {this.viewer});
   final Player player;
   final List<Card> cards;
   final String why;
+
+  /// Only this player sees the cards (looking at a hand); null when shown to everyone.
+  final Player? viewer;
   @override
   String get log => '${player.name} reveals ${cards.map((c) => c.title).join(', ')}$why.';
 }

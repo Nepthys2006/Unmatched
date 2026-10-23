@@ -994,7 +994,7 @@ class Game {
     for (final m in allMods.toList()) {
       if (await m.blocksHandLook(this, target, viewer)) return false;
     }
-    await emit(Revealed(target, List.of(target.hand), ' to ${viewer.name}$why'));
+    await emit(Revealed(target, List.of(target.hand), ' to ${viewer.name}$why', viewer: viewer));
     viewer.script.seen(target.hand);
     return true;
   }
