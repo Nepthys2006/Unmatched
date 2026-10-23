@@ -3,7 +3,7 @@
 A fan-made, personal-use digital version of the board game **Unmatched** (Restoration Games), built in
 **Flutter** for mobile (landscape), desktop and web. Look and feel target: *Unmatched: Digital Edition*.
 
-## Status (2026-10-23)
+## Status (2026-10-24)
 
 | Area | State |
 |---|---|
@@ -13,7 +13,8 @@ A fan-made, personal-use digital version of the board game **Unmatched** (Restor
 | Game modes in engine | **Done.** 1v1, 2v2, 3v3, free-for-all 3–5 players. |
 | AI (`lib/engine/ai.dart`) | **Done.** Easy / Medium / Hard / Insane. Answers the same prompts a human does. |
 | Assets | **Done.** Card faces, backs, identity cards, avatars, minis, sidekick tokens, fonts, original synthesized music + SFX. |
-| **Flutter UI** | **NOT STARTED** — `lib/main.dart` is still the template. This is the remaining work. |
+| Flutter UI (`lib/ui/`) | **Playable end to end**, every mode. See TODO.md for what's left. |
+| 3D maps (`lib/ui/board3d/`, `assets/web3d/`, `assets/maps3d/`) | **Done.** The 3D Map models in a web view (Three.js) under the Flutter HUD; Settings → Battlefield. |
 
 ## The user's requirements for the UI (all still to build)
 
@@ -89,10 +90,14 @@ Data corrections made against the printed cards live in `tool/card_fixes.json`.
 ```
 lib/engine/        rules engine (defs, state, game, combat, events, prompt, hero_script, ai)
 lib/engine/heroes/ one file per set; registry.dart maps hero id -> script
+lib/ui/            screens, match screen, HUD, 2D board, settings, audio
+lib/ui/board3d/    3D board controller + web view hosts (web iframe, Android/iOS WebView, Windows WebView2)
 assets/data/       heroes.json (39 heroes, 484 cards), maps.json (13 boards)
 assets/cards/      card faces per hero
 assets/heroes/     avatar, mini, back, identity, sidekick tokens per hero
 assets/audio/      battle.wav, menu.wav, sfx
+assets/maps3d/     the 12 3D map models (.glb, meshopt + WebP) and their thumbnails
+assets/web3d/      the Three.js page that draws the 3D board (three.js r170 bundled)
 assets/fonts/      Saira Condensed (titles), Barlow Semi Condensed (text) — OFL
 tool/              asset builders (need the user's local card scans; not needed for UI work)
 test/              engine_core_test, heroes_*_test, fuzz_test (fuzz takes ~11 min)

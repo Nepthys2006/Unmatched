@@ -1,0 +1,1625 @@
+/// The live match: runs the engine, paces its events into animations, and turns every prompt
+/// the player must answer into highlights, a card choice or a panel.
+library;
+
+import 'dart:async';
+import 'dart:math' as math;
+import 'dart:ui' as ui;
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
+import 'package:flutter/material.dart' hide Card, Intent;
+
+import '../../engine/ai.dart';
+import '../../engine/combat.dart';
+import '../../engine/events.dart';
+import '../../engine/game.dart';
+import '../../engine/hero_script.dart' show FighterPlacedAtStart;
+import '../../engine/prompt.dart';
+import '../../engine/state.dart';
+import '../audio.dart';
+import '../board/board_painter.dart';
+import '../board3d/board3d.dart';
+import '../screens/settings_screen.dart';
+import '../settings.dart';
+import '../services.dart';
+import '../shapes.dart';
+import '../theme.dart';
+import '../widgets.dart';
+import 'agents.dart';
+import 'board_layer.dart';
+import 'hud.dart';
+import 'match_config.dart';
+
+/// Dev-only: `--dart-define=AUTOPLAY=true` lets an AI answer your prompts (after showing them)
+/// so whole matches can be screenshot and soak-tested. Never set in real builds.
+const _autoplay = bool.fromEnvironment('AUTOPLAY');
+
+class _Abandoned implements Exception {
+  const _Abandoned();
+}
+
+class MatchScreen extends StatefulWidget {
+  const MatchScreen({super.key, required this.config, this.seed, this.autoplay = _autoplay});
+  final MatchConfig config;
+
+  /// An AI answers your prompts too (dev builds and tests only).
+  final bool autoplay;
+
+  /// Tests only: a fixed shuffle. Real games shuffle with Random.secure().
+  final int? seed;
+
+  @override
+  State<MatchScreen> createState() => MatchScreenState();
+}
+
+class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin {
+  late final Services _s = context.services;
+  late Game game;
+  late BoardGeometry geo;
+  Player get me => game.players[0];
+
+  // Prompt state.
+  Prompt? _prompt;
+  Completer<List<int>>? _answer;
+  bool _attackMode = false;
+  Fighter? _attackTarget;
+  bool _schemeHint = false;
+  final BoardMarks _marks = BoardMarks();
+  Player? _thinking;
+
+  // Presentation state.
+  final List<LogLine> _log = [];
+  bool _showLog = false;
+  Combat? _combat;
+  bool _revealed = false;
+  bool _resolved = false;
+  Side? _resolving;
+  String? _effectText;
+  (Card, String)? _spot;
+  GameOver? _result;
+  String _bannerTitle = '';
+  String _bannerSub = '';
+  Color _bannerColor = Palette.bone;
+  String? _error;
+  bool _started = false;
+  bool _disposed = false;
+
+  // Animation.
+  final SteppedPulse _pulse = SteppedPulse();
+  late final AnimationController _banner = AnimationController(vsync: this, duration: const Duration(milliseconds: 1500));
+  late final AnimationController _moveA = AnimationController(vsync: this);
+  late final AnimationController _fxA = AnimationController(vsync: this, duration: const Duration(milliseconds: 800));
+  late final AnimationController _camA = AnimationController(vsync: this, duration: const Duration(milliseconds: 650));
+  late final AnimationController _shakeA = AnimationController(vsync: this, duration: const Duration(milliseconds: 320));
+  final ValueNotifier<MoveAnim?> _move = ValueNotifier(null);
+  final ValueNotifier<int> _boardTick = ValueNotifier(0);
+  final List<Fx> _fx = [];
+  final TransformationController _cam = TransformationController();
+  Matrix4? _camHome;
+  Size _viewport = Size.zero;
+  Animation<Matrix4>? _camTween;
+
+  /// The 3D map, when it's on (Settings > Battlefield) and this map and platform have one.
+  Board3DController? _b3;
+  StreamSubscription<Offset>? _b3Taps;
+  bool _b3Failed = false;
+  bool get _in3d => _b3 != null;
+
+  /// The static board, rasterised once: drawing one texture per frame instead of every space,
+  /// gradient and path keeps camera moves and animations cheap on phones and the web.
+  ui.Image? _boardImage;
+
+  double get _speed {
+    final base = _s.settings.speed;
+    // Once you're out, the rest of the game plays out quickly.
+    return game.players.isNotEmpty && me.eliminated ? base * 0.35 : base;
+  }
+
+  // ======================================================================== lifecycle
+
+  @override
+  void initState() {
+    super.initState();
+    _moveA.addListener(() {
+      final m = _move.value;
+      if (m != null) m.t = _moveA.value;
+    });
+    _camA.addListener(() {
+      if (_camTween != null) _cam.value = _camTween!.value;
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_started) return;
+    _started = true;
+    final cfg = widget.config;
+    geo = BoardGeometry(cfg.map);
+    final level = cfg.ai;
+    game = Game(
+      data: _s.data,
+      map: cfg.map,
+      heroIds: cfg.heroIds,
+      teams: cfg.teams,
+      seed: widget.seed,
+      presenter: _present,
+      agents: [
+        HumanAgent(_onPrompt),
+        for (var i = 1; i < cfg.heroIds.length; i++)
+          PacedAgent(
+            AiAgent(level: level),
+            think: (p) =>
+                p.ask == Ask.action ? (650 * _speed).round() : (p.ask == Ask.card || p.ask == Ask.space ? (260 * _speed).round() : 0),
+            onThinking: (p) {
+              if (!_disposed && _thinking != p.player) setState(() => _thinking = p.player);
+            },
+          ),
+      ],
+    );
+    me
+      ..label = _s.settings.username
+      ..isAI = false;
+    for (final p in game.players.skip(1)) {
+      p
+        ..label = 'AI ${level.label}'
+        ..isAI = true;
+    }
+    _s.audio.music(Music.battle);
+    _ensure3d();
+    // The 2D board image is only needed without the 3D map (made later if the 3D map fails).
+    if (_b3 == null) unawaited(_bakeBoard());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _run());
+  }
+
+  Future<void> _run() async {
+    try {
+      await _waitForBoard();
+      if (_disposed) return;
+      await game.run();
+    } on _Abandoned {
+      return;
+    } catch (e, st) {
+      debugPrint('Match error: $e\n$st');
+      if (!_disposed) setState(() => _error = '$e');
+    }
+  }
+
+  /// Holds the match until the 3D map is on screen, so the opening moves aren't missed.
+  Future<void> _waitForBoard() async {
+    final c = _b3;
+    if (c == null || c.status.value != Board3DStatus.loading) return;
+    final done = Completer<void>();
+    void listen() {
+      if (c.status.value != Board3DStatus.loading && !done.isCompleted) done.complete();
+    }
+
+    c.status.addListener(listen);
+    await done.future.timeout(const Duration(seconds: 40), onTimeout: () => c.fail('it took too long to load'));
+    try {
+      c.status.removeListener(listen);
+    } catch (_) {}
+  }
+
+  /// Creates, swaps or drops the 3D board to match the settings (also called from build, so a
+  /// change made in the pause menu applies at once).
+  void _ensure3d() {
+    final settings = _s.settings;
+    final want = settings.board3d && board3dSupported && hasModel(widget.config.map) && !_b3Failed;
+    final quality = settings.quality.name;
+    if (want && _b3?.quality == quality || !want && _b3 == null) return;
+    _drop3d();
+    if (!want) {
+      if (_boardImage == null) unawaited(_bakeBoard());
+      return;
+    }
+    final start = widget.config.map.spaces.where((s) => s.start == 1).firstOrNull;
+    // The boards' print reads upright from the far (-y) side; seat the camera there unless your
+    // start is clearly on the near half.
+    final sy = start?.y ?? 0;
+    final c = _b3 = Board3DController(map: widget.config.map, quality: quality, homeSide: sy > 1 ? 1 : -1);
+    _b3Taps = c.taps.listen((p) => _onBoardTap(geo.world(p.dx, p.dy)));
+    c.status.addListener(() {
+      Future.microtask(() {
+        if (_disposed || !mounted || _b3 != c) return;
+        if (c.status.value == Board3DStatus.failed) {
+          _b3Failed = true;
+          _drop3d();
+          if (_boardImage == null) unawaited(_bakeBoard());
+          ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+            SnackBar(content: Text('The 3D map could not be shown (${c.error}). Playing on the 2D board.')),
+          );
+        }
+        setState(() {});
+      });
+    });
+  }
+
+  void _drop3d() {
+    _b3Taps?.cancel();
+    _b3Taps = null;
+    final c = _b3;
+    _b3 = null;
+    // After the frame, once the web view holding it is gone.
+    if (c != null) WidgetsBinding.instance.addPostFrameCallback((_) => c.dispose());
+  }
+
+  static String _hex(Color c) => '#${(c.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0')}';
+
+  /// Sends the board as it is now; the controller skips repeats.
+  void _sync3d() {
+    final c = _b3;
+    if (c == null) return;
+    final pend = _marks.pending;
+    c.send({
+      't': 'state',
+      'fighters': [
+        for (final f in game.fighters)
+          if (f.onBoard) {'id': f.uid, 'space': f.space, 'color': _hex(colorOf(f.owner)), 'hero': f.isHero, 'hp': f.hp, 'name': f.name},
+      ],
+      'marks': {
+        'select': [for (final f in _marks.select) f.uid],
+        'targets': [for (final f in _marks.targets) f.uid],
+        'spaces': _marks.spaces.toList(),
+        'edges': [
+          for (final e in _marks.edges) [e.$1, e.$2],
+        ],
+        'subject': _marks.subject?.uid,
+        'pendingFighter': pend is Fighter ? pend.uid : null,
+        'pendingSpace': pend is int ? pend : null,
+        'pendingEdge': pend is (int, int) ? [pend.$1, pend.$2] : null,
+        'preview': _marks.previewPath,
+        'harmful': _marks.harmful,
+      },
+      'tokens': [
+        for (final t in game.board.tokens)
+          if (t.kind == 'fog' && t.space != null)
+            {'kind': 'fog', 'space': t.space}
+          else if (t.path != null)
+            {'kind': t.kind, 'a': t.path!.$1, 'b': t.path!.$2},
+      ],
+      'focus': _combat == null ? const <int>[] : [_combat!.attacker.fighter.uid, _combat!.defender.fighter.uid],
+    });
+  }
+
+  Future<void> _bakeBoard() async {
+    final mobile = defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS;
+    final res = ((mobile ? 2048 : 3072) / math.max(geo.size.width, geo.size.height)).clamp(0.5, 2.0);
+    final size = geo.size * res;
+    final recorder = ui.PictureRecorder();
+    BoardPainter(geo, showStarts: false).paint(Canvas(recorder), size);
+    final picture = recorder.endRecording();
+    try {
+      final image = await picture.toImage(size.width.ceil(), size.height.ceil());
+      if (_disposed) {
+        image.dispose();
+      } else {
+        setState(() => _boardImage = image);
+      }
+    } catch (_) {
+      // Keep painting the board live if the image can't be made.
+    } finally {
+      picture.dispose();
+    }
+  }
+
+  @override
+  void dispose() {
+    _boardImage?.dispose();
+    _disposed = true;
+    _drop3d();
+    if (_answer != null && !_answer!.isCompleted) _answer!.completeError(const _Abandoned());
+    _pulse.dispose();
+    for (final c in [_banner, _moveA, _fxA, _camA, _shakeA]) {
+      c.dispose();
+    }
+    _move.dispose();
+    _boardTick.dispose();
+    _cam.dispose();
+    super.dispose();
+  }
+
+  // ======================================================================== presenting events
+
+  Future<void> _wait(int ms) async {
+    final d = (ms * _speed).round();
+    if (d > 0) await Future<void>.delayed(Duration(milliseconds: d));
+    if (_disposed) throw const _Abandoned();
+  }
+
+  void _refresh() {
+    if (_disposed) return;
+    _boardTick.value++;
+    setState(() {});
+  }
+
+  Color colorOf(Player p) {
+    final cfg = widget.config;
+    if (cfg.teams != null) {
+      final sameTeam = [
+        for (final o in game.players)
+          if (o.team == p.team) o,
+      ];
+      final shades = p.team == me.team ? Palette.teamA : Palette.teamB;
+      return shades[sameTeam.indexOf(p) % shades.length];
+    }
+    if (game.players.length == 2) return p == me ? Palette.seats[0] : Palette.seats[1];
+    return Palette.seats[p.seat % Palette.seats.length];
+  }
+
+  Future<void> _present(GameEvent e) async {
+    if (_disposed) throw const _Abandoned();
+    if (logIsPublic(e, me)) {
+      _log.add(e is TurnStarted ? LogLine('Turn ${e.number} · ${e.player.name}', turn: true, color: colorOf(e.player)) : LogLine(e.log));
+      if (_log.length > 400) _log.removeRange(0, 100);
+    }
+    final quality = _s.settings.quality;
+    switch (e) {
+      case TurnStarted(:final player):
+        _thinking = null;
+        final mine = player == me;
+        _bannerTitle = mine ? 'Your turn' : "${player.name}'s turn";
+        _bannerSub = mine ? 'Two actions: maneuver, scheme or attack' : player.label;
+        _bannerColor = hexColor(player.hero.color);
+        _refresh();
+        _s.audio.sfx(Sfx.whoosh, volume: 0.7);
+        _banner.duration = Duration(milliseconds: math.max(300, (1500 * _speed).round()));
+        unawaited(_banner.forward(from: 0));
+        await _wait(mine ? 1150 : 850);
+      case FighterPlacedAtStart():
+        _refresh();
+        await _wait(140);
+      case FighterMoved(:final fighter, :final path, :final placed):
+        if (placed || path.length < 2) {
+          _refresh();
+          _s.audio.sfx(Sfx.step);
+          await _wait(300);
+        } else {
+          final steps = path.length - 1;
+          final ms = (190 * steps * _speed).round();
+          if (ms <= 0) {
+            _refresh();
+            break;
+          }
+          _b3?.send({'t': 'move', 'id': fighter.uid, 'path': path, 'ms': ms});
+          _move.value = MoveAnim(fighter, path);
+          _moveA.duration = Duration(milliseconds: ms);
+          for (var i = 0; i < steps; i++) {
+            Future<void>.delayed(Duration(milliseconds: (ms * i / steps).round()), () {
+              if (!_disposed) _s.audio.sfx(Sfx.step, volume: 0.7);
+            });
+          }
+          await _moveA.forward(from: 0);
+          _move.value = null;
+          _refresh();
+          if (_disposed) throw const _Abandoned();
+        }
+      case Swapped():
+        _s.audio.sfx(Sfx.whoosh, volume: 0.6);
+        _refresh();
+        await _wait(350);
+      case Damaged(:final fighter, :final amount):
+        _s.audio.sfx(Sfx.hit);
+        await _burst(fighter, '−$amount', Palette.target, sparks: true, shake: quality.shake);
+      case Healed(:final fighter, :final amount):
+        _s.audio.sfx(Sfx.heal);
+        await _burst(fighter, '+$amount', Palette.good);
+      case Defeated(:final fighter):
+        _log.add(LogLine('${fighter.name} is defeated', turn: true, color: Palette.danger));
+        final mine = fighter.owner == me;
+        final enemy = fighter.isEnemyOf(me);
+        _bannerTitle = fighter.isHero && mine ? 'Defeat' : '${fighter.name} defeated';
+        _bannerSub = fighter.isHero
+            ? (mine ? 'Your hero has fallen' : (enemy ? 'An enemy hero falls' : 'Your ally has fallen'))
+            : (mine ? 'You lost a sidekick' : (enemy ? 'Enemy sidekick down' : 'Ally sidekick down'));
+        _bannerColor = enemy ? Palette.good : Palette.danger;
+        _s.audio.sfx(Sfx.hit);
+        _refresh();
+        _banner.duration = Duration(milliseconds: math.max(300, (1500 * _speed).round()));
+        unawaited(_banner.forward(from: 0));
+        await _wait(fighter.isHero ? 1300 : 800);
+      case Returned():
+        _refresh();
+        await _wait(350);
+      case CombatStarted(:final combat):
+        _combat = combat;
+        _revealed = false;
+        _resolved = false;
+        _resolving = null;
+        _effectText = null;
+        _s.audio.sfx(Sfx.whoosh);
+        _refresh();
+        if (quality.cameraEffects) _pushIn(combat);
+        await _wait(700);
+      case PhaseChanged(:final phase):
+        _refresh();
+        if (phase.index >= Phase.immediately.index && phase.index <= Phase.after.index) await _wait(300);
+      case CardsRevealed():
+        _revealed = true;
+        _s.audio.sfx(Sfx.reveal);
+        _refresh();
+        await _wait(1300);
+      case EffectResolving(:final side, :final timing, :final text):
+        _resolving = side;
+        _effectText = '${side.card?.title.toUpperCase() ?? ''} · ${timing.toUpperCase()}${timing == 'after' ? ' COMBAT' : ''}: $text';
+        _refresh();
+        await _wait(1500);
+        _resolving = null;
+        _effectText = null;
+      case ValuesChanged() || Canceled() || CardSwapped():
+        _refresh();
+        await _wait(450);
+      case CombatResolved():
+        _resolved = true;
+        _refresh();
+        await _wait(1500);
+      case CombatEnded():
+        await _wait(400);
+        _combat = null;
+        _resolved = false;
+        _refresh();
+        if (quality.cameraEffects) _pullBack();
+        await _wait(300);
+      case SchemePlayed(:final card, :final fighter):
+        _spot = (card, '${fighter.name} plays a scheme');
+        _s.audio.sfx(Sfx.card);
+        _refresh();
+        await _wait(card.owner == me ? 900 : 1900);
+        _spot = null;
+        _refresh();
+      case Boosted(:final player, :final card, :final blind):
+        if (player != me) {
+          _spot = (card, '${player.name} ${blind ? 'blind ' : ''}boosts with');
+          _refresh();
+          await _wait(1100);
+          _spot = null;
+        }
+        _refresh();
+      case CardsDrawn(:final player):
+        if (player == me) _s.audio.sfx(Sfx.card, volume: 0.6);
+        _refresh();
+        await _wait(player == me ? 220 : 80);
+      case ActionsChanged() || ActionTaken() || CardMoved() || StatusChanged() || Revealed() || LogEvent() || Exhausted():
+        _refresh();
+        if (e is StatusChanged) await _wait(300);
+      case GameOver():
+        _result = e;
+        _clearPrompt();
+        final won = game.winningTeam == me.team;
+        _s.audio.stopMusic();
+        _s.audio.sfx(won ? Sfx.victory : Sfx.hit);
+        _refresh();
+      default:
+        _refresh();
+    }
+  }
+
+  Future<void> _burst(Fighter f, String text, Color color, {bool sparks = false, bool shake = false}) async {
+    if (f.space == null) {
+      _refresh();
+      return;
+    }
+    _fx
+      ..clear()
+      ..add(Fx(geo.of(f.space!), text, color, sparks: sparks));
+    _refresh();
+    final ms = (800 * _speed).round();
+    _b3?.send({'t': 'fx', 'id': f.uid, 'text': text, 'color': _hex(color), 'sparks': sparks && _s.settings.quality.particles, 'ms': ms});
+    if (shake) _in3d ? _b3!.send({'t': 'shake'}) : unawaited(_shakeA.forward(from: 0));
+    if (ms > 0) {
+      _fxA.duration = Duration(milliseconds: ms);
+      await _fxA.forward(from: 0);
+    }
+    _fx.clear();
+    if (_disposed) throw const _Abandoned();
+    _refresh();
+  }
+
+  // ======================================================================== camera
+
+  Matrix4 _fitMatrix(Size view) {
+    // Leave room for the prompt bar on top and the hand along the bottom.
+    const top = 46.0;
+    // Phones: let the board run under the hand's peek; it can be zoomed and panned anyway.
+    final bottom = view.height * (view.height < 520 ? 0.1 : 0.2);
+    final avail = Size(view.width - 24, view.height - top - bottom);
+    final s = math.min(avail.width / geo.size.width, avail.height / geo.size.height);
+    final dx = (view.width - geo.size.width * s) / 2;
+    final dy = top + (avail.height - geo.size.height * s) / 2;
+    return Matrix4.identity()
+      ..translateByDouble(dx, dy, 0, 1)
+      ..scaleByDouble(s, s, 1, 1);
+  }
+
+  void _animateCam(Matrix4 to, {Duration? d}) {
+    _camTween = Matrix4Tween(begin: _cam.value.clone(), end: to).animate(CurvedAnimation(parent: _camA, curve: Curves.easeInOutCubic));
+    _camA.duration = d ?? Duration(milliseconds: math.max(1, (650 * _s.settings.speed).round()));
+    _camA.forward(from: 0);
+  }
+
+  void _fit() {
+    if (_in3d) return _b3!.send({'t': 'cam', 'op': 'fit'});
+    if (_viewport == Size.zero) return;
+    _camHome = _fitMatrix(_viewport);
+    _animateCam(_camHome!, d: const Duration(milliseconds: 380));
+  }
+
+  void _zoom(double factor) {
+    if (_in3d) return _b3!.send({'t': 'cam', 'op': 'zoom', 'k': factor});
+    final c = Offset(_viewport.width / 2, _viewport.height / 2);
+    final m = _cam.value.clone();
+    final scene = _cam.toScene(c);
+    final cur = m.getMaxScaleOnAxis();
+    final next = (cur * factor).clamp(_minScale, _maxScale);
+    final k = next / cur;
+    final to = m
+      ..translateByDouble(scene.dx, scene.dy, 0, 1)
+      ..scaleByDouble(k, k, 1, 1)
+      ..translateByDouble(-scene.dx, -scene.dy, 0, 1);
+    _animateCam(to, d: const Duration(milliseconds: 220));
+  }
+
+  double get _minScale => (_camHome?.getMaxScaleOnAxis() ?? 0.3) * 0.7;
+  double get _maxScale => (_camHome?.getMaxScaleOnAxis() ?? 0.3) * 3.5;
+
+  /// The dramatic push-in: frame the two fighters between the combat cards.
+  void _pushIn(Combat c) {
+    final a = c.attacker.fighter.space, d = c.defender.fighter.space;
+    if (a == null || d == null) return;
+    if (_in3d) return _b3!.send({'t': 'cam', 'op': 'push', 'a': a, 'b': d, 'ms': math.max(1, (650 * _s.settings.speed).round())});
+    if (_viewport == Size.zero) return;
+    final pa = geo.of(a), pd = geo.of(d);
+    final mid = Offset.lerp(pa, pd, 0.5)!;
+    final span = (pa - pd).distance + geo.unit * 2.2;
+    final home = _camHome?.getMaxScaleOnAxis() ?? 0.4;
+    final want = (_viewport.width * 0.36) / span;
+    final s = want.clamp(home * 1.15, home * 2.4);
+    // Below the combat cards, which sit across the top of the screen.
+    final target = Offset(_viewport.width / 2, _viewport.height * 0.8);
+    _animateCam(
+      Matrix4.identity()
+        ..translateByDouble(target.dx - mid.dx * s, target.dy - mid.dy * s, 0, 1)
+        ..scaleByDouble(s, s, 1, 1),
+    );
+  }
+
+  void _pullBack() {
+    if (_in3d) return _b3!.send({'t': 'cam', 'op': 'pull', 'ms': math.max(1, (650 * _s.settings.speed).round())});
+    if (_camHome != null) _animateCam(_camHome!);
+  }
+
+  // ======================================================================== prompts
+
+  void _onPrompt(Prompt p, Completer<List<int>> c) {
+    if (_disposed) {
+      c.completeError(const _Abandoned());
+      return;
+    }
+    _prompt = p;
+    _answer = c;
+    _attackMode = false;
+    _attackTarget = null;
+    _schemeHint = false;
+    _thinking = null;
+    _computeMarks();
+    if (_marks.any && _s.settings.quality.pulse) {
+      _pulse.start();
+    }
+    _refresh();
+    if (widget.autoplay) {
+      Future<void>.delayed(Duration(milliseconds: (900 * _speed).round()), () async {
+        if (_disposed || _prompt != p) return;
+        _submit(await AiAgent(level: AiLevel.hard).decide(game, p));
+      });
+    }
+  }
+
+  void _clearPrompt() {
+    _prompt = null;
+    _answer = null;
+    _attackMode = false;
+    _attackTarget = null;
+    _schemeHint = false;
+    _marks.clear();
+    _pulse.stop();
+  }
+
+  void _submit(List<int> picks) {
+    final c = _answer;
+    if (c == null || c.isCompleted) return;
+    _clearPrompt();
+    _refresh();
+    c.complete(picks);
+  }
+
+  List<Object?> get _values => [for (final c in _prompt?.choices ?? const <Choice<Object?>>[]) c.value];
+
+  int? _indexOf(Object? v) {
+    final i = _values.indexWhere((x) => identical(x, v) || x == v);
+    return i < 0 ? null : i;
+  }
+
+  /// A space choice may be a plain space id or a token sitting on a space (fog).
+  int? _spaceOf(Object? v) => v is int ? v : (v is Token ? v.space : null);
+
+  bool get _isBoardSpacePrompt => _prompt?.ask == Ask.space && _values.every((v) => _spaceOf(v) != null);
+  bool get _isFighterPrompt => _prompt?.ask == Ask.fighter && _values.every((v) => v is Fighter && v.onBoard);
+  bool get _isHandCardPrompt => _prompt?.ask == Ask.card && _values.every((v) => v is Card && me.hand.contains(v));
+  bool get _isPathPrompt => _prompt?.ask == Ask.path && _values.every((v) => v is (int, int));
+
+  List<ActionChoice> get _actions => [
+    for (final v in _values)
+      if (v is ActionChoice) v,
+  ];
+
+  void _computeMarks() {
+    _marks.clear();
+    final p = _prompt;
+    if (p == null) return;
+    if (p.ask == Ask.action) {
+      final attacks = _actions.where((a) => a.kind == ActionKind.attack).toList();
+      if (_attackMode) {
+        if (_attackTarget == null) {
+          _marks.targets.addAll(attacks.map((a) => a.target!));
+          _marks.select.addAll(attacks.map((a) => a.fighter!));
+        } else {
+          _marks.targets.add(_attackTarget!);
+          _marks.select.addAll(attacks.where((a) => a.target == _attackTarget).map((a) => a.fighter!));
+        }
+      }
+    } else if (_isFighterPrompt) {
+      final fs = _values.cast<Fighter>();
+      if (p.intent == Intent.harm || p.intent == Intent.attackTarget || p.intent == Intent.moveEnemy) {
+        _marks.targets.addAll(fs);
+      } else {
+        _marks.select.addAll(fs);
+      }
+    } else if (_isBoardSpacePrompt) {
+      _marks.spaces.addAll(_values.map(_spaceOf).whereType<int>());
+      final subj = p.subject;
+      if (subj is Fighter && subj.onBoard) {
+        _marks.subject = subj;
+        _marks.spaces.remove(subj.space);
+      }
+      _marks.harmful = p.intent == Intent.moveEnemy || p.intent == Intent.harm;
+    } else if (_isPathPrompt) {
+      _marks.edges.addAll(_values.cast<(int, int)>());
+    }
+  }
+
+  /// Hand cards that can be picked right now.
+  Set<Card> get _playable {
+    final p = _prompt;
+    if (p == null) return const {};
+    if (_isHandCardPrompt) return _values.cast<Card>().toSet();
+    if (p.ask == Ask.action && !_attackMode) {
+      final schemes = _actions.where((a) => a.kind == ActionKind.scheme).map((a) => a.card!.def.key).toSet();
+      return me.hand.where((c) => schemes.contains(c.def.key)).toSet();
+    }
+    return const {};
+  }
+
+  // ------------------------------------------------------------------ board input
+
+  void _onBoardTap(Offset local) {
+    final p = _prompt;
+    if (p == null) return;
+    final space = geo.spaceAt(local);
+    final fighter = space == null ? null : game.fighterAt(space);
+
+    if (p.ask == Ask.action) {
+      final attacks = _actions.where((a) => a.kind == ActionKind.attack).toList();
+      if (fighter == null) return;
+      if (_attackTarget != null && attacks.any((a) => a.target == _attackTarget && a.fighter == fighter)) {
+        _confirmAttack(fighter, _attackTarget!);
+        return;
+      }
+      final asTarget = attacks.where((a) => a.target == fighter).toList();
+      if (asTarget.isEmpty) return;
+      _attackMode = true;
+      if (asTarget.length == 1) {
+        _confirmAttack(asTarget.first.fighter!, fighter);
+      } else {
+        _attackTarget = fighter;
+        _computeMarks();
+        _refresh();
+      }
+      return;
+    }
+
+    if (_isFighterPrompt && fighter != null) {
+      final i = _indexOf(fighter);
+      if (i == null) return;
+      // Only attacks ask "Are you sure?"; everything else happens on the first tap.
+      _submit([i]);
+      return;
+    }
+
+    if (_isBoardSpacePrompt && space != null) {
+      final i = _values.indexWhere((v) => _spaceOf(v) == space);
+      if (i < 0) return;
+      _s.audio.sfx(Sfx.click, volume: 0.4);
+      _submit([i]);
+      return;
+    }
+
+    if (_isPathPrompt) {
+      final e = geo.edgeAt(local, _values.cast<(int, int)>());
+      if (e == null) return;
+      _submit([_indexOf(e)!]);
+    }
+  }
+
+  void _confirmPending() {
+    final pend = _marks.pending;
+    if (pend == null) return;
+    if (pend is Fighter) {
+      final i = _indexOf(pend);
+      if (i != null) _submit([i]);
+    } else if (pend is int) {
+      final i = _values.indexWhere((v) => _spaceOf(v) == pend);
+      if (i >= 0) _submit([i]);
+    } else if (pend is (int, int)) {
+      final i = _indexOf(pend);
+      if (i != null) _submit([i]);
+    }
+  }
+
+  Future<void> _confirmAttack(Fighter attacker, Fighter target) async {
+    final i = _actions.indexWhere((a) => a.kind == ActionKind.attack && a.fighter == attacker && a.target == target);
+    if (i < 0) return;
+    final idx = _values.indexOf(_actions[i]);
+    if (_s.settings.confirmActions) {
+      _marks
+        ..targets.clear()
+        ..targets.add(target)
+        ..select.clear()
+        ..select.add(attacker);
+      _refresh();
+      final ok = await showConfirm(
+        context,
+        title: 'Attack ${target.name}?',
+        message: '${attacker.name} attacks. You choose the attack card next.',
+        confirm: 'Attack',
+      );
+      if (!mounted || _prompt == null) return;
+      if (!ok) {
+        _attackTarget = null;
+        _computeMarks();
+        _refresh();
+        return;
+      }
+    }
+    _submit([idx]);
+  }
+
+  // ------------------------------------------------------------------ actions & cards
+
+  void _startManeuver() {
+    final i = _values.indexWhere((v) => v is ActionChoice && v.kind == ActionKind.maneuver);
+    if (i >= 0) _submit([i]);
+  }
+
+  void _toggleAttack() {
+    _attackMode = !_attackMode;
+    _attackTarget = null;
+    _schemeHint = false;
+    _computeMarks();
+    if (_marks.any && _s.settings.quality.pulse) _pulse.start();
+    _refresh();
+  }
+
+  void _schemes() {
+    final schemes = _actions.where((a) => a.kind == ActionKind.scheme).toList();
+    if (schemes.length == 1) {
+      _tapCard(schemes.first.card!);
+      return;
+    }
+    setState(() {
+      _attackMode = false;
+      _schemeHint = true;
+      _computeMarks();
+    });
+  }
+
+  Future<void> _tapCard(Card card) async {
+    final p = _prompt;
+    final actions = <Widget>[];
+    String? caption;
+    if (p != null && p.ask == Ask.action) {
+      final scheme = _actions.where((a) => a.kind == ActionKind.scheme && a.card!.def.key == card.def.key).firstOrNull;
+      if (scheme != null && _schemeHint) {
+        // SCHEME was pressed first: the tap is the choice.
+        _s.audio.sfx(Sfx.card, volume: 0.6);
+        _submit([_values.indexOf(scheme)]);
+        return;
+      } else if (scheme != null) {
+        actions.add(_zoomAction('Play this scheme', Icons.auto_awesome_rounded, () => _submit([_values.indexOf(scheme)])));
+      } else if (card.def.canAttack) {
+        caption = 'To attack, tap ATTACK and choose a target. You pick the card after.';
+      }
+    } else if (p != null && _isHandCardPrompt && _values.contains(card)) {
+      final i = _values.indexOf(card);
+      // Only the attack card asks first; defending, boosting and other picks take one tap.
+      // (Long-press or right-click a card to read it.)
+      if (p.intent != Intent.attackCard || !_s.settings.confirmActions) {
+        _s.audio.sfx(Sfx.card, volume: 0.6);
+        _submit([i]);
+        return;
+      }
+      actions.add(_zoomAction('Attack with this card', Icons.flash_on_rounded, () => _submit([i])));
+    }
+    await showCardZoom<void>(context, card.def.image, caption: caption, actions: actions);
+  }
+
+  void _readCard(Card card) => showCardZoom<void>(context, card.def.image);
+
+  Widget _zoomAction(String label, IconData icon, VoidCallback onTap) => Builder(
+    builder: (ctx) => PlateButton(
+      label: label,
+      icon: icon,
+      style: PlateStyle.confirm,
+      height: 50,
+      fontSize: 16,
+      onPressed: () {
+        Navigator.of(ctx).pop();
+        onTap();
+      },
+    ),
+  );
+
+  Future<void> _skip() async {
+    final p = _prompt;
+    if (p == null || !p.optional) return;
+    _submit(const []);
+  }
+
+  // ======================================================================== menus
+
+  Future<void> _pause() async {
+    final r = await showGeneralDialog<String>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Resume',
+      barrierColor: const Color(0xB3000000),
+      pageBuilder: (ctx, _, _) => Center(
+        child: Material(
+          color: Colors.transparent,
+          child: Panel(
+            padding: const EdgeInsets.all(22),
+            cut: 14,
+            child: SizedBox(
+              width: 300,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text('PAUSED', textAlign: TextAlign.center, style: titleStyle(30, spacing: 4)),
+                  const Center(child: DecoRule(width: 160, opacity: 0.4)),
+                  const SizedBox(height: 16),
+                  PlateButton(
+                    label: 'Resume',
+                    icon: Icons.play_arrow_rounded,
+                    height: 50,
+                    onPressed: () => Navigator.of(ctx).pop('resume'),
+                  ),
+                  const SizedBox(height: 12),
+                  PlateButton(
+                    label: 'Settings',
+                    icon: Icons.tune_rounded,
+                    style: PlateStyle.secondary,
+                    height: 50,
+                    onPressed: () => Navigator.of(ctx).pop('settings'),
+                  ),
+                  const SizedBox(height: 12),
+                  PlateButton(
+                    label: 'Leave match',
+                    icon: Icons.logout_rounded,
+                    style: PlateStyle.danger,
+                    height: 50,
+                    onPressed: () => Navigator.of(ctx).pop('leave'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (r == 'settings') {
+      await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const SettingsScreen(inMatch: true)));
+      if (mounted) setState(() {});
+    } else if (r == 'leave') {
+      final ok = await showConfirm(
+        context,
+        title: 'Leave the match?',
+        message: 'This match can\'t be resumed.',
+        confirm: 'Leave',
+        danger: true,
+      );
+      if (ok && mounted) _toMenu();
+    }
+  }
+
+  void _toMenu() {
+    _s.audio.music(Music.menu);
+    Navigator.of(context).popUntil((r) => r.isFirst);
+  }
+
+  void _rematch() {
+    Navigator.of(context).pushReplacement(
+      PageRouteBuilder<void>(
+        transitionDuration: const Duration(milliseconds: 400),
+        pageBuilder: (_, _, _) => MatchScreen(config: widget.config.rematch()),
+        transitionsBuilder: (_, a, _, child) => FadeTransition(opacity: a, child: child),
+      ),
+    );
+  }
+
+  // ======================================================================== build
+
+  String get _promptText {
+    final p = _prompt;
+    if (_result != null) return 'Game over';
+    if (p == null) {
+      if (_thinking != null) return '${_thinking!.name} is thinking…';
+      if (game.turnNumber == 0) return 'Setting up the battlefield…';
+      return game.active == me ? 'Resolving…' : "${game.active.name}'s turn";
+    }
+    if (p.ask == Ask.action) {
+      final left = game.actions + 1;
+      if (_attackMode) {
+        return _attackTarget == null ? 'Tap a red-marked fighter to attack' : 'Choose who attacks ${_attackTarget!.name}';
+      }
+      if (_schemeHint) return 'Tap a glowing scheme card in your hand';
+      return 'Your turn · choose an action ($left left)';
+    }
+    if (_isFighterPrompt && _marks.pending != null) return '${p.text} · tap again or confirm';
+    if (_isBoardSpacePrompt && _marks.pending != null) return 'Tap again or press ✓ to confirm';
+    return switch (p.intent) {
+      Intent.attackCard => 'Choose an attack card from your hand',
+      Intent.defenseCard => 'Play a defense card, or skip',
+      _ => p.text,
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    final p = _prompt;
+    final settings = _s.settings;
+    // The HUD was laid out for a landscape phone (~412 px tall); bigger screens scale it up.
+    final ui = (size.shortestSide / 470).clamp(1.0, 1.4);
+    final cardW = (size.height * 0.26 * cardAspect * 1.25).clamp(64.0, 220.0);
+    final handLeft = math.min(250 * ui + 10, size.width * 0.3);
+    final handRight = math.min(200 * ui + 10, size.width * 0.24);
+    final combatCardH = (size.height * 0.46).clamp(150.0, 380.0);
+    final others = game.players.where((o) => o != me).toList();
+    final playable = _playable;
+    final boardPick = _marks.pending != null;
+    final focus = _combat == null ? <Fighter>{} : {_combat!.attacker.fighter, _combat!.defender.fighter};
+    _ensure3d();
+    _sync3d();
+    // During combat the hand drops out of the way of the fighters, unless a card is to be picked.
+    final handDown = _combat != null && !_isHandCardPrompt;
+    final handH = cardW / cardAspect * 0.95;
+
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && _result == null) _pause();
+      },
+      child: Scaffold(
+        backgroundColor: Palette.bgDeep,
+        body: TableBackground(
+          ornament: false,
+          child: Stack(
+            children: [
+              // The board with its camera: the 3D map, or the 2D board.
+              if (_b3 != null)
+                Positioned.fill(
+                  child: Stack(
+                    children: [
+                      Positioned.fill(child: Board3DView(key: ObjectKey(_b3), controller: _b3!)),
+                      Positioned.fill(
+                        child: ValueListenableBuilder<Board3DStatus>(
+                          valueListenable: _b3!.status,
+                          builder: (_, st, _) =>
+                              st == Board3DStatus.ready ? const SizedBox.shrink() : _Board3DCover(map: widget.config.map.name, progress: _b3!.progress),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else
+              Positioned.fill(
+                child: LayoutBuilder(
+                  builder: (context, c) {
+                    final view = c.biggest;
+                    if (view != _viewport) {
+                      _viewport = view;
+                      final first = _camHome == null;
+                      _camHome = _fitMatrix(view);
+                      if (first) _cam.value = _camHome!.clone();
+                    }
+                    return AnimatedBuilder(
+                      animation: _shakeA,
+                      builder: (_, child) {
+                        final t = _shakeA.value;
+                        final dx = t == 0 || t == 1 ? 0.0 : math.sin(t * math.pi * 7) * 7 * (1 - t);
+                        return Transform.translate(offset: Offset(dx, 0), child: child);
+                      },
+                      child: Listener(
+                        onPointerSignal: (e) {
+                          if (e is PointerScrollEvent) _zoom(e.scrollDelta.dy > 0 ? 0.9 : 1.1);
+                        },
+                        child: InteractiveViewer(
+                          transformationController: _cam,
+                          constrained: false,
+                          minScale: _minScale,
+                          maxScale: _maxScale,
+                          boundaryMargin: EdgeInsets.all(math.max(view.width, view.height)),
+                          scaleEnabled: true,
+                          trackpadScrollCausesScale: false,
+                          onInteractionStart: (_) => _camA.stop(),
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTapUp: (d) => _onBoardTap(d.localPosition),
+                            child: SizedBox(
+                              width: geo.size.width,
+                              height: geo.size.height,
+                              child: Stack(
+                                children: [
+                                  RepaintBoundary(
+                                    child: _boardImage == null
+                                        ? CustomPaint(size: geo.size, painter: BoardPainter(geo, showStarts: false))
+                                        : RawImage(
+                                            image: _boardImage,
+                                            width: geo.size.width,
+                                            height: geo.size.height,
+                                            fit: BoxFit.fill,
+                                            filterQuality: FilterQuality.medium,
+                                          ),
+                                  ),
+                                  RepaintBoundary(
+                                    child: CustomPaint(
+                                      size: geo.size,
+                                      painter: BoardLayerPainter(
+                                        game: game,
+                                        geo: geo,
+                                        marks: _marks,
+                                        colorOf: colorOf,
+                                        quality: settings.quality,
+                                        move: _move,
+                                        pulse: _pulse,
+                                        fxT: _fxA,
+                                        fx: _fx,
+                                        focus: focus,
+                                        repaint: Listenable.merge([_boardTick, _moveA, _pulse, _fxA]),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+
+              // Dim the edges during combat so the duel reads first.
+              if (_combat != null)
+                const Positioned.fill(
+                  child: IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: RadialGradient(radius: 0.9, colors: [Colors.transparent, Color(0x99000000)], stops: [0.35, 1]),
+                      ),
+                    ),
+                  ),
+                ),
+
+              // Combat cards.
+              if (_combat != null)
+                Positioned.fill(
+                  child: CombatView(
+                    game: game,
+                    combat: _combat!,
+                    me: me,
+                    revealed: _revealed,
+                    resolved: _resolved,
+                    resolving: _resolving,
+                    effectText: _effectText,
+                    cardHeight: combatCardH,
+                    onZoom: (c) => showCardZoom<void>(context, c.def.image),
+                  ),
+                ),
+
+              // Prompt bar.
+              Positioned(
+                top: 0,
+                left: 120 * ui,
+                right: 120 * ui,
+                child: SafeArea(
+                  bottom: false,
+                  child: LayoutBuilder(
+                    builder: (context, c) => Center(
+                      child: _scaled(
+                        ui,
+                        Alignment.topCenter,
+                        ConstrainedBox(
+                          constraints: BoxConstraints(maxWidth: c.maxWidth / ui),
+                          child: PromptBar(
+                            text: _promptText,
+                            mine: p != null,
+                            source: p?.source?.def.image,
+                            onSource: p?.source == null ? null : () => showCardZoom<void>(context, p!.source!.def.image),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+
+              // Top-left: menu and log.
+              Positioned(
+                top: 8,
+                left: 10,
+                child: SafeArea(
+                  child: _scaled(
+                    ui,
+                    Alignment.topLeft,
+                    Row(
+                      children: [
+                        HexButton(icon: Icons.menu_rounded, tooltip: 'Menu', size: 44, onPressed: _pause),
+                        const SizedBox(width: 6),
+                        HexButton(
+                          icon: Icons.receipt_long_rounded,
+                          tooltip: 'Game log',
+                          size: 44,
+                          onPressed: () => setState(() => _showLog = !_showLog),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
+              // Left edge: camera controls.
+              Positioned(
+                left: 10,
+                top: 0,
+                bottom: 0,
+                child: SafeArea(
+                  child: _hideInCombat(
+                    Center(
+                      child: _scaled(
+                        ui,
+                        Alignment.centerLeft,
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            HexButton(icon: Icons.add_rounded, tooltip: 'Zoom in', size: 38, onPressed: () => _zoom(1.25)),
+                            const SizedBox(height: 6),
+                            HexButton(icon: Icons.remove_rounded, tooltip: 'Zoom out', size: 38, onPressed: () => _zoom(0.8)),
+                            const SizedBox(height: 6),
+                            HexButton(icon: Icons.fit_screen_rounded, tooltip: 'Fit board', size: 38, onPressed: _fit),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+
+              // Top-right: everyone else.
+              Positioned(
+                top: 8,
+                right: 10,
+                child: SafeArea(
+                  child: _hideInCombat(
+                    _scaled(
+                      ui,
+                      Alignment.topRight,
+                      _OpponentColumn(
+                        players: others,
+                        active: game.turnNumber == 0 ? null : game.active,
+                        colorOf: colorOf,
+                        me: me,
+                        actions: game.actions,
+                        compact: others.length > 2 || size.height < 500 && others.length > 1,
+                        onTap: (o) => showPiles(context, o, mine: false),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+
+              // Bottom: your hand.
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 260),
+                curve: Curves.easeOutCubic,
+                left: handLeft,
+                right: handRight,
+                bottom: handDown ? -handH * 0.62 : 0,
+                height: handH,
+                child: HandFan(
+                  cards: me.hand,
+                  playable: playable,
+                  dimOthers: _isHandCardPrompt,
+                  cardWidth: cardW,
+                  onTap: _tapCard,
+                  onRead: _readCard,
+                ),
+              ),
+
+              // Bottom-left: you.
+              Positioned(
+                left: 10,
+                bottom: 10,
+                child: SafeArea(
+                  top: false,
+                  child: _scaled(
+                    ui,
+                    Alignment.bottomLeft,
+                    PlayerPlate(
+                      player: me,
+                      color: colorOf(me),
+                      subtitle: settings.username,
+                      big: size.width > 700,
+                      active: game.turnNumber > 0 && game.active == me,
+                      actionsLeft: game.turnNumber > 0 && game.active == me
+                          ? (p?.ask == Ask.action ? game.actions + 1 : game.actions)
+                          : null,
+                      onTap: () => showPiles(context, me, mine: true),
+                    ),
+                  ),
+                ),
+              ),
+
+              // Bottom-right: actions, skip, confirm.
+              Positioned(
+                right: 12,
+                bottom: 12,
+                child: SafeArea(top: false, child: _scaled(ui, Alignment.bottomRight, _actionCluster(p, boardPick))),
+              ),
+
+              // A scheme or boost card in the spotlight.
+              if (_spot != null)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: Center(
+                      child: TweenAnimationBuilder<double>(
+                        key: ValueKey(_spot!.$1.uid),
+                        tween: Tween(begin: 0, end: 1),
+                        duration: const Duration(milliseconds: 280),
+                        curve: Curves.easeOutBack,
+                        builder: (_, t, child) => Opacity(
+                          opacity: t.clamp(0, 1),
+                          child: Transform.scale(scale: 0.8 + 0.2 * t, child: child),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.fromLTRB(16, 3, 22, 4),
+                              decoration: ShapeDecoration(
+                                color: plateColor(hexColor(_spot!.$1.owner.hero.color)),
+                                shape: const PlateBorder(side: BorderSide(color: Palette.bone)),
+                              ),
+                              child: Text(_spot!.$2.toUpperCase(), style: titleStyle(15, color: Colors.white, spacing: 1)),
+                            ),
+                            const SizedBox(height: 8),
+                            CardImage(_spot!.$1.def.image, width: (size.height * 0.55 * cardAspect).clamp(110, 260)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+
+              // Panels for choices that aren't on the board or in your hand.
+              if (p != null) ?_choiceOverlay(p),
+
+              // The game log.
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 240),
+                curve: Curves.easeOutCubic,
+                left: _showLog ? 10 : -360,
+                top: 60,
+                bottom: 10,
+                width: math.min(340, size.width * 0.45),
+                child: LogPanel(lines: _log, onClose: () => setState(() => _showLog = false)),
+              ),
+
+              TurnBanner(animation: _banner, title: _bannerTitle, sub: _bannerSub, color: _bannerColor),
+
+              if (_result != null)
+                Positioned.fill(
+                  child: ResultView(
+                    won: game.winningTeam == me.team,
+                    winner: _result!.winner,
+                    reason: _result!.reason,
+                    turns: game.turnNumber,
+                    onRematch: _rematch,
+                    onMenu: _toMenu,
+                  ),
+                ),
+
+              if (_error != null)
+                Positioned.fill(
+                  child: Container(
+                    color: const Color(0xE60E0F12),
+                    alignment: Alignment.center,
+                    child: Panel(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text('SOMETHING WENT WRONG', style: titleStyle(22, color: Palette.danger)),
+                          const SizedBox(height: 6),
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 520),
+                            child: Text(
+                              'The match hit a rules error and stopped.\n$_error',
+                              textAlign: TextAlign.center,
+                              style: bodyStyle(14, color: Palette.boneDim),
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          PlateButton(label: 'Back to menu', onPressed: _toMenu),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Scales a HUD cluster from its anchored corner (hit-testing follows the transform).
+  static Widget _scaled(double ui, Alignment anchor, Widget child) =>
+      ui == 1 ? child : Transform.scale(scale: ui, alignment: anchor, child: child);
+
+  /// Side chrome steps aside while the combat cards are up.
+  Widget _hideInCombat(Widget child) => IgnorePointer(
+    ignoring: _combat != null,
+    child: AnimatedOpacity(opacity: _combat != null ? 0 : 1, duration: const Duration(milliseconds: 220), child: child),
+  );
+
+  Widget _actionCluster(Prompt? p, bool boardPick) {
+    final children = <Widget>[];
+    if (p != null && p.ask == Ask.action) {
+      final hasScheme = _actions.any((a) => a.kind == ActionKind.scheme);
+      final hasAttack = _actions.any((a) => a.kind == ActionKind.attack);
+      children.addAll([
+        PlateButton(
+          label: 'Maneuver',
+          icon: Icons.directions_run_rounded,
+          style: PlateStyle.secondary,
+          width: 178,
+          height: 46,
+          fontSize: 17,
+          onPressed: _startManeuver,
+        ),
+        const SizedBox(height: 8),
+        PlateButton(
+          label: 'Scheme',
+          icon: Icons.auto_awesome_rounded,
+          style: _schemeHint ? PlateStyle.primary : PlateStyle.secondary,
+          width: 178,
+          height: 46,
+          fontSize: 17,
+          onPressed: hasScheme ? _schemes : null,
+        ),
+        const SizedBox(height: 8),
+        PlateButton(
+          label: _attackMode ? 'Cancel attack' : 'Attack',
+          icon: _attackMode ? Icons.close_rounded : Icons.flash_on_rounded,
+          style: _attackMode ? PlateStyle.primary : PlateStyle.danger,
+          width: 178,
+          height: 46,
+          fontSize: 17,
+          onPressed: hasAttack ? _toggleAttack : null,
+        ),
+      ]);
+      return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.end, children: children);
+    }
+    final showSkip = p != null && p.optional && _choiceOverlay(p) == null;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        if (showSkip) ...[
+          PlateButton(
+            label: p.skipLabel ?? 'Skip',
+            icon: Icons.skip_next_rounded,
+            style: PlateStyle.secondary,
+            height: 44,
+            fontSize: 16,
+            onPressed: _skip,
+          ),
+          const SizedBox(height: 10),
+        ],
+        ConfirmHex(size: 70, onPressed: boardPick ? _confirmPending : null, tooltip: 'Confirm', pulse: boardPick ? _pulse : null),
+      ],
+    );
+  }
+
+  /// A panel for prompts that can't be answered on the board or from the hand.
+  Widget? _choiceOverlay(Prompt p) {
+    if (p.ask == Ask.action || _isFighterPrompt || _isBoardSpacePrompt || _isHandCardPrompt || _isPathPrompt) return null;
+    final values = _values;
+    String? image(Object? v) => v is Card ? v.def.image : null;
+    final images = [for (final v in values) image(v)];
+    final source = p.source?.def.image;
+    if ((p.ask == Ask.card || p.ask == Ask.cards) && images.every((i) => i != null)) {
+      return Positioned.fill(
+        child: Container(
+          color: const Color(0x8C000000),
+          child: CardPicker(
+            key: ValueKey(p),
+            title: p.text,
+            images: images.cast<String>(),
+            min: p.ask == Ask.cards ? p.min : 1,
+            max: p.ask == Ask.cards ? p.max : 1,
+            onDone: _submit,
+            onSkip: p.optional ? () => _submit(const []) : null,
+            skipLabel: p.skipLabel,
+            onZoom: (i) => showCardZoom<void>(context, images[i]!),
+          ),
+        ),
+      );
+    }
+    return Positioned.fill(
+      child: Container(
+        color: const Color(0x8C000000),
+        child: ChoicePanel(
+          key: ValueKey(p),
+          title: p.text,
+          labels: [for (final c in p.choices) c.label],
+          source: source,
+          onSource: source == null ? null : () => showCardZoom<void>(context, source),
+          onPick: (i) => _submit([i]),
+          skipLabel: p.skipLabel,
+          onSkip: p.optional ? () => _submit(const []) : null,
+        ),
+      ),
+    );
+  }
+}
+
+class _OpponentColumn extends StatelessWidget {
+  const _OpponentColumn({
+    required this.players,
+    required this.active,
+    required this.colorOf,
+    required this.me,
+    required this.actions,
+    required this.compact,
+    required this.onTap,
+  });
+  final List<Player> players;
+  final Player? active;
+  final Color Function(Player) colorOf;
+  final Player me;
+  final int actions;
+  final bool compact;
+  final void Function(Player) onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final plates = [
+      for (final o in players)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: compact
+              ? _MiniPlate(player: o, color: colorOf(o), active: active == o, ally: o.team == me.team, onTap: () => onTap(o))
+              : PlayerPlate(
+                  player: o,
+                  color: colorOf(o),
+                  subtitle: '${o.team == me.team ? 'Ally · ' : ''}${o.label}',
+                  active: active == o,
+                  actionsLeft: active == o ? actions : null,
+                  onTap: () => onTap(o),
+                ),
+        ),
+    ];
+    if (!compact) return Column(crossAxisAlignment: CrossAxisAlignment.end, children: plates);
+    return Wrap(direction: Axis.vertical, spacing: 0, runSpacing: 6, crossAxisAlignment: WrapCrossAlignment.end, children: plates);
+  }
+}
+
+/// Avatar + heart only: for 3+ other players on a phone.
+class _MiniPlate extends StatelessWidget {
+  const _MiniPlate({required this.player, required this.color, required this.active, required this.ally, required this.onTap});
+  final Player player;
+  final Color color;
+  final bool active;
+  final bool ally;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    label: '${ally ? 'Ally ' : ''}${player.name}, ${player.heroFighter.hp} health',
+    child: GestureDetector(
+      onTap: onTap,
+      child: Opacity(
+        opacity: player.eliminated ? 0.5 : 1,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(4, 3, 14, 3),
+          decoration: ShapeDecoration(
+            color: const Color(0xD90E0F12),
+            shape: PlateBorder(
+              slant: 0.3,
+              side: BorderSide(color: active ? Palette.bone : color.withValues(alpha: 0.6), width: active ? 1.8 : 1.2),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Avatar(player.hero.avatar, size: 30, ring: color, ringWidth: 1.6, grey: player.eliminated),
+              const SizedBox(width: 6),
+              SizedBox(
+                width: 76,
+                child: Text(player.name.toUpperCase(), maxLines: 1, overflow: TextOverflow.ellipsis, style: titleStyle(12, spacing: 0.4)),
+              ),
+              HeartBadge(player.heroFighter.hp, size: 22),
+              const SizedBox(width: 4),
+              Icon(Icons.style_rounded, size: 12, color: Palette.boneDim),
+              Text('${player.hand.length}', style: titleStyle(12, weight: FontWeight.w700, spacing: 0)),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+/// Covers the 3D map while its model loads.
+class _Board3DCover extends StatelessWidget {
+  const _Board3DCover({required this.map, required this.progress});
+  final String map;
+  final ValueListenable<double> progress;
+
+  @override
+  Widget build(BuildContext context) => ColoredBox(
+    color: Palette.bgDeep,
+    child: Center(
+      child: SizedBox(
+        width: 280,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(map.toUpperCase(), textAlign: TextAlign.center, style: titleStyle(26, spacing: 2)),
+            const SizedBox(height: 4),
+            Text('Setting up the 3D battlefield…', style: bodyStyle(14, color: Palette.boneDim)),
+            const SizedBox(height: 14),
+            ValueListenableBuilder<double>(
+              valueListenable: progress,
+              builder: (_, v, _) => ClipRRect(
+                borderRadius: BorderRadius.circular(2),
+                child: LinearProgressIndicator(
+                  value: v > 0 ? v : null,
+                  minHeight: 4,
+                  color: Palette.bone,
+                  backgroundColor: Palette.line,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}

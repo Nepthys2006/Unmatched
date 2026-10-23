@@ -36,6 +36,9 @@ dependencies:
   cupertino_icons: ^1.0.8
   audioplayers: ^6.8.1
   shared_preferences: ^2.5.6
+  webview_flutter: ^4.14.1
+  webview_windows: ^0.4.0
+  web: ^1.1.2
 
 dev_dependencies:
   flutter_test:
@@ -57,7 +60,14 @@ flutter:
   assets:
     - assets/data/
     - assets/audio/
-    - assets/ui/
+    - assets/maps3d/
+    - assets/web3d/
+    - assets/web3d/three/
+    - assets/web3d/three/addons/controls/
+    - assets/web3d/three/addons/environments/
+    - assets/web3d/three/addons/libs/
+    - assets/web3d/three/addons/loaders/
+    - assets/web3d/three/addons/utils/
     - assets/cards/achilles/
     - assets/cards/alice/
     - assets/cards/ancient-leshen/

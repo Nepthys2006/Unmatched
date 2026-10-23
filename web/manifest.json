@@ -1,12 +1,12 @@
 {
-    "name": "unmatched_game",
-    "short_name": "unmatched_game",
+    "name": "Unmatched (fan edition)",
+    "short_name": "Unmatched",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
+    "background_color": "#1b1c20",
+    "theme_color": "#1b1c20",
     "description": "Unmatched fan game",
-    "orientation": "portrait-primary",
+    "orientation": "landscape",
     "prefer_related_applications": false,
     "icons": [
         {
