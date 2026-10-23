@@ -554,6 +554,11 @@ class Game {
       if (turnEnded) break;
       await m.combatImmediately(this, c);
     }
+    c.phase = Phase.during;
+    for (final m in allMods.toList()) {
+      if (turnEnded) break;
+      await m.duringCombat(this, c);
+    }
     await _phase(c, Phase.during, 'during');
 
     c.phase = Phase.damage;
@@ -853,9 +858,16 @@ class Game {
       for (final m in allMods.toList()) {
         await m.onDamaged(this, target, real, info);
       }
-      if (target.hp <= 0 && !target.defeated) await defeat(target);
+      if (target.hp <= 0 && !target.defeated && !await _defeatPrevented(target)) await defeat(target);
     }
     return dealt;
+  }
+
+  Future<bool> _defeatPrevented(Fighter f) async {
+    for (final m in allMods.toList()) {
+      if (await m.preventDefeat(this, f)) return true;
+    }
+    return false;
   }
 
   Future<void> defeat(Fighter f) async {

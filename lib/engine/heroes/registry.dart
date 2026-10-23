@@ -10,6 +10,7 @@ import 'bol_more.dart';
 import 'buffy.dart';
 import 'cobble.dart';
 import 'fables.dart';
+import 'hells_kitchen.dart';
 import 'jurassic.dart';
 import 'marvel.dart';
 import 'legends.dart';
@@ -75,6 +76,9 @@ final Map<String, HeroScript Function()> heroScripts = {
   'spiderman': SpiderMan.new,
   'black-panther': BlackPanther.new,
   'winter-soldier': WinterSoldier.new,
+  'bullseye': Bullseye.new,
+  'daredevil': Daredevil.new,
+  'elektra': Elektra.new,
 };
 
 /// Heroes whose ability and every card are scripted and tested.

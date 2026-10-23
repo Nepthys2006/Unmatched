@@ -95,6 +95,12 @@ abstract class Mod {
   /// [f] finished moving along [path] (normal movement, not placement).
   Future<void> afterMove(Game g, Fighter f, List<int> path) async {}
 
+  /// A DURING COMBAT ability, resolved before the cards' DURING COMBAT effects (Daredevil).
+  Future<void> duringCombat(Game g, Combat c) async {}
+
+  /// [f] is about to be defeated; true keeps it from being defeated (Elektra's first death).
+  Future<bool> preventDefeat(Game g, Fighter f) async => false;
+
   /// False stops [p] drawing cards (Right in the Face!).
   bool canDraw(Game g, Player p) => true;
 

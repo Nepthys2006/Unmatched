@@ -91,6 +91,8 @@ class Combat {
   Side sideOf(Player p) => attacker.player == p ? attacker : defender;
   Side sideOfFighter(Fighter f) => attacker.fighter == f ? attacker : defender;
   bool involves(Fighter f) => attacker.fighter == f || defender.fighter == f;
-  bool won(Player p) => resolved && (attackerWon ? attacker.player == p : defender.player == p);
+  /// Whether [p] won. Also true when an effect says they are "considered to have won"
+  /// (flags['alsoWon'], Bullseye's Arrogant But Effective).
+  bool won(Player p) => resolved && ((attackerWon ? attacker.player == p : defender.player == p) || flags['alsoWon'] == p);
   Iterable<Side> get sides => [defender, attacker];
 }
