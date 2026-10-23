@@ -232,9 +232,8 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
           _b3Failed = true;
           _drop3d();
           if (_boardImage == null) unawaited(_bakeBoard());
-          ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-            SnackBar(content: Text('The 3D map could not be shown (${c.error}). Playing on the 2D board.')),
-          );
+          ScaffoldMessenger.maybeOf(context)
+              ?.showSnackBar(SnackBar(content: Text('The 3D map could not be shown (${c.error}). Playing on the 2D board.')));
         }
         setState(() {});
       });
@@ -464,7 +463,8 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
         _combat = null;
         _resolved = false;
         _refresh();
-        if (quality.cameraEffects) _pullBack();
+        if (quality.cameraEffects && !_pulledForPick) _pullBack();
+        _pulledForPick = false;
         await _wait(300);
       case SchemePlayed(:final card, :final fighter):
         _spot = (card, '${fighter.name} plays a scheme');
@@ -596,6 +596,16 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
 
   // ======================================================================== prompts
 
+  /// The camera pulled back from the duel so a board choice can be made (re-pushed after).
+  bool _pulledForPick = false;
+
+  /// A card effect asks you to pick on the board in the middle of a combat (move a fighter,
+  /// place one, choose a space or path): the combat cards step aside until you're done.
+  bool get _pickingInCombat => _combat != null && (_isBoardSpacePrompt || _isFighterPrompt || _isPathPrompt);
+
+  /// The combat cards cover the screen (not while you pick on the board).
+  bool get _combatCovers => _combat != null && !_pickingInCombat;
+
   void _onPrompt(Prompt p, Completer<List<int>> c) {
     if (_disposed) {
       c.completeError(const _Abandoned());
@@ -610,6 +620,11 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
     _computeMarks();
     if (_marks.any && _s.settings.quality.pulse) {
       _pulse.start();
+    }
+    if (_pickingInCombat && !_pulledForPick && _s.settings.quality.cameraEffects) {
+      // Show the board around the fighters, not the close-up of the duel.
+      _pulledForPick = true;
+      _pullBack();
     }
     _refresh();
     if (widget.autoplay) {
@@ -636,6 +651,14 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
     _clearPrompt();
     _refresh();
     c.complete(picks);
+    if (_pulledForPick) {
+      // Back to the duel once the moving is over (not between two picks of one effect).
+      Future<void>.delayed(const Duration(milliseconds: 450), () {
+        if (_disposed || !_pulledForPick || _pickingInCombat) return;
+        _pulledForPick = false;
+        if (_combat != null) _pushIn(_combat!);
+      });
+    }
   }
 
   List<Object?> get _values => [for (final c in _prompt?.choices ?? const <Choice<Object?>>[]) c.value];
@@ -1027,99 +1050,104 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
                 Positioned.fill(
                   child: Stack(
                     children: [
-                      Positioned.fill(child: IgnorePointer(child: Board3DView(key: ObjectKey(_b3), controller: _b3!))),
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: Board3DView(key: ObjectKey(_b3), controller: _b3!),
+                        ),
+                      ),
                       Positioned.fill(child: _Board3DInput(controller: _b3!)),
                       Positioned.fill(
                         child: ValueListenableBuilder<Board3DStatus>(
                           valueListenable: _b3!.status,
-                          builder: (_, st, _) =>
-                              st == Board3DStatus.ready ? const SizedBox.shrink() : _Board3DCover(map: widget.config.map.name, progress: _b3!.progress),
+                          builder: (_, st, _) => st == Board3DStatus.ready
+                              ? const SizedBox.shrink()
+                              : _Board3DCover(map: widget.config.map.name, progress: _b3!.progress),
                         ),
                       ),
                     ],
                   ),
                 )
               else
-              Positioned.fill(
-                child: LayoutBuilder(
-                  builder: (context, c) {
-                    final view = c.biggest;
-                    if (view != _viewport) {
-                      _viewport = view;
-                      final first = _camHome == null;
-                      _camHome = _fitMatrix(view);
-                      if (first) _cam.value = _camHome!.clone();
-                    }
-                    return AnimatedBuilder(
-                      animation: _shakeA,
-                      builder: (_, child) {
-                        final t = _shakeA.value;
-                        final dx = t == 0 || t == 1 ? 0.0 : math.sin(t * math.pi * 7) * 7 * (1 - t);
-                        return Transform.translate(offset: Offset(dx, 0), child: child);
-                      },
-                      child: Listener(
-                        onPointerSignal: (e) {
-                          if (e is PointerScrollEvent) _zoom(e.scrollDelta.dy > 0 ? 0.9 : 1.1);
+                Positioned.fill(
+                  child: LayoutBuilder(
+                    builder: (context, c) {
+                      final view = c.biggest;
+                      if (view != _viewport) {
+                        _viewport = view;
+                        final first = _camHome == null;
+                        _camHome = _fitMatrix(view);
+                        if (first) _cam.value = _camHome!.clone();
+                      }
+                      return AnimatedBuilder(
+                        animation: _shakeA,
+                        builder: (_, child) {
+                          final t = _shakeA.value;
+                          final dx = t == 0 || t == 1 ? 0.0 : math.sin(t * math.pi * 7) * 7 * (1 - t);
+                          return Transform.translate(offset: Offset(dx, 0), child: child);
                         },
-                        child: InteractiveViewer(
-                          transformationController: _cam,
-                          constrained: false,
-                          minScale: _minScale,
-                          maxScale: _maxScale,
-                          boundaryMargin: EdgeInsets.all(math.max(view.width, view.height)),
-                          scaleEnabled: true,
-                          trackpadScrollCausesScale: false,
-                          onInteractionStart: (_) => _camA.stop(),
-                          child: GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onTapUp: (d) => _onBoardTap(d.localPosition),
-                            child: SizedBox(
-                              width: geo.size.width,
-                              height: geo.size.height,
-                              child: Stack(
-                                children: [
-                                  RepaintBoundary(
-                                    child: _boardImage == null
-                                        ? CustomPaint(size: geo.size, painter: BoardPainter(geo, showStarts: false))
-                                        : RawImage(
-                                            image: _boardImage,
-                                            width: geo.size.width,
-                                            height: geo.size.height,
-                                            fit: BoxFit.fill,
-                                            filterQuality: FilterQuality.medium,
-                                          ),
-                                  ),
-                                  RepaintBoundary(
-                                    child: CustomPaint(
-                                      size: geo.size,
-                                      painter: BoardLayerPainter(
-                                        game: game,
-                                        geo: geo,
-                                        marks: _marks,
-                                        colorOf: colorOf,
-                                        quality: settings.quality,
-                                        move: _move,
-                                        pulse: _pulse,
-                                        fxT: _fxA,
-                                        fx: _fx,
-                                        focus: focus,
-                                        repaint: Listenable.merge([_boardTick, _moveA, _pulse, _fxA]),
+                        child: Listener(
+                          onPointerSignal: (e) {
+                            if (e is PointerScrollEvent) _zoom(e.scrollDelta.dy > 0 ? 0.9 : 1.1);
+                          },
+                          child: InteractiveViewer(
+                            transformationController: _cam,
+                            constrained: false,
+                            minScale: _minScale,
+                            maxScale: _maxScale,
+                            boundaryMargin: EdgeInsets.all(math.max(view.width, view.height)),
+                            scaleEnabled: true,
+                            trackpadScrollCausesScale: false,
+                            onInteractionStart: (_) => _camA.stop(),
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTapUp: (d) => _onBoardTap(d.localPosition),
+                              child: SizedBox(
+                                width: geo.size.width,
+                                height: geo.size.height,
+                                child: Stack(
+                                  children: [
+                                    RepaintBoundary(
+                                      child: _boardImage == null
+                                          ? CustomPaint(size: geo.size, painter: BoardPainter(geo, showStarts: false))
+                                          : RawImage(
+                                              image: _boardImage,
+                                              width: geo.size.width,
+                                              height: geo.size.height,
+                                              fit: BoxFit.fill,
+                                              filterQuality: FilterQuality.medium,
+                                            ),
+                                    ),
+                                    RepaintBoundary(
+                                      child: CustomPaint(
+                                        size: geo.size,
+                                        painter: BoardLayerPainter(
+                                          game: game,
+                                          geo: geo,
+                                          marks: _marks,
+                                          colorOf: colorOf,
+                                          quality: settings.quality,
+                                          move: _move,
+                                          pulse: _pulse,
+                                          fxT: _fxA,
+                                          fx: _fx,
+                                          focus: focus,
+                                          repaint: Listenable.merge([_boardTick, _moveA, _pulse, _fxA]),
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
                             ),
                           ),
                         ),
-                      ),
-                    );
-                  },
+                      );
+                    },
+                  ),
                 ),
-              ),
 
               // Dim the edges during combat so the duel reads first.
-              if (_combat != null)
+              if (_combatCovers)
                 const Positioned.fill(
                   child: IgnorePointer(
                     child: DecoratedBox(
@@ -1130,19 +1158,26 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
                   ),
                 ),
 
-              // Combat cards.
+              // Combat cards; they step aside while a card effect has you pick on the board.
               if (_combat != null)
                 Positioned.fill(
-                  child: CombatView(
-                    game: game,
-                    combat: _combat!,
-                    me: me,
-                    revealed: _revealed,
-                    resolved: _resolved,
-                    resolving: _resolving,
-                    effectText: _effectText,
-                    cardHeight: combatCardH,
-                    onZoom: (c) => showCardZoom<void>(context, c.def.image),
+                  child: IgnorePointer(
+                    ignoring: !_combatCovers,
+                    child: AnimatedOpacity(
+                      opacity: _combatCovers ? 1 : 0,
+                      duration: const Duration(milliseconds: 220),
+                      child: CombatView(
+                        game: game,
+                        combat: _combat!,
+                        me: me,
+                        revealed: _revealed,
+                        resolved: _resolved,
+                        resolving: _resolving,
+                        effectText: _effectText,
+                        cardHeight: combatCardH,
+                        onZoom: (c) => showCardZoom<void>(context, c.def.image),
+                      ),
+                    ),
                   ),
                 ),
 
@@ -1431,8 +1466,8 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
 
   /// Side chrome steps aside while the combat cards are up.
   Widget _hideInCombat(Widget child) => IgnorePointer(
-    ignoring: _combat != null,
-    child: AnimatedOpacity(opacity: _combat != null ? 0 : 1, duration: const Duration(milliseconds: 220), child: child),
+    ignoring: _combatCovers,
+    child: AnimatedOpacity(opacity: _combatCovers ? 0 : 1, duration: const Duration(milliseconds: 220), child: child),
   );
 
   Widget _actionCluster(Prompt? p, bool boardPick) {
@@ -1648,12 +1683,7 @@ class _Board3DCover extends StatelessWidget {
               valueListenable: progress,
               builder: (_, v, _) => ClipRRect(
                 borderRadius: BorderRadius.circular(2),
-                child: LinearProgressIndicator(
-                  value: v > 0 ? v : null,
-                  minHeight: 4,
-                  color: Palette.bone,
-                  backgroundColor: Palette.line,
-                ),
+                child: LinearProgressIndicator(value: v > 0 ? v : null, minHeight: 4, color: Palette.bone, backgroundColor: Palette.line),
               ),
             ),
           ],
