@@ -135,6 +135,18 @@ void main() {
       expect(s.p1.hand, hasLength(1), reason: 'the trap went back to the box: draw');
     });
 
+    test('an enemy moving through a fighter standing on a trap is not stopped there', () async {
+      final s = Scenario('robert-muldoon', 'buffy');
+      s.place(s.hero(s.p1), 6);
+      s.place(s.hero(s.p2), 4);
+      s.game.board.tokens.add(Token('trap', s.p1, space: 6));
+      m(s).placed = 1;
+      s.a2.then(sp(7)); // Buffy runs through Muldoon (on his trap) to 7
+      await s.game.moveFighter(s.hero(s.p2), 3, chooser: s.p2);
+      expect(s.hero(s.p2).space, 7);
+      expect(m(s).traps, hasLength(1));
+    });
+
     test('his own fighters walk over traps; placing an enemy on one sets it off', () async {
       final s = Scenario('robert-muldoon', 'medusa');
       s.place(s.hero(s.p1), 4);

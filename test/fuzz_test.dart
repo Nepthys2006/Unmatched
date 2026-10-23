@@ -32,7 +32,11 @@ void main() {
       final seen = <int>{};
       for (final f in g.fighters) {
         expect(f.hp, inInclusiveRange(0, f.maxHp), reason: '$f hp');
-        if (f.onBoard) expect(seen.add(f.space!), isTrue, reason: 'two fighters on space ${f.space} ($e)');
+        if (f.onBoard && !seen.add(f.space!)) {
+          final tail = g.log.reversed.take(12).toList().reversed.map((e) => '${e.runtimeType}: ${e.log}').join('\n  ');
+          fail('${g.players.map((p) => p.hero.id).join(' vs ')} (seed $seed): two fighters on space ${f.space} after $e\n  $tail');
+        }
+        if (f.tail != null) expect(seen.add(f.tail!), isTrue, reason: "a large fighter's back overlaps another fighter");
         if (f.defeated) expect(f.space, isNull);
       }
       int count(Player p) =>

@@ -1141,7 +1141,8 @@ class Game {
     // Something along the way can stop the move early (a trap).
     for (final m in allMods) {
       final stop = m.stopMove(this, f, path);
-      if (stop != null && stop > 0 && stop < path.length - 1) path = path.sublist(0, stop + 1);
+      final free = stop != null && (fighterAt(path[stop]) == null || fighterAt(path[stop]) == f);
+      if (free && stop > 0 && stop < path.length - 1) path = path.sublist(0, stop + 1);
     }
     f.space = path.last;
     if (f.owner.script.isLarge(f)) {

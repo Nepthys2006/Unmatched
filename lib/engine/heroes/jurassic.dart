@@ -134,8 +134,10 @@ class Muldoon extends HeroScript {
   @override
   int? stopMove(Game g, Fighter f, List<int> path) {
     if (!f.isEnemyOf(me)) return null;
+    // Only where it could end its move: passing through a fighter standing on a trap doesn't
+    // stop it there.
     for (var i = 1; i < path.length; i++) {
-      if (trapAt(path[i])) return i;
+      if (trapAt(path[i]) && (g.fighterAt(path[i]) == null || g.fighterAt(path[i]) == f)) return i;
     }
     return null;
   }
