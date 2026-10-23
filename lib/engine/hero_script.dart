@@ -95,6 +95,12 @@ abstract class Mod {
   /// [f] finished moving along [path] (normal movement, not placement).
   Future<void> afterMove(Game g, Fighter f, List<int> path) async {}
 
+  /// False stops [p] drawing cards (Right in the Face!).
+  bool canDraw(Game g, Player p) => true;
+
+  /// The attack card is chosen and the defender is about to pick theirs (Spidey-Sense).
+  Future<void> beforeDefense(Game g, Combat c) async {}
+
   /// Where a move along [path] must stop early, as an index into [path] (Muldoon's traps), or
   /// null to let it finish.
   int? stopMove(Game g, Fighter f, List<int> path) => null;
@@ -430,6 +436,13 @@ abstract class HeroScript extends Mod {
     await game.emit(StatusChanged(me, 'Die of Ultimate Destruction ($why): ${v == 0 ? 'blank' : v}'));
     return v;
   }
+
+  /// Cards held outside the hand that may only be used to BOOST (Black Panther's Vibranium
+  /// Suit; they can belong to other players).
+  final List<Card> stored = [];
+
+  /// After this player BOOSTs (Vibranium Suit: draw 1 card).
+  Future<void> afterBoost() async {}
 
   /// Opponent cards this player has seen (looked at a hand, revealed), for the AI.
   final Set<Card> known = {};

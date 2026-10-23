@@ -523,7 +523,7 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
         // The boost card was already shown as it went to the discard pile (CardMoved).
         _refresh();
       case CardMoved(:final card, :final from, :final to, :final reason, :final reveal)
-          when reveal && to == Zone.discard && (from == Zone.hand || reason.contains('blind boost')):
+          when reveal && to == Zone.discard && (from == Zone.hand || reason.contains('boost')):
         // Every discard is public: boosts (blind ones too), random discards, hand limit...
         final who = card.owner == me ? 'You' : card.owner.name;
         final what = switch (reason) {

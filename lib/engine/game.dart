@@ -355,16 +355,17 @@ class Game {
     await p.script.maneuverDraw(n);
     var bonus = 0;
     Card? boost;
-    final boostable = p.hand.where((c) => c.def.canBoost).toList();
+    final boostable = boostOptions(p);
     if (boostable.isNotEmpty) {
       boost = await chooseCard(p, boostable, 'Discard a card to BOOST your movement?',
           optional: true, skipLabel: "Don't boost", intent: Intent.boost);
       if (boost != null) {
-        await discardCard(boost, reason: ' to boost');
+        await discardForBoost(p, boost);
         bonus = await boostAmount(boost);
         await emit(Boosted(p, boost, 'their maneuver'));
         turn.flags['maneuverBoost'] = boost;
         await runBoosted(boost);
+        await p.script.afterBoost();
       }
     }
     for (final m in allMods.toList()) {
@@ -528,6 +529,9 @@ class Game {
     _inCombat.add(card!);
     if (!reach) c.attacker.faceUp = true;
     await p.script.onAttackCardChosen(c);
+    for (final m in allMods.toList()) {
+      await m.beforeDefense(this, c);
+    }
     final defOptions = o.hand.where((x) => canDefendWith(x, c.defender.fighter)).toList();
     final d = await chooseCard(o, defOptions, 'Play a defense card or skip', optional: true, skipLabel: 'No defense',
         intent: Intent.defenseCard, subject: c, autoSingle: false);
@@ -691,18 +695,35 @@ class Game {
       p.discard.add(b);
       await emit(CardMoved(b, Zone.deck, Zone.discard, reason: ' (blind boost)'));
     } else {
-      final options = p.hand.where((c) => c.def.canBoost).toList();
+      final options = boostOptions(p);
       b = await chooseCard(p, options, text ?? 'Discard a card to BOOST ${s.card?.title}?',
           optional: optional, skipLabel: "Don't boost", intent: Intent.boost, subject: s);
       if (b == null) return false;
-      await discardCard(b, reason: ' to boost');
+      await discardForBoost(p, b);
     }
     s.boosts.add(b);
     final v = blind ? boostValueOf(b) : await boostAmount(b);
     addOp(s, ValueOp.add(v, '${blind ? 'Blind boosted' : 'Boosted'} by ${b.title.toUpperCase()}'));
     await emit(Boosted(p, b, s.card?.title ?? 'the card', blind: blind));
     if (!blind) await runBoosted(b);
+    await p.script.afterBoost();
     return true;
+  }
+
+  /// Cards [p] may discard to BOOST: from their hand, and any stored only for boosting.
+  List<Card> boostOptions(Player p) => [
+    ...p.hand.where((c) => c.def.canBoost),
+    ...p.script.stored.where((c) => c.def.canBoost),
+  ];
+
+  /// Discards a boost card from the hand, or from storage into its owner's discard pile.
+  Future<void> discardForBoost(Player p, Card c) async {
+    if (p.script.stored.remove(c)) {
+      c.owner.discard.add(c);
+      await emit(CardMoved(c, Zone.inPlay, Zone.discard, reason: ' to boost (Vibranium Suit)'));
+    } else {
+      await discardCard(c, reason: ' to boost');
+    }
   }
 
   /// Houdini's cards do something extra when discarded to boost.
@@ -882,6 +903,10 @@ class Game {
 
   Future<List<Card>> draw(Player p, int n) async {
     final drawn = <Card>[];
+    if (n > 0 && !allMods.every((m) => m.canDraw(this, p))) {
+      await say("${p.name} can't draw cards this turn.");
+      return drawn;
+    }
     for (var i = 0; i < n; i++) {
       if (p.deck.isEmpty) {
         if (drawn.isNotEmpty) {

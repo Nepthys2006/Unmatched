@@ -41,7 +41,8 @@ void main() {
       }
       int count(Player p) =>
           p.deck.length + g.players.fold<int>(0, (n, h) => n + h.hand.where((c) => c.owner == p).length) +
-          p.discard.length + p.inPlay.length + p.removed.length + g.playedCards.where((c) => c.owner == p).length;
+          p.discard.length + p.inPlay.length + p.removed.length + g.playedCards.where((c) => c.owner == p).length +
+          g.players.fold<int>(0, (n, h) => n + h.script.stored.where((c) => c.owner == p).length);
       // Decks exist from the first draw on; nothing can have been lost before then.
       if (totals.isEmpty && e is CardsDrawn) {
         for (final p in g.players) {

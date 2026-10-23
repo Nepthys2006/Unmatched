@@ -11,6 +11,7 @@ import 'buffy.dart';
 import 'cobble.dart';
 import 'fables.dart';
 import 'jurassic.dart';
+import 'marvel.dart';
 import 'legends.dart';
 import 'marvel_buffy.dart';
 import 'slings.dart';
@@ -70,6 +71,10 @@ final Map<String, HeroScript Function()> heroScripts = {
   'bloody-mary': BloodyMary.new,
   'chupacabra': Chupacabra.new,
   'pandora': Pandora.new,
+  'she-hulk': SheHulk.new,
+  'spiderman': SpiderMan.new,
+  'black-panther': BlackPanther.new,
+  'winter-soldier': WinterSoldier.new,
 };
 
 /// Heroes whose ability and every card are scripted and tested.
