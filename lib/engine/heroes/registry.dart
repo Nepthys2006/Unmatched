@@ -16,6 +16,7 @@ import 'marvel.dart';
 import 'legends.dart';
 import 'marvel_buffy.dart';
 import 'slings.dart';
+import 'teen_spirit.dart';
 import 'tmnt.dart';
 import 'witcher_rf.dart';
 import 'witcher_ss.dart';
@@ -79,6 +80,8 @@ final Map<String, HeroScript Function()> heroScripts = {
   'bullseye': Bullseye.new,
   'daredevil': Daredevil.new,
   'elektra': Elektra.new,
+  'cloak-dagger': CloakDagger.new,
+  'ms-marvel': MsMarvel.new,
 };
 
 /// Heroes whose ability and every card are scripted and tested.

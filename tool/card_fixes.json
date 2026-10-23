@@ -70,5 +70,42 @@
     "fighters": []
    }
   }
+ },
+ "cloak-dagger": {
+  "hero": {
+   "name": "Cloak & Dagger",
+   "fighters": [
+    {
+     "id": "cloak",
+     "name": "Cloak",
+     "hero": true,
+     "attack": "melee",
+     "hp": 8,
+     "count": 1
+    },
+    {
+     "id": "dagger",
+     "name": "Dagger",
+     "hero": true,
+     "attack": "melee",
+     "hp": 8,
+     "count": 1
+    }
+   ]
+  },
+  "cards": {
+   "6": {
+    "fighters": [
+     "cloak"
+    ],
+    "usedBy": "Cloak"
+   },
+   "11": {
+    "fighters": [
+     "dagger"
+    ],
+    "usedBy": "Dagger"
+   }
+  }
  }
 }

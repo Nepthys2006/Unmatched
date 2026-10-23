@@ -83,6 +83,8 @@ class Fighter {
   String get name {
     // A pack of heroes (the Raptors) are told apart by number.
     if (isHero && def.count > 1) return '${_singular[def.name.toLowerCase()] ?? def.name} $ordinal';
+    // A pair of different heroes (Cloak & Dagger) go by their own names.
+    if (isHero && owner.heroes.any((h) => h.def != def)) return def.name;
     if (isHero) return owner.script.heroName;
     final base = _singular[def.name.toLowerCase()] ?? def.name;
     return def.count > 1 ? '$base $ordinal' : base;

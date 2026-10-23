@@ -394,10 +394,11 @@ abstract class HeroScript extends Mod {
   /// Large fighters (T. Rex) occupy their space and the one they last moved from.
   bool isLarge(Fighter f) => false;
 
-  /// Places sidekicks at the start of the game: in the hero's zone, one by one.
+  /// Places sidekicks (and any other heroes, like Dagger) at the start of the game: in the
+  /// hero's zone, one by one.
   Future<void> placeSidekicks() async {
     final hero = me.heroFighter;
-    for (final f in me.fighters.where((f) => f.isSidekick && !f.reserve)) {
+    for (final f in me.fighters.where((f) => f != hero && !f.reserve && f.space == null)) {
       final options = game.board.zoneOf(hero.space!).where(game.isEmpty).toList();
       final spaces = options.isNotEmpty ? options : game.emptySpaces().toList();
       final s = await game.chooseSpace(me, spaces, 'Place ${f.name} in ${hero.name}\'s zone',

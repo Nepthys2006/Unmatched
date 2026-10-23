@@ -12138,7 +12138,7 @@
  },
  {
   "id": "cloak-dagger",
-  "name": "Cloak Dagger",
+  "name": "Cloak & Dagger",
   "set": "Teen Spirit",
   "color": "#4686bb",
   "move": 2,
@@ -12146,8 +12146,16 @@
   "description": "Living light and living shadow. She assaults you with a Lightforce barrage. He strikes out from the Darkforce Dimension. Fighting together in perfect balance, they will send you into the void.",
   "fighters": [
    {
-    "id": "cloak-dagger",
-    "name": "Cloak Dagger",
+    "id": "cloak",
+    "name": "Cloak",
+    "hero": true,
+    "attack": "melee",
+    "hp": 8,
+    "count": 1
+   },
+   {
+    "id": "dagger",
+    "name": "Dagger",
     "hero": true,
     "attack": "melee",
     "hp": 8,
@@ -12232,7 +12240,7 @@
      "after": "Place the opposing fighter in any space. Your opponent discards 1 card."
     },
     "fighters": [
-     "cloak-dagger"
+     "cloak"
     ]
    },
    {
@@ -12300,7 +12308,7 @@
      "after": "If you won the combat, your fighter takes damage equal to the amount of damage you dealt."
     },
     "fighters": [
-     "cloak-dagger"
+     "dagger"
     ]
    },
    {
