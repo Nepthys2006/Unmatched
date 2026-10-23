@@ -91,7 +91,7 @@ class _LoadingScreenState extends State<LoadingScreen> with SingleTickerProvider
     }
   }
 
-  /// Dev only (`--dart-define=QUICKMATCH=<map id>[:<players>]`): straight into a match with
+  /// Dev only (`--dart-define=QUICKMATCH=<map id>[:<players>[:<hero id>[:<seed>]]]`): straight into a match with
   /// random heroes, for screenshots and soak tests.
   Widget _quick(Services s) {
     final parts = _quickMatch.split(':');
@@ -104,9 +104,11 @@ class _LoadingScreenState extends State<LoadingScreen> with SingleTickerProvider
       _ => GameMode.duel,
     };
     if (!s.settings.hasUsername) s.settings.username = 'Tester';
-    final hero = s.data.heroes.keys.elementAt(math.Random().nextInt(s.data.heroes.length));
+    final hero = parts.elementAtOrNull(2) ?? s.data.heroes.keys.elementAt(math.Random().nextInt(s.data.heroes.length));
+    final rng = int.tryParse(parts.elementAtOrNull(3) ?? '') == null ? null : math.Random(int.parse(parts[3]));
     return MatchScreen(
-      config: MatchConfig(mode: mode, players: players, map: map, ai: AiLevel.medium, heroIds: MatchConfig.randomLineup(s.data, hero, players)),
+      seed: int.tryParse(parts.elementAtOrNull(3) ?? ''),
+      config: MatchConfig(mode: mode, players: players, map: map, ai: AiLevel.medium, heroIds: MatchConfig.randomLineup(s.data, hero, players, rng)),
     );
   }
 

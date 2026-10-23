@@ -63,10 +63,12 @@ flutter:
     - assets/maps3d/
     - assets/web3d/
     - assets/web3d/three/
-    - assets/web3d/three/addons/controls/
     - assets/web3d/three/addons/environments/
     - assets/web3d/three/addons/libs/
     - assets/web3d/three/addons/loaders/
+    - assets/web3d/three/addons/math/
+    - assets/web3d/three/addons/postprocessing/
+    - assets/web3d/three/addons/shaders/
     - assets/web3d/three/addons/utils/
     - assets/cards/achilles/
     - assets/cards/alice/

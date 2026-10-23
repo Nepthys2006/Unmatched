@@ -7,8 +7,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:webview_flutter/webview_flutter.dart' as wf;
@@ -109,11 +107,8 @@ class _MobileHostState extends State<_MobileHost> {
   }
 
   @override
-  Widget build(BuildContext context) => wf.WebViewWidget(
-    controller: _wv,
-    // The board takes every touch: one finger pans, two fingers zoom and orbit.
-    gestureRecognizers: {Factory<OneSequenceGestureRecognizer>(EagerGestureRecognizer.new)},
-  );
+  // Display only (the match screen wraps it in IgnorePointer and forwards gestures).
+  Widget build(BuildContext context) => wf.WebViewWidget(controller: _wv);
 }
 
 class _WindowsHost extends StatefulWidget {

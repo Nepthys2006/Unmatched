@@ -36,7 +36,9 @@ class _WebHostState extends State<_WebHost> {
         ..style.border = 'none'
         ..style.width = '100%'
         ..style.height = '100%'
-        ..style.display = 'block';
+        ..style.display = 'block'
+        // Display only: every click goes to the game, which forwards camera moves and taps.
+        ..style.pointerEvents = 'none';
       _frame = f;
       return f;
     });

@@ -1,11 +1,13 @@
 /// The 3D battlefield: the 3D Map table's models (`assets/maps3d/<id>.glb`) drawn by Three.js in a
-/// web view (assets/web3d/), with the match screen's HUD on top. The page only draws; the
-/// match screen sends it the board state and gets taps back in map coordinates.
+/// web view (assets/web3d/), with the match screen's HUD on top. The page only draws and takes
+/// no input: the match screen handles every touch (so its buttons always come first), sends
+/// camera moves and taps to the page, and gets taps back in map coordinates.
 library;
 
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import '../../engine/defs.dart';
@@ -26,18 +28,24 @@ enum Board3DStatus { loading, ready, failed }
 
 /// Talks to one 3D board page.
 class Board3DController {
-  Board3DController({required this.map, required this.quality, required this.homeSide});
+  Board3DController({required this.map, required Map<String, Object> graphics, required this.homeSide})
+    : _graphics = graphics,
+      antialias = graphics['aa'] == true;
 
   final MapDef map;
 
-  /// 'low', 'medium' or 'high'.
-  final String quality;
+  /// Settings.graphics3d. Antialiasing is fixed when the page starts; the rest can change live.
+  Map<String, Object> _graphics;
+  final bool antialias;
 
   /// +1 if the player's start is on the near (+y) half of the board, -1 if on the far half.
   final int homeSide;
 
   final ValueNotifier<Board3DStatus> status = ValueNotifier(Board3DStatus.loading);
   final ValueNotifier<double> progress = ValueNotifier(0);
+
+  /// Frames drawn per second, when Settings > Show FPS is on.
+  final ValueNotifier<int?> fps = ValueNotifier(null);
   String? error;
 
   /// Taps on the board, in map coordinates.
@@ -59,6 +67,14 @@ class Board3DController {
       _lastState = json;
     }
     if (_open) _raw?.call(json);
+  }
+
+  /// Applies changed graphics settings to the running page.
+  void setGraphics(Map<String, Object> g) {
+    if (mapEquals(g, _graphics)) return;
+    _graphics = g;
+    if (g['fps'] != true) fps.value = null;
+    send({'t': 'gfx', 'gfx': g});
   }
 
   /// Host side: how to reach the page.
@@ -88,6 +104,8 @@ class Board3DController {
       case 'error':
         debugPrint('3D board: ${m['msg']}');
         if (m['fatal'] == true && status.value != Board3DStatus.ready) fail('${m['msg']}');
+      case 'fps':
+        fps.value = (m['v'] as num?)?.round();
       case 'tap':
         final x = (m['x'] as num?)?.toDouble(), y = (m['y'] as num?)?.toDouble();
         if (x != null && y != null) _taps.add(Offset(x, y));
@@ -104,7 +122,7 @@ class Board3DController {
   Map<String, Object?> _init() => {
     't': 'init',
     'glb': '../maps3d/${map.id}.glb',
-    'quality': quality,
+    'gfx': _graphics,
     'home': homeSide,
     'spaces': [
       for (final s in map.spaces) {'id': s.id, 'x': s.x, 'y': s.y},
@@ -120,6 +138,7 @@ class Board3DController {
     _taps.close();
     status.dispose();
     progress.dispose();
+    fps.dispose();
   }
 }
 

@@ -1,20 +1,26 @@
 /* Unmatched 3D board.
    Draws one of the 3D Map battlefields (assets/maps3d/<id>.glb) and the live pieces on it. The
-   Flutter match screen drives it with JSON messages and gets taps back; the rules never run
-   here. Map coordinates: maps.json x -> world x, maps.json y -> world z, board top at y = 0.
+   Flutter match screen drives it with JSON messages; the rules never run here. The page takes no
+   input of its own: the game handles every touch and click (so its buttons always win) and sends
+   camera moves and taps here. Map coordinates: maps.json x -> world x, y -> world z, top at y 0.
 
    Flutter -> page (window.board.receive(json), WebView2 web messages, or iframe postMessage):
-     init   {glb, quality, home, spaces:[{id,x,y}], links:[[a,b]]}
+     init   {glb, home, gfx, spaces:[{id,x,y}], links:[[a,b]]}      gfx {graphics settings}
      state  {fighters:[{id,space,color,hero,hp,name}], marks:{...}, tokens:[...], focus:[id]}
-     move   {id, path:[space], ms}        fx {id, text, color, sparks, ms}
-     cam    {op:'fit'|'zoom'|'push'|'pull', k, a, b, ms}        shake {}
-   Page -> Flutter: ready, progress {p}, error {msg}, tap {x, y}. */
+     move   {id, path:[space], ms}        fx {id, text, color, sparks, ms}        shake {}
+     cam    {op:'fit'|'zoom'|'push'|'pull'|'turn'|'tilt', k, a, b, ms}
+     drag {dx, dy} / orbit {dx, dy} (fractions of the view) / pinch {k, a} / pick {x, y}
+   Page -> Flutter: loaded, ready, progress {p}, error {msg}, tap {x, y}, fps {v}. */
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 const V3 = THREE.Vector3;
 const TAU = Math.PI * 2;
@@ -34,18 +40,17 @@ function post(msg) {
 window.addEventListener('error', e => post({ t: 'error', msg: String(e.message || e) }));
 window.addEventListener('unhandledrejection', e => post({ t: 'error', msg: String(e.reason && e.reason.message || e.reason) }));
 
-/* pr = highest pixel ratio; phones (coarse pointer) get less, and the frame-time governor in
-   loop() lowers it further if frames run long. */
-const coarse = matchMedia('(pointer: coarse)').matches;
-const QUALITY = {
-  low: { pr: 1, prPhone: .85, aa: false, shadow: 0 },
-  medium: { pr: 1.5, prPhone: 1.25, aa: true, shadow: 1024 },
-  high: { pr: 2, prPhone: 1.75, aa: true, shadow: 2048 },
-};
-let prMax = 1, prNow = 1;
+/* ---------------------------------------------------------------- graphics settings
+   scale: render resolution as a share of the screen's pixels (capped at 2x); auto: let the
+   frame-time governor lower it when frames run long; shadows 0-3 (off / 1024 / 2048 / 4096);
+   aa: multisampling (fixed when the page starts); bloom: glow; ao: ambient occlusion;
+   scenery: trees, rocks and buildings; brightness: exposure; labels: name plate size. */
+const G = { scale: 1, auto: true, shadows: 2, aa: true, bloom: true, ao: false, scenery: true, brightness: 1, labels: 1, fps: false };
+const SHADOW_SIZE = [512, 1024, 2048, 4096];
+let prMax = 1, prNow = 1, prMin = .5;
 
 /* ---------------------------------------------------------------- scene */
-let renderer, scene, camera, controls, lamp, Q;
+let renderer, scene, camera, lamp, composer = null;
 let boardRoot = null, span = 14, box = new THREE.Box3();
 const spaces = new Map();        // id -> {x, z, top}
 let links = [];
@@ -54,20 +59,16 @@ let loaded = false, pendingState = null;
 let dirty = 2;
 const invalidate = (n = 2) => { dirty = Math.max(dirty, n); };
 
-function setup(quality) {
-  Q = QUALITY[quality] || QUALITY.medium;
+function setup() {
   try {
-    renderer = new THREE.WebGLRenderer({ antialias: Q.aa, powerPreference: 'high-performance', stencil: false });
+    renderer = new THREE.WebGLRenderer({ antialias: G.aa, powerPreference: 'high-performance', stencil: false });
   } catch (e) {
     post({ t: 'error', fatal: true, msg: 'WebGL is not available' });
     return false;
   }
-  prMax = prNow = Math.min(window.devicePixelRatio || 1, coarse ? Q.prPhone : Q.pr);
-  renderer.setPixelRatio(prNow);
   renderer.setSize(innerWidth, innerHeight);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.shadowMap.enabled = Q.shadow > 0;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.shadowMap.autoUpdate = false;
   document.body.appendChild(renderer.domElement);
@@ -80,25 +81,10 @@ function setup(quality) {
   scene.environmentIntensity = .42;
 
   camera = new THREE.PerspectiveCamera(34, innerWidth / innerHeight, .1, 260);
-  camera.position.set(0, 12, 10);
-  controls = new OrbitControls(camera, renderer.domElement);
-  controls.enableDamping = true;
-  controls.dampingFactor = .1;
-  controls.screenSpacePanning = false;
-  controls.minPolarAngle = .05;
-  controls.maxPolarAngle = 1.3;
-  controls.minDistance = 2.5;
-  // One finger / left button scrolls the map like the 2D board; two fingers / right button orbit.
-  controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
-  controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE };
-  controls.addEventListener('start', () => { camTween = null; });
-  controls.addEventListener('change', () => invalidate());
 
   // A warm table lamp, a cool fill and a faint bounce, as on the 3D Map table.
   scene.add(new THREE.HemisphereLight('#dfe6ff', '#2b1d12', .3));
   lamp = new THREE.SpotLight('#ffd2a0', 100, 0, .7, .85, 2);
-  lamp.castShadow = Q.shadow > 0;
-  lamp.shadow.mapSize.set(Q.shadow || 512, Q.shadow || 512);
   lamp.shadow.bias = -.00015;
   lamp.shadow.normalBias = .025;
   const fill = new THREE.DirectionalLight('#a9bfff', .38);
@@ -107,18 +93,84 @@ function setup(quality) {
 
   addEventListener('resize', () => {
     renderer.setSize(innerWidth, innerHeight);
+    if (composer) composer.setSize(innerWidth, innerHeight);
     camera.aspect = innerWidth / Math.max(1, innerHeight);
     camera.updateProjectionMatrix();
     invalidate();
   });
-  setupInput();
+  applyResolution();
   requestAnimationFrame(loop);
   return true;
 }
 
+function applyResolution() {
+  prMax = clamp(Math.min(window.devicePixelRatio || 1, 2) * G.scale, .5, 3);
+  prMin = Math.max(.6, prMax * .75); // never blurrier than 3/4 of the chosen resolution
+  prNow = prMax;
+  renderer.setPixelRatio(prNow);
+  renderer.setSize(innerWidth, innerHeight);
+  if (composer) { composer.setPixelRatio(prNow); composer.setSize(innerWidth, innerHeight); }
+  invalidate();
+}
+
+/** Bloom and ambient occlusion need a composer; without them the scene renders straight out. */
+function buildComposer() {
+  if (composer) { composer.dispose(); composer = null; }
+  if (!G.bloom && !G.ao) return;
+  const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: G.aa ? 4 : 0 });
+  composer = new EffectComposer(renderer, rt);
+  composer.setPixelRatio(prNow);
+  composer.setSize(innerWidth, innerHeight);
+  composer.addPass(new RenderPass(scene, camera));
+  if (G.ao) {
+    const ao = new GTAOPass(scene, camera, innerWidth, innerHeight);
+    ao.blendIntensity = .85;
+    ao.updateGtaoMaterial({ radius: .32, distanceExponent: 1.4, thickness: 1, scale: 1.1, samples: 12 });
+    ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 4, rings: 2, samples: 16 });
+    composer.addPass(ao);
+  }
+  if (G.bloom) composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), .32, .5, .88));
+  composer.addPass(new OutputPass());
+}
+
+function applyShadows() {
+  const on = G.shadows > 0, size = SHADOW_SIZE[G.shadows] || 1024;
+  renderer.shadowMap.enabled = on;
+  lamp.castShadow = on;
+  if (lamp.shadow.mapSize.x !== size) {
+    lamp.shadow.mapSize.set(size, size);
+    if (lamp.shadow.map) { lamp.shadow.map.dispose(); lamp.shadow.map = null; }
+  }
+  scene.traverse(o => {
+    if (!o.isMesh) return;
+    o.castShadow = on && !!o.userData.casts;
+    o.receiveShadow = on && !o.userData.noShadow;
+    for (const m of Array.isArray(o.material) ? o.material : [o.material]) if (m) m.needsUpdate = true;
+  });
+  renderer.shadowMap.needsUpdate = true;
+  invalidate();
+}
+
+/** Applies graphics settings; `first` when the page starts. */
+function applyGfx(g, first) {
+  const old = { ...G };
+  Object.assign(G, g || {});
+  if (!renderer) return;
+  if (first || old.scale !== G.scale) applyResolution();
+  if (first || old.shadows !== G.shadows) applyShadows();
+  if (first || old.bloom !== G.bloom || old.ao !== G.ao) buildComposer();
+  renderer.toneMappingExposure = G.brightness;
+  const scenery = boardRoot && boardRoot.getObjectByName('Scenery');
+  if (scenery && scenery.visible !== G.scenery) { scenery.visible = G.scenery; renderer.shadowMap.needsUpdate = true; }
+  for (const p of pieces.values()) sizePiece(p);
+  if (!G.auto && prNow !== prMax) applyResolution();
+  invalidate();
+}
+
 /* ---------------------------------------------------------------- loading */
 async function init(msg) {
-  if (!setup(msg.quality)) return;
+  Object.assign(G, msg.gfx || {});
+  if (!setup()) return;
   homeSide = msg.home || 1;
   for (const s of msg.spaces) spaces.set(s.id, { x: s.x, z: s.y, top: .003 });
   links = msg.links || [];
@@ -132,16 +184,13 @@ async function init(msg) {
     return;
   }
   boardRoot = gltf.scene;
-  const shadows = Q.shadow > 0;
   boardRoot.updateMatrixWorld(true);
   boardRoot = mergeStatic(boardRoot);
   boardRoot.traverse(o => {
     if (!o.isMesh) return;
-    const scenery = isUnder(o, 'Scenery');
-    o.receiveShadow = shadows;
-    o.castShadow = shadows && scenery;
+    o.userData.casts = isUnder(o, 'Scenery');
     const m = o.material;
-    if (m && m.map) m.map.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+    if (m && m.map) m.map.anisotropy = Math.min(16, renderer.capabilities.getMaxAnisotropy());
   });
   scene.add(boardRoot);
   boardRoot.updateMatrixWorld(true);
@@ -162,13 +211,11 @@ async function init(msg) {
   scene.userData.fill.position.set(W * .6, 6, -D * .8);
   scene.fog.near = span * 2.2;
   scene.fog.far = span * 4.4;
-  controls.maxDistance = span * 2.2;
   const table = new THREE.Mesh(
     new THREE.PlaneGeometry(span * 5, span * 5).rotateX(-Math.PI / 2),
     new THREE.MeshStandardMaterial({ color: '#2b2019', roughness: .82 }),
   );
   table.position.y = box.min.y - .002;
-  table.receiveShadow = shadows;
   scene.add(table);
 
   // Where each space's surface is (discs sit on plinths in diorama mode; bridges are raised).
@@ -184,11 +231,10 @@ async function init(msg) {
   camera.aspect = innerWidth / Math.max(1, innerHeight);
   camera.updateProjectionMatrix();
   const home = homeView();
-  camera.position.copy(home.pos);
-  controls.target.copy(home.target);
-  controls.update();
+  setRig(home.pos, home.target);
+  syncCamera();
   loaded = true;
-  renderer.shadowMap.needsUpdate = true;
+  applyGfx(null, true);
   if (pendingState) applyState(pendingState);
   invalidate(3);
   // Two frames so the first picture is on screen before the cover is lifted.
@@ -242,10 +288,57 @@ function isUnder(o, name) {
   return false;
 }
 
-/* ---------------------------------------------------------------- camera */
+/* ---------------------------------------------------------------- camera
+   A simple rig: a target on the board and the camera on a sphere around it (r, phi from
+   straight down... up, theta around). The game sends drags, pinches and orbits. */
 let camTween = null, shakeUntil = 0, preCombat = null;
+const rig = { target: new V3(), r: 20, phi: .62, theta: 0 };
+const PHI_MIN = .08, PHI_MAX = 1.3, R_MIN = 2.5;
+const rMax = () => span * 2.2;
 const spherical = (target, dist, polar, azim) =>
   target.clone().add(new V3(Math.sin(polar) * Math.sin(azim), Math.cos(polar), Math.sin(polar) * Math.cos(azim)).multiplyScalar(dist));
+
+function setRig(pos, target) {
+  const o = pos.clone().sub(target);
+  rig.target.copy(target);
+  rig.r = Math.max(1e-3, o.length());
+  rig.phi = Math.acos(clamp(o.y / rig.r, -1, 1));
+  rig.theta = Math.atan2(o.x, o.z);
+}
+
+function syncCamera() {
+  if (!box.isEmpty()) {
+    rig.target.x = clamp(rig.target.x, box.min.x - 3, box.max.x + 3);
+    rig.target.z = clamp(rig.target.z, box.min.z - 3, box.max.z + 3);
+  }
+  camera.position.copy(spherical(rig.target, rig.r, rig.phi, rig.theta));
+  camera.lookAt(rig.target);
+  invalidate();
+}
+
+/** One finger / left button: slide the board under the finger. */
+function drag(dx, dy) {
+  camTween = null;
+  const k = 2 * rig.r * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+  const right = new V3(Math.cos(rig.theta), 0, -Math.sin(rig.theta));
+  const fwd = new V3(-Math.sin(rig.theta), 0, -Math.cos(rig.theta));
+  rig.target.addScaledVector(right, -dx * k * camera.aspect).addScaledVector(fwd, dy * k / Math.max(.35, Math.cos(rig.phi)));
+  syncCamera();
+}
+/** Right button: turn around the board and tilt. */
+function orbit(dx, dy) {
+  camTween = null;
+  rig.theta -= dx * Math.PI * 1.4;
+  rig.phi = clamp(rig.phi - dy * Math.PI * .8, PHI_MIN, PHI_MAX);
+  syncCamera();
+}
+/** Two fingers: pinch to zoom (k > 1 = closer) and twist to turn. */
+function pinch(k, a) {
+  camTween = null;
+  rig.r = clamp(rig.r / k, R_MIN, rMax());
+  rig.theta -= a || 0;
+  syncCamera();
+}
 
 /** The whole board from the player's side, clear of the prompt bar on top and the hand below. */
 function homeView() {
@@ -276,25 +369,31 @@ function homeView() {
   return { pos: spherical(target, dist, polar, azim), target };
 }
 
-function tweenTo(pos, target, ms) {
-  if (!ms) {
-    camera.position.copy(pos); controls.target.copy(target); controls.update(); invalidate();
-    return;
-  }
-  camTween = { p0: camera.position.clone(), t0: controls.target.clone(), p1: pos, t1: target, start: performance.now(), ms };
+function rigTo(target, r, phi, theta, ms) {
+  // Turn the short way round.
+  let d = (theta - rig.theta) % TAU;
+  if (d > Math.PI) d -= TAU;
+  if (d < -Math.PI) d += TAU;
+  const to = { target: target.clone(), r, phi, theta: rig.theta + d };
+  if (!ms) { rig.target.copy(to.target); rig.r = r; rig.phi = phi; rig.theta = to.theta; syncCamera(); return; }
+  camTween = { from: { target: rig.target.clone(), r: rig.r, phi: rig.phi, theta: rig.theta }, to, start: performance.now(), ms };
 }
 
-function zoom(k) {
-  const off = camera.position.clone().sub(controls.target);
-  const len = clamp(off.length() / k, controls.minDistance, controls.maxDistance);
-  tweenTo(controls.target.clone().add(off.setLength(len)), controls.target.clone(), 220);
+function tweenTo(pos, target, ms) {
+  const o = pos.clone().sub(target), r = o.length();
+  rigTo(target, r, Math.acos(clamp(o.y / r, -1, 1)), Math.atan2(o.x, o.z), ms);
 }
+
+function zoom(k) { rigTo(rig.target, clamp(rig.r / k, R_MIN, rMax()), rig.phi, rig.theta, 220); }
+function turn(a) { rigTo(rig.target, rig.r, rig.phi, rig.theta + a, 380); }
+/** Toggles between the seated view and looking straight down. */
+function tilt() { rigTo(rig.target, rig.r, rig.phi > .3 ? PHI_MIN : .62, rig.theta, 380); }
 
 /** The dramatic push-in: a low camera beside the two fighters, looking across the duel. */
 function pushIn(a, b, ms) {
   const A = spaces.get(a), B = spaces.get(b);
   if (!A || !B) return;
-  preCombat = { pos: camera.position.clone(), target: controls.target.clone() };
+  preCombat = { pos: camera.position.clone(), target: rig.target.clone() };
   const mid = new V3((A.x + B.x) / 2, (A.top + B.top) / 2 + .25, (A.z + B.z) / 2);
   const along = new V3(B.x - A.x, 0, B.z - A.z);
   const len = along.length();
@@ -411,7 +510,8 @@ function makePiece(f) {
   const orb = new THREE.Mesh(orbGeo, new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: .5, roughness: .25, metalness: .05 }));
   orb.scale.setScalar(rad);
   orb.position.y = rad + .14;
-  orb.castShadow = Q.shadow > 0;
+  orb.userData.casts = true;
+  orb.castShadow = G.shadows > 0;
   orb.userData.fid = f.id;
   const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: .55, toneMapped: false }));
   glow.position.y = orb.position.y;
@@ -431,17 +531,24 @@ function makePiece(f) {
   const lc = document.createElement('canvas'); lc.width = 384; lc.height = 96;
   const lt = new THREE.CanvasTexture(lc); lt.colorSpace = THREE.SRGBColorSpace;
   const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: lt, depthTest: false, transparent: true, toneMapped: false }));
-  const ls = f.hero ? 1.25 : 1;
-  label.scale.set(ls * 1.3, ls * .325, 1);
+  label.userData.base = f.hero ? 1.25 : 1;
   label.position.y = orb.position.y + rad + .3;
   label.renderOrder = 10;
   label.userData.fid = f.id;
   group.add(base, ring, orb, glow, reticle, label);
   scene.add(group);
   const p = { id: f.id, group, orb, glow, base, ring, reticle, label, rad, color: f.color, name: f.name, hp: f.hp, space: f.space, anim: null };
+  sizePiece(p);
   drawLabel(p);
   fontReady.then(() => { drawLabel(p); invalidate(); });
   return p;
+}
+
+/** Name plate size and orb glow follow the graphics settings. */
+function sizePiece(p) {
+  const ls = p.label.userData.base * G.labels;
+  p.label.scale.set(ls * 1.3, ls * .325, 1);
+  p.orb.material.emissiveIntensity = G.bloom ? 1.25 : .5;
 }
 
 function disposePiece(p) {
@@ -533,7 +640,8 @@ function buildTokens(tokens) {
       const d = new THREE.Mesh(new THREE.OctahedronGeometry(.15, 0), new THREE.MeshStandardMaterial({ color: '#1c1c1c', roughness: .5, emissive: '#c8352c', emissiveIntensity: .25 }));
       d.scale.y = .45;
       d.position.set(m.x, m.y + .08, m.z);
-      d.castShadow = Q.shadow > 0;
+      d.userData.casts = true;
+      d.castShadow = G.shadows > 0;
       tokenGroup.add(d);
     }
   }
@@ -603,7 +711,7 @@ function burst(id, text, color, sparks, ms) {
   sprite.renderOrder = 11;
   scene.add(sprite);
   let points = null, vel = null;
-  if (sparks && Q === QUALITY.high) {
+  if (sparks) {
     const n = 26, pos = new Float32Array(n * 3);
     vel = [];
     for (let i = 0; i < n; i++) {
@@ -619,36 +727,24 @@ function burst(id, text, color, sparks, ms) {
   fxList.push({ sprite, points, vel, origin, start: performance.now(), ms: Math.max(300, ms || 800) });
 }
 
-/* ---------------------------------------------------------------- input */
-function setupInput() {
-  const el = renderer.domElement;
-  const downs = new Map();
-  el.addEventListener('pointerdown', e => downs.set(e.pointerId, { x: e.clientX, y: e.clientY, t: performance.now(), multi: downs.size > 0 }));
-  el.addEventListener('pointerup', e => {
-    const d = downs.get(e.pointerId);
-    downs.delete(e.pointerId);
-    if (!d || d.multi || downs.size) return;
-    if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 10 || performance.now() - d.t > 600) return;
-    if (e.button !== undefined && e.button !== 0) return;
-    tap(e.clientX, e.clientY);
-  });
-  el.addEventListener('pointercancel', e => downs.delete(e.pointerId));
-  el.addEventListener('contextmenu', e => e.preventDefault());
-}
-
+/* ---------------------------------------------------------------- picking */
 const raycaster = new THREE.Raycaster();
 function tap(cx, cy) {
   if (!loaded) return;
   const ndc = new THREE.Vector2(cx / innerWidth * 2 - 1, -(cy / innerHeight) * 2 + 1);
   raycaster.setFromCamera(ndc, camera);
-  // Fighters first: the orb and its name plate both count as the fighter.
-  const targets = [];
-  for (const p of pieces.values()) targets.push(p.orb, p.label);
-  const hit = raycaster.intersectObjects(targets, false)[0];
-  if (hit) {
-    const p = pieces.get(hit.object.userData.fid), s = p && spaces.get(p.space);
-    if (s) { post({ t: 'tap', x: s.x, y: s.z }); return; }
+  // Fighters first: the orb, with a hit area a little bigger than the orb for fingers. Name
+  // plates don't count: they float over the neighbouring spaces.
+  let best = null, bestD = Infinity;
+  const sphere = new THREE.Sphere();
+  for (const p of pieces.values()) {
+    sphere.set(p.group.position.clone().add(new V3(0, p.orb.position.y, 0)), p.rad * 1.5);
+    const at = raycaster.ray.intersectSphere(sphere, new V3());
+    const d = at && at.distanceTo(raycaster.ray.origin);
+    if (d != null && d < bestD) { bestD = d; best = p; }
   }
+  const s = best && spaces.get(best.space);
+  if (s) { post({ t: 'tap', x: s.x, y: s.z }); return; }
   // Otherwise the nearest point on the board's surface (bridges are a little higher).
   const plane = new THREE.Plane(new V3(0, 1, 0), -.02);
   const pt = raycaster.ray.intersectPlane(plane, new V3());
@@ -661,21 +757,14 @@ function loop(now) {
   let busy = false;
 
   if (camTween) {
-    const t = clamp((now - camTween.start) / camTween.ms, 0, 1), k = ease(t);
-    camera.position.lerpVectors(camTween.p0, camTween.p1, k);
-    controls.target.lerpVectors(camTween.t0, camTween.t1, k);
+    const t = clamp((now - camTween.start) / camTween.ms, 0, 1), k = ease(t), a = camTween.from, b = camTween.to;
+    rig.target.lerpVectors(a.target, b.target, k);
+    rig.r = a.r + (b.r - a.r) * k;
+    rig.phi = a.phi + (b.phi - a.phi) * k;
+    rig.theta = a.theta + (b.theta - a.theta) * k;
+    syncCamera();
     if (t >= 1) camTween = null;
     busy = true;
-  }
-  if (controls.update()) busy = true;
-
-  // Keep the camera over the board.
-  const lim = span * .6;
-  const tx = clamp(controls.target.x, box.min.x - 1, box.max.x + 1) - controls.target.x;
-  const tz = clamp(controls.target.z, box.min.z - 1, box.max.z + 1) - controls.target.z;
-  if (loaded && (Math.abs(tx) > 1e-4 || Math.abs(tz) > 1e-4) && lim > 0) {
-    controls.target.x += tx; controls.target.z += tz;
-    camera.position.x += tx; camera.position.z += tz;
   }
 
   for (const p of pieces.values()) {
@@ -738,12 +827,18 @@ function loop(now) {
 
   if (busy || dirty > 0) {
     govern(now);
-    renderer.render(scene, camera);
+    if (composer) composer.render(); else renderer.render(scene, camera);
+    fpsFrames++;
     if (dirty > 0) dirty--;
     if (busy) dirty = Math.max(dirty, 1);
   }
   if (shake) camera.position.sub(shake);
+  if (G.fps && now - fpsStart >= 1000) {
+    post({ t: 'fps', v: Math.round(fpsFrames * 1000 / (now - fpsStart)) });
+    fpsFrames = 0; fpsStart = now;
+  }
 }
+let fpsFrames = 0, fpsStart = 0;
 
 /* Frame-time governor: while frames render back to back, lower the resolution when they run
    long (slow phone, busy browser) and raise it again when there's headroom. */
@@ -751,18 +846,19 @@ let govLast = 0, govSum = 0, govN = 0;
 function govern(now) {
   const dt = now - govLast;
   govLast = now;
-  if (dt <= 0 || dt > 100) return; // first frame after idle: not a measurement
+  if (!G.auto || dt <= 0 || dt > 100) return; // off, or the first frame after idle
   govSum += dt; govN++;
   if (govN < 45) return;
   const avg = govSum / govN;
   govSum = govN = 0;
   let next = prNow;
-  if (avg > 21) next = Math.max(.6, prNow * .85);
+  if (avg > 21) next = Math.max(prMin, prNow * .85);
   else if (avg < 14 && prNow < prMax) next = Math.min(prMax, prNow * 1.1);
   if (Math.abs(next - prNow) > .01) {
     prNow = next;
     renderer.setPixelRatio(prNow);
     renderer.setSize(innerWidth, innerHeight);
+    if (composer) { composer.setPixelRatio(prNow); composer.setSize(innerWidth, innerHeight); }
   }
 }
 
@@ -777,16 +873,33 @@ function receive(raw) {
     case 'move': if (loaded) startMove(m.id, m.path, m.ms); invalidate(); break;
     case 'fx': if (loaded) burst(m.id, m.text, m.color, m.sparks, m.ms); break;
     case 'shake': shakeUntil = performance.now() + 320; break;
+    case 'gfx': applyGfx(m.gfx); break;
+    case 'drag': if (loaded) drag(m.dx, m.dy); break;
+    case 'orbit': if (loaded) orbit(m.dx, m.dy); break;
+    case 'pinch': if (loaded) pinch(m.k || 1, m.a || 0); break;
+    case 'pick': if (loaded) tap(m.x * innerWidth, m.y * innerHeight); break;
     case 'cam':
       if (!loaded) break;
       if (m.op === 'fit') { const h = homeView(); tweenTo(h.pos, h.target, m.ms ?? 380); }
       else if (m.op === 'zoom') zoom(m.k || 1.25);
       else if (m.op === 'push') pushIn(m.a, m.b, m.ms ?? 650);
       else if (m.op === 'pull') pullBack(m.ms ?? 650);
+      else if (m.op === 'turn') turn(m.a || Math.PI / 4);
+      else if (m.op === 'tilt') tilt();
       break;
   }
 }
-window.board = { receive, stats: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, pixelRatio: prNow }) };
+// stats/marked are for automated checks (frame rate, and where the highlighted spaces are).
+const toScreen = v => { const p = v.clone().project(camera); return [(p.x + 1) / 2 * innerWidth, (1 - p.y) / 2 * innerHeight]; };
+window.board = {
+  receive,
+  stats: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, pixelRatio: prNow, composer: !!composer }),
+  marked: () => ({
+    spaces: (marks.spaces || []).filter(id => spaces.has(id)).map(id => toScreen(at(id))),
+    fighters: [...(marks.select || []), ...(marks.targets || [])].map(id => pieces.get(id)).filter(Boolean)
+      .map(p => toScreen(p.group.position.clone().add(new V3(0, p.orb.position.y, 0)))),
+  }),
+};
 if (window.chrome && window.chrome.webview) window.chrome.webview.addEventListener('message', e => receive(e.data));
 window.addEventListener('message', e => {
   if (typeof e.data === 'string' && e.data.startsWith('board3d:')) return; // our own posts (no parent)

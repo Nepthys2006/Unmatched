@@ -207,8 +207,13 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
   void _ensure3d() {
     final settings = _s.settings;
     final want = settings.board3d && board3dSupported && hasModel(widget.config.map) && !_b3Failed;
-    final quality = settings.quality.name;
-    if (want && _b3?.quality == quality || !want && _b3 == null) return;
+    final graphics = settings.graphics3d;
+    if (want && _b3 != null && _b3!.antialias == settings.antialias) {
+      // Everything but antialiasing applies to the running view.
+      _b3!.setGraphics(graphics);
+      return;
+    }
+    if (!want && _b3 == null) return;
     _drop3d();
     if (!want) {
       if (_boardImage == null) unawaited(_bakeBoard());
@@ -218,7 +223,7 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
     // The boards' print reads upright from the far (-y) side; seat the camera there unless your
     // start is clearly on the near half.
     final sy = start?.y ?? 0;
-    final c = _b3 = Board3DController(map: widget.config.map, quality: quality, homeSide: sy > 1 ? 1 : -1);
+    final c = _b3 = Board3DController(map: widget.config.map, graphics: graphics, homeSide: sy > 1 ? 1 : -1);
     _b3Taps = c.taps.listen((p) => _onBoardTap(geo.world(p.dx, p.dy)));
     c.status.addListener(() {
       Future.microtask(() {
@@ -1022,7 +1027,8 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
                 Positioned.fill(
                   child: Stack(
                     children: [
-                      Positioned.fill(child: Board3DView(key: ObjectKey(_b3), controller: _b3!)),
+                      Positioned.fill(child: IgnorePointer(child: Board3DView(key: ObjectKey(_b3), controller: _b3!))),
+                      Positioned.fill(child: _Board3DInput(controller: _b3!)),
                       Positioned.fill(
                         child: ValueListenableBuilder<Board3DStatus>(
                           valueListenable: _b3!.status,
@@ -1191,6 +1197,23 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
                 ),
               ),
 
+              if (_b3 != null && settings.showFps)
+                Positioned(
+                  top: 62,
+                  left: 14,
+                  child: SafeArea(
+                    child: IgnorePointer(
+                      child: ValueListenableBuilder<int?>(
+                        valueListenable: _b3!.fps,
+                        builder: (_, v, _) => Text(
+                          v == null ? '' : (v == 0 ? 'FPS · idle' : '$v FPS'),
+                          style: titleStyle(13, color: v != null && v > 0 && v < 30 ? Palette.danger : Palette.good, spacing: 1),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+
               // Left edge: camera controls.
               Positioned(
                 left: 10,
@@ -1210,6 +1233,22 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
                             HexButton(icon: Icons.remove_rounded, tooltip: 'Zoom out', size: 38, onPressed: () => _zoom(0.8)),
                             const SizedBox(height: 6),
                             HexButton(icon: Icons.fit_screen_rounded, tooltip: 'Fit board', size: 38, onPressed: _fit),
+                            if (_in3d) ...[
+                              const SizedBox(height: 6),
+                              HexButton(
+                                icon: Icons.rotate_left_rounded,
+                                tooltip: 'Turn the board',
+                                size: 38,
+                                onPressed: () => _b3?.send({'t': 'cam', 'op': 'turn', 'a': math.pi / 4}),
+                              ),
+                              const SizedBox(height: 6),
+                              HexButton(
+                                icon: Icons.threed_rotation_rounded,
+                                tooltip: 'Top view / table view',
+                                size: 38,
+                                onPressed: () => _b3?.send({'t': 'cam', 'op': 'tilt'}),
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -1621,5 +1660,62 @@ class _Board3DCover extends StatelessWidget {
         ),
       ),
     ),
+  );
+}
+
+/// Takes every touch and click on the 3D map and forwards it: the web view under it only draws,
+/// so HUD buttons on top always get their taps first. One finger or the left button slides the
+/// board, two fingers pinch to zoom and twist to turn, the right button orbits, the wheel zooms.
+class _Board3DInput extends StatefulWidget {
+  const _Board3DInput({required this.controller});
+  final Board3DController controller;
+
+  @override
+  State<_Board3DInput> createState() => _Board3DInputState();
+}
+
+class _Board3DInputState extends State<_Board3DInput> {
+  bool _orbiting = false;
+  double _scale = 1;
+  double _rotation = 0;
+  Size _size = Size.zero;
+
+  Board3DController get c => widget.controller;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, box) {
+      _size = box.biggest;
+      return Listener(
+        onPointerDown: (e) => _orbiting = e.kind == PointerDeviceKind.mouse && e.buttons & kSecondaryMouseButton != 0,
+        onPointerMove: (e) {
+          if (_orbiting) c.send({'t': 'orbit', 'dx': e.delta.dx / _size.width, 'dy': e.delta.dy / _size.height});
+        },
+        onPointerUp: (_) => _orbiting = false,
+        onPointerCancel: (_) => _orbiting = false,
+        onPointerSignal: (e) {
+          if (e is PointerScrollEvent) c.send({'t': 'pinch', 'k': e.scrollDelta.dy > 0 ? 0.9 : 1.1});
+        },
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapUp: (d) => c.send({'t': 'pick', 'x': d.localPosition.dx / _size.width, 'y': d.localPosition.dy / _size.height}),
+          onScaleStart: (_) {
+            _scale = 1;
+            _rotation = 0;
+          },
+          onScaleUpdate: (d) {
+            if (_orbiting) return;
+            final delta = d.focalPointDelta;
+            if (delta != Offset.zero) c.send({'t': 'drag', 'dx': delta.dx / _size.width, 'dy': delta.dy / _size.height});
+            if (d.pointerCount > 1) {
+              final k = d.scale / _scale, a = d.rotation - _rotation;
+              _scale = d.scale;
+              _rotation = d.rotation;
+              if ((k - 1).abs() > 0.001 || a.abs() > 0.001) c.send({'t': 'pinch', 'k': k, 'a': a});
+            }
+          },
+        ),
+      );
+    },
   );
 }
