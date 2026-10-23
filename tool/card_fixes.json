@@ -107,5 +107,15 @@
     "usedBy": "Dagger"
    }
   }
+ },
+ "deadpool": {
+  "cards": {
+   "19": {
+    "title": "Deadpool Merc For Hire, LLC"
+   },
+   "11": {
+    "title": "I've Been Hacked!"
+   }
+  }
  }
 }

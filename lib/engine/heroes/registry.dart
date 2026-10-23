@@ -15,6 +15,7 @@ import 'jurassic.dart';
 import 'marvel.dart';
 import 'legends.dart';
 import 'marvel_buffy.dart';
+import 'redemption_row.dart';
 import 'slings.dart';
 import 'teen_spirit.dart';
 import 'tmnt.dart';
@@ -82,6 +83,9 @@ final Map<String, HeroScript Function()> heroScripts = {
   'elektra': Elektra.new,
   'cloak-dagger': CloakDagger.new,
   'ms-marvel': MsMarvel.new,
+  'ghost-rider': GhostRider.new,
+  'luke-cage': LukeCage.new,
+  'deadpool': Deadpool.new,
 };
 
 /// Heroes whose ability and every card are scripted and tested.
