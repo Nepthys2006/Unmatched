@@ -1,0 +1,11 @@
+{
+ "_comment": "Corrections to ../heroes.json, each checked against the printed card image.",
+ "achilles": {"cards": {"3": {"fighters": []}}},
+ "michelangelo": {"cards": {"8": {"text": {"effect": "Add +1 to the value of Michelangelo's attacks this turn. Gain 1 action."}}}},
+ "krang": {"cards": {"7": {"dieBoost": true}, "9": {"dieBoost": true}}},
+ "loki": {"cards": {
+  "1": {"boost": null}, "2": {"boost": null}, "9": {"boost": null}, "10": {"boost": null, "value": null},
+  "3": {"boost": 2}
+ }},
+ "blackbeard": {"cards": {"2": {"value": null}, "4": {"value": null}}}
+}

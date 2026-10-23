@@ -1,0 +1,8055 @@
+[
+ {
+  "id": "king-arthur",
+  "name": "King Arthur",
+  "set": "Battle of Legends, Volume One",
+  "color": "#e35456",
+  "move": 2,
+  "ability": "When King Arthur attacks, you may BOOST that attack, Play the BOOST card, face down, along with your attack card.\nIf your opponent cancels the effects on your attack card, the BOOST is discarded without effect.",
+  "description": "With mighty Excalibur in his mailed fist and the tricky Merlin at his back, his greatest weapon is his faith and willingness to sacrifice to see that deed is done.",
+  "fighters": [
+   {
+    "id": "king-arthur",
+    "name": "King Arthur",
+    "hero": true,
+    "attack": "melee",
+    "hp": 18,
+    "count": 1
+   },
+   {
+    "id": "merlin",
+    "name": "Merlin",
+    "hero": false,
+    "attack": "ranged",
+    "hp": 7,
+    "count": 1
+   }
+  ],
+  "cards": [
+   {
+    "index": 1,
+    "title": "The Lady of the Lake",
+    "type": "scheme",
+    "value": null,
+    "boost": 2,
+    "copies": 1,
+    "usedBy": "Arthur",
+    "text": {
+     "effect": "Search your deck and discard pile for the EXCALIBUR card. Add it to your hand. If you searched your deck, shuffle it."
+    },
+    "fighters": [
+     "king-arthur"
+    ]
+   },
+   {
+    "index": 2,
+    "title": "The Aid of Morgana",
+    "type": "attack",
+    "value": 4,
+    "boost": 2,
+    "copies": 1,
+    "usedBy": "Arthur",
+    "text": {
+     "after": "Draw 2 cards."
+    },
+    "fighters": [
+     "king-arthur"
+    ]
+   },
+   {
+    "index": 3,
+    "title": "Prophecy",
+    "type": "scheme",
+    "value": null,
+    "boost": 2,
+    "copies": 1,
+    "usedBy": "Merlin",
+    "text": {
+     "effect": "Look at the top 4 cards of your deck. Add 2 of them to your hand and put the other 2 back on top of your deck, in any order."
+    },
+    "fighters": [
+     "merlin"
+    ]
+   },
+   {
+    "index": 4,
+    "title": "Excalibur",
+    "type": "attack",
+    "value": 6,
+    "boost": 3,
+    "copies": 1,
+    "usedBy": "Arthur",
+    "text": {},
+    "fighters": [
+     "king-arthur"
+    ]
+   },
+   {
+    "index": 5,
+    "title": "Momentous Shift",
+    "type": "versatile",
+    "value": 3,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "during": "If your fighter started this turn in a different space, this card's value is 5 instead."
+    },
+    "fighters": []
+   },
+   {
+    "index": 6,
+    "title": "Bewilderment",
+    "type": "defense",
+    "value": 0,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Merlin",
+    "text": {
+     "during": "Prevent all damage",
+     "after": "You may place your fighter in any space."
+    },
+    "fighters": [
+     "merlin"
+    ]
+   },
+   {
+    "index": 7,
+    "title": "Command the Storms",
+    "type": "scheme",
+    "value": null,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Merlin",
+    "text": {
+     "effect": "Move each fighter up to 3 spaces. (This includes opposing fighters.)"
+    },
+    "fighters": [
+     "merlin"
+    ]
+   },
+   {
+    "index": 8,
+    "title": "Regroup",
+    "type": "versatile",
+    "value": 1,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "after": "Draw 1 card. If you won the combat, draw 2 cards instead."
+    },
+    "fighters": []
+   },
+   {
+    "index": 9,
+    "title": "Swift Strike",
+    "type": "attack",
+    "value": 3,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "after": "Move your fighter up to 4 spaces."
+    },
+    "fighters": []
+   },
+   {
+    "index": 10,
+    "title": "Aid the Chosen One",
+    "type": "attack",
+    "value": 4,
+    "boost": 2,
+    "copies": 1,
+    "usedBy": "Merlin",
+    "text": {
+     "after": "If you won the combat, draw 2 cards."
+    },
+    "fighters": [
+     "merlin"
+    ]
+   },
+   {
+    "index": 11,
+    "title": "Divine Intervention",
+    "type": "versatile",
+    "value": 3,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Arthur",
+    "text": {
+     "after": "Move King Arthur up to 5 spaces."
+    },
+    "fighters": [
+     "king-arthur"
+    ]
+   },
+   {
+    "index": 12,
+    "title": "Feint",
+    "type": "versatile",
+    "value": 2,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "immediately": "Cancel all effects on your opponent's card."
+    },
+    "fighters": []
+   },
+   {
+    "index": 13,
+    "title": "Noble Sacrifice",
+    "type": "attack",
+    "value": 2,
+    "boost": 3,
+    "copies": 3,
+    "usedBy": "Arthur",
+    "text": {
+     "during": "You may BOOST this attack. (This is in addition to any boost from King Arthur's special ability.)"
+    },
+    "fighters": [
+     "king-arthur"
+    ]
+   },
+   {
+    "index": 14,
+    "title": "Restless Spirits",
+    "type": "scheme",
+    "value": null,
+    "boost": 2,
+    "copies": 1,
+    "usedBy": "Merlin",
+    "text": {
+     "effect": "Choose any space in Merlin's zone. Deal 2 damage to each opposing fighter in that space and in one adjacent space. If at least one fighter is defeated this way, draw 1 card."
+    },
+    "fighters": [
+     "merlin"
+    ]
+   },
+   {
+    "index": 15,
+    "title": "Skirmish",
+    "type": "versatile",
+    "value": 4,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "after": "If you won the combat, choose one of the fighters in the combat and move them up to 2 spaces."
+    },
+    "fighters": []
+   },
+   {
+    "index": 16,
+    "title": "The Holy Grail",
+    "type": "defense",
+    "value": 1,
+    "boost": 2,
+    "copies": 1,
+    "usedBy": "Arthur",
+    "text": {
+     "after": "If King Arthur has 4 or less health but is not defeated, set his health to 8."
+    },
+    "fighters": [
+     "king-arthur"
+    ]
+   }
+  ]
+ },
+ {
+  "id": "alice",
+  "name": "Alice",
+  "set": "Battle of Legends, Volume One",
+  "color": "#6796c3",
+  "move": 2,
+  "ability": "When you place Alice, choose whether she starts the game BIG or SMALL.\nWhen Alice is BIG, add 2 to the value of her attack cards.\nWhen Alice is SMALL, add 1 to the value of her defense cards.",
+  "description": "Big trouble in a little package. She's been through the looking glass and came back with a vorpal blade and the Jabberwock in tow. Catch her at the wrong size, and it'll be checkmate for you.",
+  "fighters": [
+   {
+    "id": "alice",
+    "name": "Alice",
+    "hero": true,
+    "attack": "melee",
+    "hp": 13,
+    "count": 1
+   },
+   {
+    "id": "the-jabberwock",
+    "name": "The Jabberwock",
+    "hero": false,
+    "attack": "melee",
+    "hp": 8,
+    "count": 1
+   }
+  ],
+  "cards": [
+   {
+    "index": 1,
+    "title": "Mad as a Hatter",
+    "type": "versatile",
+    "value": 3,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "Allice",
+    "text": {
+     "after": "Move each of your fighters up to 2 spaces. Change size."
+    },
+    "fighters": [
+     "alice"
+    ]
+   },
+   {
+    "index": 2,
+    "title": "Drink Me",
+    "type": "scheme",
+    "value": null,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Allice",
+    "text": {
+     "effect": "Draw 2 cards. Change size."
+    },
+    "fighters": [
+     "alice"
+    ]
+   },
+   {
+    "index": 3,
+    "title": "Skirmish",
+    "type": "versatile",
+    "value": 4,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "after": "If you won the combat, choose one of the fighters in the combat and move them up to 2 spaces."
+    },
+    "fighters": []
+   },
+   {
+    "index": 4,
+    "title": "Jaws That Bite",
+    "type": "attack",
+    "value": 4,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "The Jabberwock",
+    "text": {
+     "after": "Deal 2 damage to any one fighter adjacent to the Jabberwock."
+    },
+    "fighters": [
+     "the-jabberwock"
+    ]
+   },
+   {
+    "index": 5,
+    "title": "Momentous Shift",
+    "type": "versatile",
+    "value": 3,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "during": "If your fighter started this turn in a different space, this card's value is 5 instead."
+    },
+    "fighters": []
+   },
+   {
+    "index": 6,
+    "title": "Feint",
+    "type": "versatile",
+    "value": 2,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "immediately": "Cancel all effects on your opponent's card."
+    },
+    "fighters": []
+   },
+   {
+    "index": 7,
+    "title": "Regroup",
+    "type": "versatile",
+    "value": 1,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "after": "Draw 1 card. If you won the combat, draw 2 cards instead."
+    },
+    "fighters": []
+   },
+   {
+    "index": 8,
+    "title": "The Other Side of the Mushroom",
+    "type": "attack",
+    "value": 3,
+    "boost": 4,
+    "copies": 1,
+    "usedBy": "Allice",
+    "text": {
+     "after": "Move Alice up to 3 spaces. Change size."
+    },
+    "fighters": [
+     "alice"
+    ]
+   },
+   {
+    "index": 9,
+    "title": "Eat Me",
+    "type": "scheme",
+    "value": null,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Allice",
+    "text": {
+     "effect": "Move Alice up to 3 spaces. Change size."
+    },
+    "fighters": [
+     "alice"
+    ]
+   },
+   {
+    "index": 10,
+    "title": "Claws That Catch",
+    "type": "attack",
+    "value": 3,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "The Jabberwock",
+    "text": {
+     "during": "If the opposing fighter is a hero, this card's value is 5 instead."
+    },
+    "fighters": [
+     "the-jabberwock"
+    ]
+   },
+   {
+    "index": 11,
+    "title": "I'm Late, I'm Late",
+    "type": "versatile",
+    "value": 2,
+    "boost": 3,
+    "copies": 3,
+    "usedBy": "Allice",
+    "text": {
+     "after": "Move Alice up to 5 spaces. Change size."
+    },
+    "fighters": [
+     "alice"
+    ]
+   },
+   {
+    "index": 12,
+    "title": "Looking Glass",
+    "type": "defense",
+    "value": 2,
+    "boost": 4,
+    "copies": 2,
+    "usedBy": "Allice",
+    "text": {
+     "after": "Choose 2 different effects: - draw 2 cards - Alice recovers 3 health - place Alice in any other space"
+    },
+    "fighters": [
+     "alice"
+    ]
+   },
+   {
+    "index": 13,
+    "title": "O Frabjous Day!",
+    "type": "attack",
+    "value": 4,
+    "boost": 4,
+    "copies": 1,
+    "usedBy": "Allice",
+    "text": {
+     "after": "Change size."
+    },
+    "fighters": [
+     "alice"
+    ]
+   },
+   {
+    "index": 14,
+    "title": "Snicker-Snack",
+    "type": "attack",
+    "value": 3,
+    "boost": 4,
+    "copies": 1,
+    "usedBy": "Allice",
+    "text": {
+     "after": "If you won the combat, look at your opponent's hand and choose 1 card for them to discard."
+    },
+    "fighters": [
+     "alice"
+    ]
+   },
+   {
+    "index": 15,
+    "title": "Manxome Foe",
+    "type": "versatile",
+    "value": 3,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "during": "Discard the top card of your deck. Add its BOOST value to this card's value."
+    },
+    "fighters": []
+   }
+  ]
+ },
+ {
+  "id": "medusa",
+  "name": "Medusa",
+  "set": "Battle of Legends, Volume One",
+  "color": "#42ab47",
+  "move": 3,
+  "ability": "At the start of your turn, you may deal 1 damage to an opposing fighter in Medusa's zone.",
+  "description": "The Gorgon with the gaze that felled thousands. With her harpies at her side, you better have a defense in hand when she turns her eyes to you.",
+  "fighters": [
+   {
+    "id": "medusa",
+    "name": "Medusa",
+    "hero": true,
+    "attack": "ranged",
+    "hp": 16,
+    "count": 1
+   },
+   {
+    "id": "harpies",
+    "name": "Harpies",
+    "hero": false,
+    "attack": "melee",
+    "hp": 1,
+    "count": 3
+   }
+  ],
+  "cards": [
+   {
+    "index": 1,
+    "title": "Second Shot",
+    "type": "attack",
+    "value": 3,
+    "boost": 3,
+    "copies": 3,
+    "usedBy": "Medusa",
+    "text": {
+     "during": "You may BOOST this attack."
+    },
+    "fighters": [
+     "medusa"
+    ]
+   },
+   {
+    "index": 2,
+    "title": "A Momentary Glance",
+    "type": "scheme",
+    "value": null,
+    "boost": 4,
+    "copies": 2,
+    "usedBy": "Medusa",
+    "text": {
+     "effect": "Deal 2 damage to any one fighter in Medusa's zone."
+    },
+    "fighters": [
+     "medusa"
+    ]
+   },
+   {
+    "index": 3,
+    "title": "Winged Frenzy",
+    "type": "scheme",
+    "value": null,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "effect": "Move each of your fighters up to 3 spaces. You may move them through spaces containing opposing fighters. Then, return a defeated Harpy (if any) to any space in Medusa's zone."
+    },
+    "fighters": []
+   },
+   {
+    "index": 4,
+    "title": "Gaze of Stone",
+    "type": "attack",
+    "value": 2,
+    "boost": 4,
+    "copies": 3,
+    "usedBy": "Medusa",
+    "text": {
+     "after": "If you won the combat, deal 8 damage to the opposing fighter."
+    },
+    "fighters": [
+     "medusa"
+    ]
+   },
+   {
+    "index": 5,
+    "title": "Hiss and Slither",
+    "type": "defense",
+    "value": 4,
+    "boost": 3,
+    "copies": 3,
+    "usedBy": "Medusa",
+    "text": {
+     "after": "Your opponent discards 1 card."
+    },
+    "fighters": [
+     "medusa"
+    ]
+   },
+   {
+    "index": 6,
+    "title": "Feint",
+    "type": "versatile",
+    "value": 2,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "immediately": "Cancel all effects on your opponent's card."
+    },
+    "fighters": []
+   },
+   {
+    "index": 7,
+    "title": "Regroup",
+    "type": "versatile",
+    "value": 1,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "after": "Draw 1 card. If you won the combat, draw 2 cards instead."
+    },
+    "fighters": []
+   },
+   {
+    "index": 8,
+    "title": "Snipe",
+    "type": "versatile",
+    "value": 3,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "after": "Draw 1 card."
+    },
+    "fighters": []
+   },
+   {
+    "index": 9,
+    "title": "The Hounds of Mighty Zeus",
+    "type": "versatile",
+    "value": 4,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Harpy",
+    "text": {
+     "after": "Move each Harpy up to 3 spaces."
+    },
+    "fighters": [
+     "harpies"
+    ]
+   },
+   {
+    "index": 10,
+    "title": "Clutching Claws",
+    "type": "versatile",
+    "value": 3,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Harpy",
+    "text": {
+     "after": "Your opponent discards 1 card."
+    },
+    "fighters": [
+     "harpies"
+    ]
+   },
+   {
+    "index": 11,
+    "title": "Dash",
+    "type": "versatile",
+    "value": 3,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "after": "Move your fighter up to 3 spaces."
+    },
+    "fighters": []
+   }
+  ]
+ },
+ {
+  "id": "bigfoot",
+  "name": "Bigfoot",
+  "set": "Robin Hood vs Bigfoot",
+  "color": "#936937",
+  "move": 3,
+  "ability": "At the end of your turn, if there are no opposing fighters in Bigfoot's zone, you may draw 1 card.",
+  "description": "Mighty as a sequoia and untamable as the wind, Bigfoot comes crashing in with the darting Jackalope in tow. Quickly as you feel their power, they're gone, like a figment of the mind.",
+  "fighters": [
+   {
+    "id": "bigfoot",
+    "name": "Bigfoot",
+    "hero": true,
+    "attack": "melee",
+    "hp": 16,
+    "count": 1
+   },
+   {
+    "id": "the-jackalope",
+    "name": "The Jackalope",
+    "hero": false,
+    "attack": "melee",
+    "hp": 6,
+    "count": 1
+   }
+  ],
+  "cards": [
+   {
+    "index": 1,
+    "title": "Savagery",
+    "type": "attack",
+    "value": 4,
+    "boost": 3,
+    "copies": 3,
+    "usedBy": "Bigfoot",
+    "text": {
+     "after": "If you won the combat, deal 1 damage to each fighter adjacent to Bigfoot."
+    },
+    "fighters": [
+     "bigfoot"
+    ]
+   },
+   {
+    "index": 2,
+    "title": "It's Just Your Imagination",
+    "type": "defense",
+    "value": 3,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "immediately": "Cancel all effects on your opponent's card."
+    },
+    "fighters": []
+   },
+   {
+    "index": 3,
+    "title": "Feint",
+    "type": "versatile",
+    "value": 2,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "immediately": "Cancel all effects on your opponent's card."
+    },
+    "fighters": []
+   },
+   {
+    "index": 4,
+    "title": "Momentous Shift",
+    "type": "versatile",
+    "value": 3,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "during": "If your fighter started this turn in a different space, this card's value is 5 instead."
+    },
+    "fighters": []
+   },
+   {
+    "index": 5,
+    "title": "Jackalope Horns",
+    "type": "scheme",
+    "value": null,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "The Jackalope",
+    "text": {
+     "effect": "Move the Jackalope up to 5 spaces. You may move the Jackalope through spaces containing opposing fighters. Then deal 2 damage to any one fighter adjacent to the Jackalope."
+    },
+    "fighters": [
+     "the-jackalope"
+    ]
+   },
+   {
+    "index": 6,
+    "title": "Crash Through the Trees",
+    "type": "scheme",
+    "value": null,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Bigfoot",
+    "text": {
+     "effect": "Move Bigfoot up to 5 spaces. You may move Bigfoot through spaces containing opposing fighters."
+    },
+    "fighters": [
+     "bigfoot"
+    ]
+   },
+   {
+    "index": 7,
+    "title": "Hoax",
+    "type": "versatile",
+    "value": 4,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "after": "Move your fighter up to 5 spaces. You may move that fighter through spaces containing opposing fighters."
+    },
+    "fighters": []
+   },
+   {
+    "index": 8,
+    "title": "Skirmish",
+    "type": "versatile",
+    "value": 4,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "after": "If you won the combat, choose one of the fighters in the combat and move them up to 2 spaces."
+    },
+    "fighters": []
+   },
+   {
+    "index": 9,
+    "title": "Disengage",
+    "type": "attack",
+    "value": 4,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "after": "Choose an empty space in this fighter's zone. Place this fighter in that space."
+    },
+    "fighters": []
+   },
+   {
+    "index": 10,
+    "title": "Larger Than Life",
+    "type": "attack",
+    "value": 6,
+    "boost": 3,
+    "copies": 3,
+    "usedBy": "Bigfoot",
+    "text": {},
+    "fighters": [
+     "bigfoot"
+    ]
+   },
+   {
+    "index": 11,
+    "title": "Regroup",
+    "type": "versatile",
+    "value": 1,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "after": "Draw 1 card. If you won the combat, draw 2 cards instead."
+    },
+    "fighters": []
+   }
+  ]
+ },
+ {
+  "id": "doctor-strange",
+  "name": "Doctor Strange",
+  "set": "Brains and Brawn",
+  "color": "#4c94b7",
+  "move": 2,
+  "ability": "DARK PACT\nAfter each combat, if Doctor Strange played a card, you may deal 1 damage to him. If you do, put that card on the bottom of your deck and draw 1 card.",
+  "description": "The Master of Kamar-Taj, with the trusty Wong by his side, wields mighty spells to defeat his foes.",
+  "fighters": [
+   {
+    "id": "doctor-strange",
+    "name": "Doctor Strange",
+    "hero": true,
+    "attack": "ranged",
+    "hp": 14,
+    "count": 1
+   },
+   {
+    "id": "wong",
+    "name": "Wong",
+    "hero": false,
+    "attack": "ranged",
+    "hp": 6,
+    "count": 1
+   }
+  ],
+  "cards": [
+   {
+    "index": 1,
+    "title": "Feint",
+    "type": "versatile",
+    "value": 2,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "immediately": "Cancel all effects on your opponent's card."
+    },
+    "fighters": []
+   },
+   {
+    "index": 2,
+    "title": "The Mists of Munnopor",
+    "type": "defense",
+    "value": 2,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Doctor Strange",
+    "text": {
+     "immediately": "Discard your opponent's card. They reveal cards from their deck until they reveal an attack or versatile card they can play. They play that card and randomly put the rest of the revealed cards on the bottom of their deck."
+    },
+    "fighters": [
+     "doctor-strange"
+    ]
+   },
+   {
+    "index": 3,
+    "title": "Seven Suns of Cinnibus",
+    "type": "versatile",
+    "value": 3,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Doctor Strange",
+    "text": {
+     "during": "You may BLIND BOOST this card up to two times.",
+     "effect": "If the value of this card is above 7, ignore its value."
+    },
+    "fighters": [
+     "doctor-strange"
+    ]
+   },
+   {
+    "index": 4,
+    "title": "Eye of Agamotto",
+    "type": "scheme",
+    "value": null,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Doctor Strange",
+    "text": {
+     "effect": "Shuffle your hand into your deck. Draw 5 cards. Gain 1 action."
+    },
+    "fighters": [
+     "doctor-strange"
+    ]
+   },
+   {
+    "index": 5,
+    "title": "Steadfast Disciple",
+    "type": "versatile",
+    "value": 2,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Wong",
+    "text": {
+     "after": "If Wong is adjacent to the opposing fighter, deal 1 damage to the opposing fighter and draw 1 card."
+    },
+    "fighters": [
+     "wong"
+    ]
+   },
+   {
+    "index": 6,
+    "title": "The Winds of Watoomb",
+    "type": "attack",
+    "value": 4,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Doctor Strange",
+    "text": {
+     "after": "Your opponent places Dr. Strange in a starting space. Place the opposing fighter in another starting space. All players shuffle their decks."
+    },
+    "fighters": [
+     "doctor-strange"
+    ]
+   },
+   {
+    "index": 7,
+    "title": "Bolts of Balthakk",
+    "type": "attack",
+    "value": 2,
+    "boost": 3,
+    "copies": 4,
+    "usedBy": "Any",
+    "text": {
+     "during": "You may BLIND BOOST this card.",
+     "after": "If you won the combat, gain 1 action."
+    },
+    "fighters": []
+   },
+   {
+    "index": 8,
+    "title": "Cloak of Levitation",
+    "type": "versatile",
+    "value": 2,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "Doctor Strange",
+    "text": {
+     "during": "If Dr. Strange is adjacent to the opposing fighter, ignore the value of your opponent's card."
+    },
+    "fighters": [
+     "doctor-strange"
+    ]
+   },
+   {
+    "index": 9,
+    "title": "Master of Kamar-Taj",
+    "type": "versatile",
+    "value": 2,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "during": "If Dr. Strange and Wong are adjacent, this card's value is 4 instead."
+    },
+    "fighters": []
+   },
+   {
+    "index": 10,
+    "title": "No Really, I'm a Doctor",
+    "type": "scheme",
+    "value": null,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Doctor Strange",
+    "text": {
+     "effect": "Reveal a card from your hand and put it on top of your deck. Dr. Strange or a friendly fighter adjacent to him recovers health equal to that card's boost value."
+    },
+    "fighters": [
+     "doctor-strange"
+    ]
+   },
+   {
+    "index": 11,
+    "title": "The Rings of Raggadorr",
+    "type": "attack",
+    "value": 4,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "after": "If you won the combat, your fighter and each friendly fighter adjacent to them recover health equal to the damage dealt."
+    },
+    "fighters": []
+   }
+  ]
+ },
+ {
+  "id": "little-red",
+  "name": "Little Red",
+  "set": "Little Red Riding Hood vs. Beowulf",
+  "color": "#bd3d46",
+  "move": 2,
+  "ability": "Resolve an effect on a card you play if the symbol next to the effect matches the item in your basket. At the start of the game, place LITTLE RED's BASKET in your discard pile.\nLittle Red's Basket: This starts in your discard pile. It does not count as a card.\n🌟 counts as any one 🐺🌹⚔️ symbol.",
+  "description": "Once upon a time, Little Red Riding Hood went into the belly of the beast, and lived to tell her grim tale. With the help of her friend the Huntsman, she's ready to head back into the woods with a few terrible tricks tucked away in her basket.",
+  "fighters": [
+   {
+    "id": "little-red",
+    "name": "Little Red",
+    "hero": true,
+    "attack": "melee",
+    "hp": 14,
+    "count": 1
+   },
+   {
+    "id": "huntsman",
+    "name": "Huntsman",
+    "hero": false,
+    "attack": "ranged",
+    "hp": 9,
+    "count": 1
+   }
+  ],
+  "cards": [
+   {
+    "index": 1,
+    "title": "Never Leave the Path 🐺",
+    "type": "scheme",
+    "value": null,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "Little Red",
+    "text": {
+     "effect": "🐺 Place Little Red in any space. Gain 1 action. ⚔️ Deal 2 damage to each opposing fighter in Little Red's zone. 🌹 Draw 3 cards."
+    },
+    "fighters": [
+     "little-red"
+    ]
+   },
+   {
+    "index": 2,
+    "title": "A Grimm Tale 🌹",
+    "type": "scheme",
+    "value": null,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Huntsman",
+    "text": {
+     "effect": "Little Red Recovers 2 health. 🐺 Little Red recovers 4 health instead."
+    },
+    "fighters": [
+     "huntsman"
+    ]
+   },
+   {
+    "index": 3,
+    "title": "Once Upon a Time 🌹",
+    "type": "versatile",
+    "value": 2,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "after": "⚔️ Deal 3 damage to the opposing fighter."
+    },
+    "fighters": []
+   },
+   {
+    "index": 4,
+    "title": "Stones in the Belly 🌹",
+    "type": "versatile",
+    "value": null,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "during": "⚔️ Your opponent discards 1 random card. Add its BOOST value to this card's value."
+    },
+    "fighters": []
+   },
+   {
+    "index": 5,
+    "title": "What Big Eyes You Have 🐺",
+    "type": "versatile",
+    "value": 2,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Little Red",
+    "text": {
+     "immediately": "Cancel all effects on your opponent's card. 🌹 Also ignore the value of your opponent's card."
+    },
+    "fighters": [
+     "little-red"
+    ]
+   },
+   {
+    "index": 6,
+    "title": "What Big Ears You Have 🐺",
+    "type": "attack",
+    "value": 4,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Little Red",
+    "text": {
+     "effect": "⚔️ You may play this card as a defense card."
+    },
+    "fighters": [
+     "little-red"
+    ]
+   },
+   {
+    "index": 7,
+    "title": "The Wolf's Skin ⚔️",
+    "type": "defense",
+    "value": 2,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "after": "🐺 Draw 2 cards."
+    },
+    "fighters": []
+   },
+   {
+    "index": 8,
+    "title": "Into the Woods 🐺🌹⚔️",
+    "type": "scheme",
+    "value": null,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Little Red",
+    "text": {
+     "effect": "Move Little Red up to 3 spaces. Gain 1 action."
+    },
+    "fighters": [
+     "little-red"
+    ]
+   },
+   {
+    "index": 9,
+    "title": "Long Have I Sought You ⚔️",
+    "type": "attack",
+    "value": 4,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Huntsman",
+    "text": {
+     "during": "If the Huntsman is adjacent to the opposing fighter, the value of this card is 6 instead."
+    },
+    "fighters": [
+     "huntsman"
+    ]
+   },
+   {
+    "index": 10,
+    "title": "What a Terrible Big Mouth You Have ⚔️",
+    "type": "defense",
+    "value": 2,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Little Red",
+    "text": {
+     "after": "🐺 Deal damage to the opposing fighter equal to the printed value of their card."
+    },
+    "fighters": [
+     "little-red"
+    ]
+   },
+   {
+    "index": 11,
+    "title": "What Large Hands You Have 🐺",
+    "type": "attack",
+    "value": 2,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Little Red",
+    "text": {
+     "after": "You may return this card to your hand. 🌹 Instead, you may return the top card of your discard pile to your hand."
+    },
+    "fighters": [
+     "little-red"
+    ]
+   },
+   {
+    "index": 12,
+    "title": "What's That In My Basket? 🌟",
+    "type": "versatile",
+    "value": 4,
+    "boost": 3,
+    "copies": 4,
+    "usedBy": "Little Red",
+    "text": {
+     "effect": "(🌟 counts as any one 🐺🌹⚔️ symbol.)"
+    },
+    "fighters": [
+     "little-red"
+    ]
+   }
+  ]
+ },
+ {
+  "id": "achilles",
+  "name": "Achilles",
+  "set": "Battle of Legends, Volume Two",
+  "color": "#b56951",
+  "move": 2,
+  "ability": "When Patroclus is defeated, discard 2 random cards.\n\nWhile Patroclus is defeated:\n- Add +2 to the value of all Achilles' attacks.\n- If Achilles wins combat, draw 1 card.",
+  "description": "Achilles and Patroclus, brothers in arms and blessed by Hermes, together a formidable team.\nWhen Patroclus falls, under Achilles' helm, it will surely be the day of your doom.",
+  "fighters": [
+   {
+    "id": "achilles",
+    "name": "Achilles",
+    "hero": true,
+    "attack": "melee",
+    "hp": 18,
+    "count": 1
+   },
+   {
+    "id": "patroclus",
+    "name": "Patroclus",
+    "hero": false,
+    "attack": "melee",
+    "hp": 6,
+    "count": 1
+   }
+  ],
+  "cards": [
+   {
+    "index": 1,
+    "title": "Achilles' Heel",
+    "type": "defense",
+    "value": 4,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Achilles",
+    "text": {
+     "after": "If you lost the combat, your opponent gains 1 action."
+    },
+    "fighters": [
+     "achilles"
+    ]
+   },
+   {
+    "index": 2,
+    "title": "Feint",
+    "type": "versatile",
+    "value": 2,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "immediately": "Cancel all effects on your opponent's card."
+    },
+    "fighters": []
+   },
+   {
+    "index": 3,
+    "title": "Brothers In Arms",
+    "type": "attack",
+    "value": 4,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Patroclus",
+    "text": {
+     "after": "If Patroclus is not defeated, gain 1 action."
+    },
+    "fighters": []
+   },
+   {
+    "index": 4,
+    "title": "Under Achilles' Helm",
+    "type": "defense",
+    "value": 2,
+    "boost": 4,
+    "copies": 3,
+    "usedBy": "Achilles",
+    "text": {
+     "immediately": "If Patroclus is not defeated, Achilles may swap spaces with him. If he does, Patroclus is now the defender."
+    },
+    "fighters": [
+     "achilles"
+    ]
+   },
+   {
+    "index": 5,
+    "title": "Skirmish",
+    "type": "versatile",
+    "value": 4,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "after": "If you won the combat, choose one of the fighters in the combat and move them up to 2 spaces."
+    },
+    "fighters": []
+   },
+   {
+    "index": 6,
+    "title": "Test For Weakness",
+    "type": "attack",
+    "value": 1,
+    "boost": 3,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "after": "RELENTLESS ASSAULT: 3 ATK"
+    },
+    "fighters": []
+   },
+   {
+    "index": 7,
+    "title": "Battle Frenzy",
+    "type": "attack",
+    "value": 3,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Patroclus",
+    "text": {
+     "after": "Deal 2 damage to both fighters in the combat."
+    },
+    "fighters": [
+     "patroclus"
+    ]
+   },
+   {
+    "index": 8,
+    "title": "Spear Throw",
+    "type": "scheme",
+    "value": null,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "Achilles",
+    "text": {
+     "effect": "Deal 2 damage to an opposing fighter in Achilles' zone."
+    },
+    "fighters": [
+     "achilles"
+    ]
+   },
+   {
+    "index": 9,
+    "title": "The Day of Your Doom",
+    "type": "attack",
+    "value": 3,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Patroclus",
+    "text": {
+     "during": "You may deal 2 damage to Patroclus. If you do, the value of this attack is 5 instead."
+    },
+    "fighters": [
+     "patroclus"
+    ]
+   },
+   {
+    "index": 10,
+    "title": "Wily Fighting",
+    "type": "versatile",
+    "value": 3,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "after": "Deal 1 damage to each opposing fighter adjacent to your fighter."
+    },
+    "fighters": []
+   },
+   {
+    "index": 11,
+    "title": "Battle Hardened",
+    "type": "versatile",
+    "value": 2,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "after": "Choose a card in your discard pile and return it to your hand."
+    },
+    "fighters": []
+   },
+   {
+    "index": 12,
+    "title": "Blessed By Hermes",
+    "type": "versatile",
+    "value": 3,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "after": "Move each of your fighters up to 3 spaces. They may move through opposing fighters."
+    },
+    "fighters": []
+   }
+  ]
+ },
+ {
+  "id": "geralt-of-rivia",
+  "name": "Geralt of Rivia",
+  "set": "The Witcher - Steel & Silver",
+  "color": "#ccc",
+  "move": 2,
+  "ability": "ALWAYS PREPARED\nAt the start of the game, choose your gear. Select a POTION, ARMOR, and SWORD, and shuffle 2 copies of each into your deck.",
+  "description": "The White Wolf is one of the most revered witchers.\nMany of his deeds have been immortal-led by Dandelion.",
+  "fighters": [
+   {
+    "id": "geralt-of-rivia",
+    "name": "Geralt of Rivia",
+    "hero": true,
+    "attack": "melee",
+    "hp": 16,
+    "count": 1
+   },
+   {
+    "id": "dandelion",
+    "name": "Dandelion",
+    "hero": false,
+    "attack": "ranged",
+    "hp": 5,
+    "count": 1
+   }
+  ],
+  "cards": [
+   {
+    "index": 1,
+    "title": "Witcher Senses",
+    "type": "scheme",
+    "value": null,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Geralt",
+    "text": {
+     "effect": "Search your deck or discard pile for a GEAR card and add it to your hand. If you took it from your deck, shuffle this card back into your deck."
+    },
+    "fighters": [
+     "geralt-of-rivia"
+    ]
+   },
+   {
+    "index": 2,
+    "title": "Disciplined Duelist",
+    "type": "versatile",
+    "value": 4,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Geralt",
+    "text": {
+     "after": "If the printed value of your opponent's card is ... 2: you may draw 1 card 3: deal 1 damage to the opposing fighter 4: your opponent discards 1 card"
+    },
+    "fighters": [
+     "geralt-of-rivia"
+    ]
+   },
+   {
+    "index": 3,
+    "title": "Gear: Armor of the Forgotten Wolf",
+    "type": "defense",
+    "value": 2,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Geralt",
+    "text": {
+     "during": "Add +1 to this card's value for each fighter adjacent to Geralt.",
+     "after": "End the turn."
+    },
+    "fighters": [
+     "geralt-of-rivia"
+    ]
+   },
+   {
+    "index": 4,
+    "title": "Gear: Blizzard",
+    "type": "scheme",
+    "value": null,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Geralt",
+    "text": {
+     "effect": "Draw 1 card. Move Geralt up to 3 spaces.",
+     "ongoing": "Opponents can't gain actions. Discard this card at the end of your turn if you didn't attack."
+    },
+    "fighters": [
+     "geralt-of-rivia"
+    ]
+   },
+   {
+    "index": 5,
+    "title": "Gear: Sword of silver",
+    "type": "attack",
+    "value": 4,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Geralt",
+    "text": {
+     "immediately": "If your opponent's card has a printed value of 4 or more, ignore its value."
+    },
+    "fighters": [
+     "geralt-of-rivia"
+    ]
+   },
+   {
+    "index": 6,
+    "title": "Gear: Tawny Owl",
+    "type": "scheme",
+    "value": null,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Geralt",
+    "text": {
+     "effect": "Draw 2 cards. Gain 1 action.",
+     "ongoing": "If an effect would cause you to discard a card from your hand, you may choose to ignore it. Discard this card at the end of your turn if you didn't attack."
+    },
+    "fighters": [
+     "geralt-of-rivia"
+    ]
+   },
+   {
+    "index": 7,
+    "title": "Igni",
+    "type": "attack",
+    "value": 0,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Geralt",
+    "text": {
+     "after": "Deal 2 damage to the opposing fighter and 1 damage to each other fighter adjacent to Geralt."
+    },
+    "fighters": [
+     "geralt-of-rivia"
+    ]
+   },
+   {
+    "index": 8,
+    "title": "Plot twist",
+    "type": "versatile",
+    "value": 2,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Dandelion",
+    "text": {
+     "after": "Look at your opponent's hand and choose 1 card for them to discard. Draw 1 card."
+    },
+    "fighters": [
+     "dandelion"
+    ]
+   },
+   {
+    "index": 9,
+    "title": "Riposte",
+    "type": "versatile",
+    "value": 2,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Geralt",
+    "text": {
+     "after": "Choose one: - deal 1 damage to an adjacent fighter - Geralt swaps spaces with an adjacent fighter"
+    },
+    "fighters": [
+     "geralt-of-rivia"
+    ]
+   },
+   {
+    "index": 10,
+    "title": "Yrden",
+    "type": "versatile",
+    "value": 2,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Geralt",
+    "text": {
+     "immediately": "The opposing fighter cannot leave their space this turn.",
+     "after": "Move Geralt up to 2 spaces."
+    },
+    "fighters": [
+     "geralt-of-rivia"
+    ]
+   },
+   {
+    "index": 11,
+    "title": "Annoying tune",
+    "type": "versatile",
+    "value": 3,
+    "boost": 3,
+    "copies": 3,
+    "usedBy": "Dandelion",
+    "text": {
+     "after": "Move the opposing fighter up yo 4 spaces."
+    },
+    "fighters": [
+     "dandelion"
+    ]
+   },
+   {
+    "index": 12,
+    "title": "Gear: Sword of steel",
+    "type": "attack",
+    "value": 4,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Geralt",
+    "text": {
+     "after": "Gain 1 action. If the opposing fighter has 8 or more health, gain 2 actions instead."
+    },
+    "fighters": [
+     "geralt-of-rivia"
+    ]
+   },
+   {
+    "index": 13,
+    "title": "Rend",
+    "type": "versatile",
+    "value": 3,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Geralt",
+    "text": {
+     "during": "You may BOOST this card."
+    },
+    "fighters": [
+     "geralt-of-rivia"
+    ]
+   },
+   {
+    "index": 14,
+    "title": "Damn, you're ugly",
+    "type": "versatile",
+    "value": 5,
+    "boost": 4,
+    "copies": 3,
+    "usedBy": "Geralt",
+    "text": {},
+    "fighters": [
+     "geralt-of-rivia"
+    ]
+   },
+   {
+    "index": 15,
+    "title": "Gear: Wolf Medallion",
+    "type": "defense",
+    "value": 3,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Geralt",
+    "text": {
+     "immediately": "Cancel all effects on your opponent's card",
+     "during": "If the opposing fighter is not adjacent to Geralt, ignore the value of your opponent's card."
+    },
+    "fighters": [
+     "geralt-of-rivia"
+    ]
+   }
+  ]
+ },
+ {
+  "id": "beowulf",
+  "name": "Beowulf",
+  "set": "Little Red Riding Hood vs. Beowulf",
+  "color": "#528582",
+  "move": 2,
+  "ability": "Beowulf starts with 1 Rage.\nWhen Beowulf is dealt damage, he gains 1 Rage.\nBeowulf has a maximum of 3 rage.",
+  "description": "Every blow fills the War-King with rage. Soon you will learn why he was the equal of Grendel. With his kinsman Wiglaf by his side, they are sure to win this fatal struggle.",
+  "fighters": [
+   {
+    "id": "beowulf",
+    "name": "Beowulf",
+    "hero": true,
+    "attack": "melee",
+    "hp": 17,
+    "count": 1
+   },
+   {
+    "id": "wiglaf",
+    "name": "Wiglaf",
+    "hero": false,
+    "attack": "melee",
+    "hp": 9,
+    "count": 1
+   }
+  ],
+  "cards": [
+   {
+    "index": 1,
+    "title": "Remnant of Valor",
+    "type": "scheme",
+    "value": null,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Wiglaf",
+    "text": {
+     "effect": "Wiglaf deals 1 damage to each adjacent fighter. If Beowulf was dealt damage this way, gain 1 action."
+    },
+    "fighters": [
+     "wiglaf"
+    ]
+   },
+   {
+    "index": 2,
+    "title": "Feint",
+    "type": "versatile",
+    "value": 2,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "immediately": "Cancel all effects on your opponent's card."
+    },
+    "fighters": []
+   },
+   {
+    "index": 3,
+    "title": "The Ancient Heirloom",
+    "type": "attack",
+    "value": 3,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "Beowulf",
+    "text": {
+     "during": "You may spend 2 Rage to make this card's value 5 instead. You may spend 1 Rage to BOOST this card. (You may do both.)",
+     "effect": "This card's effects cannot be canceled."
+    },
+    "fighters": [
+     "beowulf"
+    ]
+   },
+   {
+    "index": 4,
+    "title": "The War-King",
+    "type": "versatile",
+    "value": 1,
+    "boost": 3,
+    "copies": 3,
+    "usedBy": "Beowulf",
+    "text": {
+     "during": "Spend any amount of Rage. This card's value is +2 for each Rage spent."
+    },
+    "fighters": [
+     "beowulf"
+    ]
+   },
+   {
+    "index": 5,
+    "title": "Hot for the Battle",
+    "type": "attack",
+    "value": 3,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Wiglaf",
+    "text": {
+     "after": "Wiglaf may swap spaces with Beowulf."
+    },
+    "fighters": [
+     "wiglaf"
+    ]
+   },
+   {
+    "index": 6,
+    "title": "Skirmish",
+    "type": "versatile",
+    "value": 4,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "after": "If you won the combat, choose one of the fighters in the combat and move them up to 2 spaces."
+    },
+    "fighters": []
+   },
+   {
+    "index": 7,
+    "title": "Fatal Struggle",
+    "type": "attack",
+    "value": 4,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "after": "If you won the combat, draw 2 cards. If you lost the combat, your opponent draws 2 cards."
+    },
+    "fighters": []
+   },
+   {
+    "index": 8,
+    "title": "Epic Poem",
+    "type": "attack",
+    "value": 2,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Beowulf",
+    "text": {
+     "immediately": "Gain 1 Rage.",
+     "during": "This card's value is +1 for each Rage you have. (You do not spend Rage for this effect.)"
+    },
+    "fighters": [
+     "beowulf"
+    ]
+   },
+   {
+    "index": 9,
+    "title": "Golden Drinking Horn",
+    "type": "scheme",
+    "value": null,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Beowulf",
+    "text": {
+     "effect": "Spend any amount of Rage. Choose a different effect for each Rage spent: - draw 2 cards - move Beowulf up to 4 spaces - Beowulf recovers 2 health."
+    },
+    "fighters": [
+     "beowulf"
+    ]
+   },
+   {
+    "index": 10,
+    "title": "No Contest Expecteth",
+    "type": "attack",
+    "value": 3,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Beowulf",
+    "text": {
+     "after": "If you attacked a sidekick and won the combat, you may spend 3 Rage to defeat that sidekick."
+    },
+    "fighters": [
+     "beowulf"
+    ]
+   },
+   {
+    "index": 11,
+    "title": "The Equal of Grendel",
+    "type": "defense",
+    "value": 3,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Beowulf",
+    "text": {
+     "immediately": "You may spend 2 Rage to deal damage to the opposing fighter equal to the printed value of their card."
+    },
+    "fighters": [
+     "beowulf"
+    ]
+   },
+   {
+    "index": 12,
+    "title": "Vigor and Courage",
+    "type": "scheme",
+    "value": null,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Beowulf",
+    "text": {
+     "effect": "Choose an opponent. They discard 1 random card. Gain rage equal to its BOOST value."
+    },
+    "fighters": [
+     "beowulf"
+    ]
+   }
+  ]
+ },
+ {
+  "id": "yennenga",
+  "name": "Yennenga",
+  "set": "Battle of Legends, Volume Two",
+  "color": "#186893",
+  "move": 2,
+  "ability": "If Yennenga would take damage, you may assign any amount of that damage to one or more Archers in her zone instead. (You may not assign more damage to an Archer that their remaining health.)",
+  "description": "Warrior-Princess, peerless hunter, leader of men, and the mother of an entire nation.\nWith Yennenga leading the charge, her archers will divide and conquer.",
+  "fighters": [
+   {
+    "id": "yennenga",
+    "name": "Yennenga",
+    "hero": true,
+    "attack": "ranged",
+    "hp": 15,
+    "count": 1
+   },
+   {
+    "id": "archers",
+    "name": "Archers",
+    "hero": false,
+    "attack": "ranged",
+    "hp": 2,
+    "count": 2
+   }
+  ],
+  "cards": [
+   {
+    "index": 1,
+    "title": "Skirmish",
+    "type": "versatile",
+    "value": 4,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "after": "If you won the combat, choose one of the fighters in the combat and move them up to 2 spaces."
+    },
+    "fighters": []
+   },
+   {
+    "index": 2,
+    "title": "Surprise Volley",
+    "type": "attack",
+    "value": 3,
+    "boost": 3,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "immediately": "You may return a defeated Archer to a space in the opposing fighter's zone. If you do, that Archer is now the attacker. If not, gain 1 action."
+    },
+    "fighters": []
+   },
+   {
+    "index": 3,
+    "title": "Rain of Arrows",
+    "type": "attack",
+    "value": 3,
+    "boost": 3,
+    "copies": 3,
+    "usedBy": "Yennenga",
+    "text": {
+     "after": "VOLLEY: 3 ATK"
+    },
+    "fighters": [
+     "yennenga"
+    ]
+   },
+   {
+    "index": 4,
+    "title": "Master of the Hunt",
+    "type": "scheme",
+    "value": null,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Yennenga",
+    "text": {
+     "effect": "Gain 2 actions."
+    },
+    "fighters": [
+     "yennenga"
+    ]
+   },
+   {
+    "index": 5,
+    "title": "Pin the Prey",
+    "type": "versatile",
+    "value": 1,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Archer",
+    "text": {
+     "after": "Move the opposing fighter up to 4 spaces. Your opponent discards 1 card."
+    },
+    "fighters": [
+     "archers"
+    ]
+   },
+   {
+    "index": 6,
+    "title": "One With The Land",
+    "type": "scheme",
+    "value": null,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Yennenga",
+    "text": {
+     "effect": "Move each of your fighters up to 2 spaces. Each of your fighters recovers 1 health. Draw 1 card."
+    },
+    "fighters": [
+     "yennenga"
+    ]
+   },
+   {
+    "index": 7,
+    "title": "Divide and Conquer",
+    "type": "versatile",
+    "value": 2,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "Archer",
+    "text": {
+     "during": "If your fighter is not in Yennenga's zone, the value of this card is a 4 instead."
+    },
+    "fighters": [
+     "archers"
+    ]
+   },
+   {
+    "index": 8,
+    "title": "Jaws of the Beast",
+    "type": "versatile",
+    "value": 3,
+    "boost": 3,
+    "copies": 3,
+    "usedBy": "Yennenga",
+    "text": {
+     "during": "For each zone the opposing fighter is in, increase the value of this card by +1."
+    },
+    "fighters": [
+     "yennenga"
+    ]
+   },
+   {
+    "index": 9,
+    "title": "Momentous Shift",
+    "type": "versatile",
+    "value": 3,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "during": "If your fighter started this turn in a different space, this card's value is 5 instead."
+    },
+    "fighters": []
+   },
+   {
+    "index": 10,
+    "title": "Point Blank",
+    "type": "versatile",
+    "value": 2,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Yennenga",
+    "text": {
+     "after": "If the opposing fighter is adjacent to Yennenga, deal them 2 damage."
+    },
+    "fighters": [
+     "yennenga"
+    ]
+   },
+   {
+    "index": 11,
+    "title": "Shield Formation",
+    "type": "defense",
+    "value": 3,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Yennenga",
+    "text": {
+     "immediately": "Your opponent may discard a card. If they don't, return a defeated Archer to a space in Yennenga's zone."
+    },
+    "fighters": [
+     "yennenga"
+    ]
+   },
+   {
+    "index": 12,
+    "title": "Stallion Charge",
+    "type": "versatile",
+    "value": 3,
+    "boost": 3,
+    "copies": 3,
+    "usedBy": "Yennenga",
+    "text": {
+     "after": "Move Yennenga up to 5 spaces. She may move through opposing fighters. Then, deal 1 damage to each opposing fighter she moved through."
+    },
+    "fighters": [
+     "yennenga"
+    ]
+   }
+  ]
+ },
+ {
+  "id": "black-widow",
+  "name": "Black Widow",
+  "set": "For King and Country",
+  "color": "#c5132f",
+  "move": 2,
+  "ability": "MISSION READY\nBefore drawing your starting hand, add THE MOSCOW PROTOCOL card to your hand.\nThen, shuffle your deck and draw 5 cards. (Your starting hand is 6 cards instead of 5.)",
+  "description": "From the Moscow Protocol to the Budapest Gambit, Black Widow is mission ready. She'll have you caught in her web before you even know she's there.",
+  "fighters": [
+   {
+    "id": "black-widow",
+    "name": "Black Widow",
+    "hero": true,
+    "attack": "ranged",
+    "hp": 13,
+    "count": 1
+   },
+   {
+    "id": "maria-hill",
+    "name": "Maria Hill",
+    "hero": false,
+    "attack": "ranged",
+    "hp": 6,
+    "count": 1
+   }
+  ],
+  "cards": [
+   {
+    "index": 1,
+    "title": "The Budapest Gambit",
+    "type": "scheme",
+    "value": null,
+    "boost": 4,
+    "copies": 1,
+    "usedBy": "Black Widow",
+    "text": {
+     "effect": "Mission: You have 2 or fewer other cards in your hand. Draw 5 cards. Each opponent discards 1 random card. Acquire a new mission."
+    },
+    "fighters": [
+     "black-widow"
+    ]
+   },
+   {
+    "index": 2,
+    "title": "The Moscow Protocol",
+    "type": "scheme",
+    "value": null,
+    "boost": 4,
+    "copies": 1,
+    "usedBy": "Black Widow",
+    "text": {
+     "effect": "Mission: An opposing fighter took damage this turn. Draw 1 card and gain 1 action. Acquire a new mission."
+    },
+    "fighters": [
+     "black-widow"
+    ]
+   },
+   {
+    "index": 3,
+    "title": "Widow's Line",
+    "type": "versatile",
+    "value": 3,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Black Widow",
+    "text": {
+     "after": "Move the opposing fighter up to 2 spaces."
+    },
+    "fighters": [
+     "black-widow"
+    ]
+   },
+   {
+    "index": 4,
+    "title": "Acting Director of S.H.I.E.L.D.",
+    "type": "versatile",
+    "value": 4,
+    "boost": 3,
+    "copies": 3,
+    "usedBy": "Maria Hill",
+    "text": {
+     "after": "Move each of your fighters up to 3 spaces. They may move through opposing fighters. Then, shuffle 1 scheme from your discard pile into your deck."
+    },
+    "fighters": [
+     "maria-hill"
+    ]
+   },
+   {
+    "index": 5,
+    "title": "Widow's Sting",
+    "type": "attack",
+    "value": 5,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Black Widow",
+    "text": {
+     "after": "Move Black Widow up to 3 spaces."
+    },
+    "fighters": [
+     "black-widow"
+    ]
+   },
+   {
+    "index": 6,
+    "title": "Caught in a Web",
+    "type": "versatile",
+    "value": 3,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Black Widow",
+    "text": {
+     "during": "Cancel all AFTER COMBAT effects on your opponent's card."
+    },
+    "fighters": [
+     "black-widow"
+    ]
+   },
+   {
+    "index": 7,
+    "title": "Life Model Decoy",
+    "type": "defense",
+    "value": null,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Maria Hill",
+    "text": {
+     "after": "If Maria Hill was defeated, place her adjacent to Black Widow. If you do, set Maria Hill's health to 3."
+    },
+    "fighters": [
+     "maria-hill"
+    ]
+   },
+   {
+    "index": 8,
+    "title": "Widow's Bite",
+    "type": "attack",
+    "value": 4,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Black Widow",
+    "text": {
+     "after": "If you won the combat, your opponent discards 1 card."
+    },
+    "fighters": [
+     "black-widow"
+    ]
+   },
+   {
+    "index": 9,
+    "title": "Double Identity",
+    "type": "defense",
+    "value": 3,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "immediately": "Black Widow and Maria Hill may swap spaces. If they do, your other fighter is now the defender."
+    },
+    "fighters": []
+   },
+   {
+    "index": 10,
+    "title": "Fake Out",
+    "type": "attack",
+    "value": 1,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "after": "If you lost the combat, draw 1 card and gain 1 action."
+    },
+    "fighters": []
+   },
+   {
+    "index": 11,
+    "title": "Feint",
+    "type": "versatile",
+    "value": 2,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "immediately": "Cancel all effects on your opponent's card."
+    },
+    "fighters": []
+   },
+   {
+    "index": 12,
+    "title": "The Firenze Agenda",
+    "type": "scheme",
+    "value": null,
+    "boost": 4,
+    "copies": 1,
+    "usedBy": "Black Widow",
+    "text": {
+     "effect": "Mission: Black Widow is adjacent to an opposing hero. Deal 2 damage to each opposing fighter in Black Widow's zone. Acquire a new mission."
+    },
+    "fighters": [
+     "black-widow"
+    ]
+   },
+   {
+    "index": 13,
+    "title": "The Kinshasa Directive",
+    "type": "scheme",
+    "value": null,
+    "boost": 4,
+    "copies": 1,
+    "usedBy": "Black Widow",
+    "text": {
+     "effect": "Mission: Black Widow is in your starting space. Choose an opponent. They discard 2 cards. Acquire a new mission."
+    },
+    "fighters": [
+     "black-widow"
+    ]
+   },
+   {
+    "index": 14,
+    "title": "The Madripoor Sanction",
+    "type": "scheme",
+    "value": null,
+    "boost": 4,
+    "copies": 1,
+    "usedBy": "Black Widow",
+    "text": {
+     "effect": "Mission: Black Widow is in an opponent's starting space. Deal 2 damage to each of that opponent's fighters. Acquire a new mission."
+    },
+    "fighters": [
+     "black-widow"
+    ]
+   },
+   {
+    "index": 15,
+    "title": "Widow's Kiss",
+    "type": "versatile",
+    "value": 4,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Black Widow",
+    "text": {
+     "immediately": "The opposing fighter may not leave their space for the rest of the turn."
+    },
+    "fighters": [
+     "black-widow"
+    ]
+   }
+  ]
+ },
+ {
+  "id": "titania",
+  "name": "Titania",
+  "set": "Slings and Arrows",
+  "color": "#565082",
+  "move": 2,
+  "ability": "Fairy Magic\nIf you do not have a face-up glamour at the start of your turn, flip the top card of your glamour deck face-up. Its effect is ongoing while it remains face-up.",
+  "description": "FAIRY MAGIC\nIf you do not have a face-up glamour at the start of your turn, flip the top card of your glamour deck face-up. Its effects is ongoing while it remains face-up.",
+  "fighters": [
+   {
+    "id": "titania",
+    "name": "Titania",
+    "hero": true,
+    "attack": "ranged",
+    "hp": 12,
+    "count": 1
+   },
+   {
+    "id": "oberon",
+    "name": "Oberon",
+    "hero": false,
+    "attack": "melee",
+    "hp": 6,
+    "count": 1
+   }
+  ],
+  "cards": [
+   {
+    "index": 1,
+    "title": "As Wise As Beautiful",
+    "type": "versatile",
+    "value": 2,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Titania",
+    "text": {
+     "after": "Draw 1 card. You may discard your glamour to draw 2 cards instead."
+    },
+    "fighters": [
+     "titania"
+    ]
+   },
+   {
+    "index": 2,
+    "title": "Met By Moonlight",
+    "type": "attack",
+    "value": 5,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Oberon",
+    "text": {
+     "after": "Place Oberon in a space adjacent to Titania."
+    },
+    "fighters": [
+     "oberon"
+    ]
+   },
+   {
+    "index": 3,
+    "title": "Protection Of The Fairy Woods",
+    "type": "defense",
+    "value": 2,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "immediately": "You may discard your glamour. If you do, cancel all effects on your opponent's card."
+    },
+    "fighters": []
+   },
+   {
+    "index": 4,
+    "title": "The Moon Looks Down",
+    "type": "versatile",
+    "value": 3,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Titania",
+    "text": {
+     "after": "Put a discarded glamour on the bottom of your glamour deck."
+    },
+    "fighters": [
+     "titania"
+    ]
+   },
+   {
+    "index": 5,
+    "title": "What Fools These Mortals Be",
+    "type": "scheme",
+    "value": null,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Oberon",
+    "text": {
+     "effect": "Choose an opponent, look at their hand, and choose a card. They shuffle that card into their deck."
+    },
+    "fighters": [
+     "oberon"
+    ]
+   },
+   {
+    "index": 6,
+    "title": "Fairy Song",
+    "type": "versatile",
+    "value": 3,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "during": "You may discard your glamour. If you do, the value of this card is 5 instead."
+    },
+    "fighters": []
+   },
+   {
+    "index": 7,
+    "title": "A Momentary Glance",
+    "type": "scheme",
+    "value": null,
+    "boost": 4,
+    "copies": 2,
+    "usedBy": "Titania",
+    "text": {
+     "effect": "Deal 2 damage to any fighter in Titania's zone."
+    },
+    "fighters": [
+     "titania"
+    ]
+   },
+   {
+    "index": 8,
+    "title": "But A Dream",
+    "type": "defense",
+    "value": 0,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Titania",
+    "text": {
+     "immediately": "Cancel all effects on your opponent's card, ignore its value, and return it to your opponent's hand.",
+     "after": "Draw 1 card."
+    },
+    "fighters": [
+     "titania"
+    ]
+   },
+   {
+    "index": 9,
+    "title": "Gift Of The Fair Folk",
+    "type": "scheme",
+    "value": null,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "effect": "Choose 2 different effects: - one fighter recovers 2 health, - draw 2 cards, - move two fighters up to 2 spaces each"
+    },
+    "fighters": []
+   },
+   {
+    "index": 10,
+    "title": "Parting Gift",
+    "type": "versatile",
+    "value": 2,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "after": "You may deal 2 damage to each fighter in the combat."
+    },
+    "fighters": []
+   },
+   {
+    "index": 11,
+    "title": "Queen Of The Fairies",
+    "type": "attack",
+    "value": 2,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Titania",
+    "text": {
+     "during": "Increase the value of this card by +1 for each glamour in your glamour discard pile."
+    },
+    "fighters": [
+     "titania"
+    ]
+   },
+   {
+    "index": 12,
+    "title": "Whisked Away",
+    "type": "versatile",
+    "value": 4,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "after": "Move your fighter up to 2 spaces. You may discard your glamour. If you do, place your fighter in any space."
+    },
+    "fighters": []
+   }
+  ]
+ },
+ {
+  "id": "willow",
+  "name": "Willow",
+  "set": "Buffy the Vampire Slayer",
+  "color": "#3bc0b8",
+  "move": 2,
+  "ability": "When Willow or Tara is dealt damage, Willow becomes Dark Willow.\nAt the end of your turn, if Dark Willow is adjacent to Tara, she becomes Willow.",
+  "description": "A peerless witch, dabbles in black magic and risks her darker self, potent but dangerous. At times, only Tara can bring her back from the brink of the abyss.",
+  "fighters": [
+   {
+    "id": "willow",
+    "name": "Willow",
+    "hero": true,
+    "attack": "ranged",
+    "hp": 14,
+    "count": 1
+   },
+   {
+    "id": "tara",
+    "name": "Tara",
+    "hero": false,
+    "attack": "ranged",
+    "hp": 6,
+    "count": 1
+   }
+  ],
+  "cards": [
+   {
+    "index": 1,
+    "title": "Black Magic",
+    "type": "versatile",
+    "value": 3,
+    "boost": 3,
+    "copies": 3,
+    "usedBy": "Willow",
+    "text": {
+     "during": "(DARK) BLIND BOOST this card."
+    },
+    "fighters": [
+     "willow"
+    ]
+   },
+   {
+    "index": 2,
+    "title": "Flayed Alive",
+    "type": "attack",
+    "value": 4,
+    "boost": 3,
+    "copies": 3,
+    "usedBy": "Willow",
+    "text": {
+     "during": "(DARK) BLIND BOOST this attack."
+    },
+    "fighters": [
+     "willow"
+    ]
+   },
+   {
+    "index": 3,
+    "title": "Hacker",
+    "type": "versatile",
+    "value": 2,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "after": "Look at the top card of your deck, then choose to put it on the top of your deck or the bottom of your deck."
+    },
+    "fighters": []
+   },
+   {
+    "index": 4,
+    "title": "Love and Loss",
+    "type": "scheme",
+    "value": null,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Willow",
+    "text": {
+     "effect": "Draw 2 cards. (DARK) Discard the top 2 cards of your deck. Deal 3 damage to a sidekick in your zone (even if it's your own)."
+    },
+    "fighters": [
+     "willow"
+    ]
+   },
+   {
+    "index": 5,
+    "title": "Regroup",
+    "type": "versatile",
+    "value": 1,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "after": "Draw 1 card. If you won the combat, draw 2 cards instead."
+    },
+    "fighters": []
+   },
+   {
+    "index": 6,
+    "title": "Resurrect",
+    "type": "scheme",
+    "value": null,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Willow",
+    "text": {
+     "effect": "Choose a friendly fighter who has been defeated. Place that fighter in any space in Willow's zone and set their health to 3."
+    },
+    "fighters": [
+     "willow"
+    ]
+   },
+   {
+    "index": 7,
+    "title": "When Good Magic Fails",
+    "type": "attack",
+    "value": 4,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Willow",
+    "text": {
+     "after": "(DARK) Move Willow to any space in her zone. Discard the top card of your deck."
+    },
+    "fighters": [
+     "willow"
+    ]
+   },
+   {
+    "index": 8,
+    "title": "Revoke",
+    "type": "versatile",
+    "value": 3,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Tara",
+    "text": {
+     "immediately": "Cancel any abilities on your opponent's card."
+    },
+    "fighters": [
+     "tara"
+    ]
+   },
+   {
+    "index": 9,
+    "title": "Feint",
+    "type": "versatile",
+    "value": 2,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "immediately": "Cancel all effects on your opponent's card."
+    },
+    "fighters": []
+   },
+   {
+    "index": 10,
+    "title": "Knowledge of the Craft",
+    "type": "versatile",
+    "value": 4,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Tara",
+    "text": {
+     "after": "If you won the combat, choose a card in your discard pile and add it to your hand."
+    },
+    "fighters": [
+     "tara"
+    ]
+   },
+   {
+    "index": 11,
+    "title": "Meditation",
+    "type": "defense",
+    "value": 5,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Willow",
+    "text": {
+     "after": "(DARK) Become Willow."
+    },
+    "fighters": [
+     "willow"
+    ]
+   },
+   {
+    "index": 12,
+    "title": "Rending Shot",
+    "type": "attack",
+    "value": 3,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "after": "Move the opposing fighter up to 3 spaces."
+    },
+    "fighters": []
+   },
+   {
+    "index": 13,
+    "title": "Swift Strike",
+    "type": "attack",
+    "value": 3,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "after": "Move your fighter up to 4 spaces."
+    },
+    "fighters": []
+   }
+  ]
+ },
+ {
+  "id": "robin-hood",
+  "name": "Robin Hood",
+  "set": "Robin Hood vs Bigfoot",
+  "color": "#28653e",
+  "move": 2,
+  "ability": "After you attack, you may move your attacking fighter up to 2 spaces.",
+  "description": "The quick-witted rogue is a tricky adversary, hard to pin down and deadly with a bow. And just when he's got your attention, the Outlaws come in to rob you blind.",
+  "fighters": [
+   {
+    "id": "robin-hood",
+    "name": "Robin Hood",
+    "hero": true,
+    "attack": "ranged",
+    "hp": 13,
+    "count": 1
+   },
+   {
+    "id": "outlaws",
+    "name": "Outlaws",
+    "hero": false,
+    "attack": "melee",
+    "hp": 1,
+    "count": 4
+   }
+  ],
+  "cards": [
+   {
+    "index": 1,
+    "title": "Snark",
+    "type": "versatile",
+    "value": 3,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "after": "If your fighter is adjacent to the opposing fighter, draw 1 card."
+    },
+    "fighters": []
+   },
+   {
+    "index": 2,
+    "title": "Highway Robbery",
+    "type": "attack",
+    "value": 2,
+    "boost": 2,
+    "copies": 4,
+    "usedBy": "Outlaw",
+    "text": {
+     "immediately": "Cancel all effects on your opponent's card and ignore its defense value."
+    },
+    "fighters": [
+     "outlaws"
+    ]
+   },
+   {
+    "index": 3,
+    "title": "Wily Fighting",
+    "type": "versatile",
+    "value": 3,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "after": "Deal 1 damage to each opposing fighter adjacent to your fighter."
+    },
+    "fighters": []
+   },
+   {
+    "index": 4,
+    "title": "Disarming Shot",
+    "type": "attack",
+    "value": 4,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Robin Hood",
+    "text": {
+     "after": "Draw a number of cards equal to the amount of damage dealt to the opposing fighter."
+    },
+    "fighters": [
+     "robin-hood"
+    ]
+   },
+   {
+    "index": 5,
+    "title": "Regroup",
+    "type": "versatile",
+    "value": 1,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "after": "Draw 1 card. If you won the combat, draw 2 cards instead."
+    },
+    "fighters": []
+   },
+   {
+    "index": 6,
+    "title": "A Hunter's Eye",
+    "type": "attack",
+    "value": 5,
+    "boost": 4,
+    "copies": 3,
+    "usedBy": "Robin Hood",
+    "text": {},
+    "fighters": [
+     "robin-hood"
+    ]
+   },
+   {
+    "index": 7,
+    "title": "Ambush",
+    "type": "attack",
+    "value": 2,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "during": "Your opponent discards 1 random card. Add its BOOST value to this card's attack value."
+    },
+    "fighters": []
+   },
+   {
+    "index": 8,
+    "title": "Steal From the Rich",
+    "type": "scheme",
+    "value": null,
+    "boost": 3,
+    "copies": 3,
+    "usedBy": "Robin Hood",
+    "text": {
+     "effect": "Draw 1 card, then choose an opponent. They may choose to discard 1 card. If they do not, draw 1 more card."
+    },
+    "fighters": [
+     "robin-hood"
+    ]
+   },
+   {
+    "index": 9,
+    "title": "Defenders of Sherwood",
+    "type": "defense",
+    "value": 3,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "after": "Draw 1 card. Return a defeated Outlaw (if any) to any space in Robin Hood's zone."
+    },
+    "fighters": []
+   },
+   {
+    "index": 10,
+    "title": "Feint",
+    "type": "versatile",
+    "value": 2,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "immediately": "Cancel all effects on your opponent's card."
+    },
+    "fighters": []
+   },
+   {
+    "index": 11,
+    "title": "Piercing Shot",
+    "type": "attack",
+    "value": 2,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Robin Hood",
+    "text": {
+     "after": "Draw 2 cards."
+    },
+    "fighters": [
+     "robin-hood"
+    ]
+   }
+  ]
+ },
+ {
+  "id": "ancient-leshen",
+  "name": "Ancient Leshen",
+  "set": "The Witcher - Steel & Silver",
+  "color": "#5d643b",
+  "move": 1,
+  "ability": "HEART OF THE FOREST\nAdd +3 to the value of the Leshen's attacks if it already attacked this turn.\nYour Wolves have a move value of 3.",
+  "description": "Primeval guardian of the forest and its\nInhabitants.",
+  "fighters": [
+   {
+    "id": "ancient-leshen",
+    "name": "Ancient Leshen",
+    "hero": true,
+    "attack": "ranged",
+    "hp": 13,
+    "count": 1
+   },
+   {
+    "id": "wolf",
+    "name": "Wolf",
+    "hero": false,
+    "attack": "melee",
+    "hp": 1,
+    "count": 2
+   }
+  ],
+  "cards": [
+   {
+    "index": 1,
+    "title": "Disturbing howls",
+    "type": "attack",
+    "value": 1,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Wolf",
+    "text": {
+     "after": "Move the opposing fighter up to 2 spaces. Gain 1 action."
+    },
+    "fighters": [
+     "wolf"
+    ]
+   },
+   {
+    "index": 2,
+    "title": "Flock of birds",
+    "type": "attack",
+    "value": 5,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "Leshen",
+    "text": {
+     "after": "You may place the Leshen in any space."
+    },
+    "fighters": [
+     "ancient-leshen"
+    ]
+   },
+   {
+    "index": 3,
+    "title": "Harrying strike",
+    "type": "versatile",
+    "value": 2,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Wolf",
+    "text": {
+     "during": "Add +2 to this card's value for each of your fighters adjacent to the opposing fighter."
+    },
+    "fighters": [
+     "wolf"
+    ]
+   },
+   {
+    "index": 4,
+    "title": "Nature abounds",
+    "type": "attack",
+    "value": 2,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "after": "Draw 1 card for each of your fighters adjacent to the opposing fighter."
+    },
+    "fighters": []
+   },
+   {
+    "index": 5,
+    "title": "Planted feet",
+    "type": "versatile",
+    "value": 4,
+    "boost": 3,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "after": "If your fighter hasn't left their space this turn, draw 1 card."
+    },
+    "fighters": []
+   },
+   {
+    "index": 6,
+    "title": "Primeval guardian",
+    "type": "defense",
+    "value": 5,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Leshen",
+    "text": {
+     "during": "Your opponent discards the top card of their deck. Add its BOOST value to their card's value.",
+     "after": "Move each Wolf up to 3 spaces."
+    },
+    "fighters": [
+     "ancient-leshen"
+    ]
+   },
+   {
+    "index": 7,
+    "title": "Primeval slam",
+    "type": "attack",
+    "value": 4,
+    "boost": 3,
+    "copies": 3,
+    "usedBy": "Leshen",
+    "text": {
+     "after": "Summon a Wolf in the Leshen's zone. Then, move each Wolf up to 3 spaces."
+    },
+    "fighters": [
+     "ancient-leshen"
+    ]
+   },
+   {
+    "index": 8,
+    "title": "Strength of the pack",
+    "type": "scheme",
+    "value": null,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Leshen",
+    "text": {
+     "effect": "Summon a Wolf in the Leshen's zone.",
+     "ongoing": "At the start of your turn, the Leshen recovers 1 health. Discard this card at the end of your turn if there are no Wolves in the Leshen's zone."
+    },
+    "fighters": [
+     "ancient-leshen"
+    ]
+   },
+   {
+    "index": 9,
+    "title": "Vanish into murder",
+    "type": "scheme",
+    "value": null,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Leshen",
+    "text": {
+     "effect": "Deal 1 damage to each opposing fighter in the Leshen's zone. Remove the Leshen from the board. At the start of your next turn, place the Leshen in any space. Then, draw 1 card."
+    },
+    "fighters": [
+     "ancient-leshen"
+    ]
+   },
+   {
+    "index": 10,
+    "title": "Wily Fighting",
+    "type": "versatile",
+    "value": 3,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "after": "Deal 1 damage to each opposing fighter adjacent to your fighter."
+    },
+    "fighters": []
+   },
+   {
+    "index": 11,
+    "title": "Command the forest",
+    "type": "attack",
+    "value": 4,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "after": "If you won the combat, your opponent discards 1 card."
+    },
+    "fighters": []
+   }
+  ]
+ },
+ {
+  "id": "sherlock-holmes",
+  "name": "Sherlock Holmes",
+  "set": "Cobble & Fog",
+  "color": "#e3be52",
+  "move": 2,
+  "ability": "Effects on HOLMES and DR. WATSON cards cannot be canceled by an opponent. Effects on ANY cards can be canceled.",
+  "description": "The game is afoot! With the trusty Dr. Watson at his side, he'll deduce your strategy and leave you wondering how he foiled your perfect plan. In a word: Elementary.",
+  "fighters": [
+   {
+    "id": "sherlock-holmes",
+    "name": "Sherlock Holmes",
+    "hero": true,
+    "attack": "melee",
+    "hp": 16,
+    "count": 1
+   },
+   {
+    "id": "dr-watson",
+    "name": "Dr. Watson",
+    "hero": false,
+    "attack": "ranged",
+    "hp": 8,
+    "count": 1
+   }
+  ],
+  "cards": [
+   {
+    "index": 1,
+    "title": "Counterpunch",
+    "type": "versatile",
+    "value": 3,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Holmes",
+    "text": {
+     "after": "If Holmes is adjacent to the opposing fighter, deal 2 damage to that fighter."
+    },
+    "fighters": [
+     "sherlock-holmes"
+    ]
+   },
+   {
+    "index": 2,
+    "title": "Eliminate the Impossible",
+    "type": "scheme",
+    "value": null,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Holmes",
+    "text": {
+     "effect": "Choose an opponent. Look at their hand and choose 1 card for them to discard."
+    },
+    "fighters": [
+     "sherlock-holmes"
+    ]
+   },
+   {
+    "index": 3,
+    "title": "Fixed Point in a Changing Age",
+    "type": "versatile",
+    "value": 3,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "Dr. Watson",
+    "text": {
+     "after": "If Dr. Watson is adjacent to Holmes, they each recover 1 health."
+    },
+    "fighters": [
+     "dr-watson"
+    ]
+   },
+   {
+    "index": 4,
+    "title": "Confirm Suspicion",
+    "type": "scheme",
+    "value": null,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Holmes",
+    "text": {
+     "effect": "Choose an opponent and name a value. Your opponent must choose and discard one card matching that attack or defense value. Their hero takes damage equal to the BOOST value of the discarded card. If they do not have a card of the named value, they must reveal their hand instead."
+    },
+    "fighters": [
+     "sherlock-holmes"
+    ]
+   },
+   {
+    "index": 5,
+    "title": "Elementary",
+    "type": "defense",
+    "value": 3,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Holmes",
+    "text": {
+     "during": "If you predicted the correct value, cancel all effects on your opponent's card and ignore its attack value.",
+     "effect": "Play this card face up. Predict the printed attack value of the opponent's card."
+    },
+    "fighters": [
+     "sherlock-holmes"
+    ]
+   },
+   {
+    "index": 6,
+    "title": "Master of Disguise",
+    "type": "scheme",
+    "value": null,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Holmes",
+    "text": {
+     "effect": "Choose an opponent. Holmes swaps spaces with their hero. Deal 1 damage to that hero."
+    },
+    "fighters": [
+     "sherlock-holmes"
+    ]
+   },
+   {
+    "index": 7,
+    "title": "Service Revolver",
+    "type": "attack",
+    "value": 5,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Dr. Watson",
+    "text": {},
+    "fighters": [
+     "dr-watson"
+    ]
+   },
+   {
+    "index": 8,
+    "title": "Administer Aid",
+    "type": "scheme",
+    "value": null,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Dr. Watson",
+    "text": {
+     "effect": "Place Dr. Watson in a space adjacent to Holmes. Holmes recovers 1 health. Draw 1 card."
+    },
+    "fighters": [
+     "dr-watson"
+    ]
+   },
+   {
+    "index": 9,
+    "title": "Education Never Ends",
+    "type": "versatile",
+    "value": 3,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "after": "If you won the combat, your opponent draws 1 card. If you lost the combat, you draw 2 cards."
+    },
+    "fighters": []
+   },
+   {
+    "index": 10,
+    "title": "The Game is Afoot",
+    "type": "attack",
+    "value": 5,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Holmes",
+    "text": {
+     "after": "Move Holmes up to 3 spaces."
+    },
+    "fighters": [
+     "sherlock-holmes"
+    ]
+   },
+   {
+    "index": 11,
+    "title": "Deduce Strategy",
+    "type": "versatile",
+    "value": 3,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Holmes",
+    "text": {
+     "during": "You may change the printed value of the opponent's card to its BOOST value. (If a card does not have a BOOST value, it is treated as 0.)"
+    },
+    "fighters": [
+     "sherlock-holmes"
+    ]
+   },
+   {
+    "index": 12,
+    "title": "Feint",
+    "type": "versatile",
+    "value": 2,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "immediately": "Cancel all effects on your opponent's card."
+    },
+    "fighters": []
+   },
+   {
+    "index": 13,
+    "title": "Study Methods",
+    "type": "versatile",
+    "value": 3,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "after": "If you won the combat, look at your opponent's hand."
+    },
+    "fighters": []
+   }
+  ]
+ },
+ {
+  "id": "dracula",
+  "name": "Dracula",
+  "set": "Cobble & Fog",
+  "color": "#525152",
+  "move": 2,
+  "ability": "At the start of your turn, you may deal 1 damage to a fighter adjacent to Dracula. If you do, draw a card.",
+  "description": "Dare not to meet his gaze lest you do his bidding. Whilst your mind is in a fog, he and his ravening sisters will give you your baptism of blood.",
+  "fighters": [
+   {
+    "id": "dracula",
+    "name": "Dracula",
+    "hero": true,
+    "attack": "melee",
+    "hp": 13,
+    "count": 1
+   },
+   {
+    "id": "the-sisters",
+    "name": "The Sisters",
+    "hero": false,
+    "attack": "melee",
+    "hp": 1,
+    "count": 3
+   }
+  ],
+  "cards": [
+   {
+    "index": 1,
+    "title": "Prey Upon",
+    "type": "scheme",
+    "value": null,
+    "boost": 4,
+    "copies": 2,
+    "usedBy": "Dracula",
+    "text": {
+     "effect": "Deal 1 damage to all opposing fighters adjacent to Dracula. Dracula recovers 1 health for each damage dealt."
+    },
+    "fighters": [
+     "dracula"
+    ]
+   },
+   {
+    "index": 2,
+    "title": "Thirst for Sustenance",
+    "type": "attack",
+    "value": 3,
+    "boost": 3,
+    "copies": 3,
+    "usedBy": "Sister",
+    "text": {
+     "after": "If you won the combat, place Dracula in any space adjacent to the opposing fighter."
+    },
+    "fighters": [
+     "the-sisters"
+    ]
+   },
+   {
+    "index": 3,
+    "title": "Beastform",
+    "type": "attack",
+    "value": 6,
+    "boost": 4,
+    "copies": 2,
+    "usedBy": "Dracula",
+    "text": {
+     "during": "You may discard any number of cards from your hand. This card's value is +1 for each card you discard."
+    },
+    "fighters": [
+     "dracula"
+    ]
+   },
+   {
+    "index": 4,
+    "title": "Dash",
+    "type": "versatile",
+    "value": 3,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "after": "Move your fighter up to 3 spaces."
+    },
+    "fighters": []
+   },
+   {
+    "index": 5,
+    "title": "Feint",
+    "type": "versatile",
+    "value": 2,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "immediately": "Cancel all effects on your opponent's card."
+    },
+    "fighters": []
+   },
+   {
+    "index": 6,
+    "title": "Exploit",
+    "type": "versatile",
+    "value": 4,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "after": "Draw 1 card."
+    },
+    "fighters": []
+   },
+   {
+    "index": 7,
+    "title": "Mistform",
+    "type": "scheme",
+    "value": null,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Dracula",
+    "text": {
+     "effect": "Place Dracula in any space. Gain 1 action."
+    },
+    "fighters": [
+     "dracula"
+    ]
+   },
+   {
+    "index": 8,
+    "title": "Ambush",
+    "type": "attack",
+    "value": 2,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "during": "Your opponent discards 1 random card. Add its BOOST value to this card's attack value."
+    },
+    "fighters": []
+   },
+   {
+    "index": 9,
+    "title": "Baptism of Blood",
+    "type": "scheme",
+    "value": null,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Dracula",
+    "text": {
+     "effect": "Recover 2 health. Return a defeated Sister (if any) to any space in Dracula's zone."
+    },
+    "fighters": [
+     "dracula"
+    ]
+   },
+   {
+    "index": 10,
+    "title": "Do My Bidding",
+    "type": "defense",
+    "value": 3,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Dracula",
+    "text": {
+     "immediately": "Return your opponent's attack card to their hand. Look at their hand and choose an attack or versatile card for them to play. (It may be the same card.)"
+    },
+    "fighters": [
+     "dracula"
+    ]
+   },
+   {
+    "index": 11,
+    "title": "Feeding Frenzy",
+    "type": "attack",
+    "value": 2,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Dracula",
+    "text": {
+     "during": "This card's value is +1 for each Sister in the same zone as the opposing fighter."
+    },
+    "fighters": [
+     "dracula"
+    ]
+   },
+   {
+    "index": 12,
+    "title": "Look Into My Eyes",
+    "type": "defense",
+    "value": 1,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Dracula",
+    "text": {
+     "during": "Add the BOOST value from your opponent's attack card to the defense value of this card."
+    },
+    "fighters": [
+     "dracula"
+    ]
+   },
+   {
+    "index": 13,
+    "title": "Ravening Seduction",
+    "type": "scheme",
+    "value": null,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Sister",
+    "text": {
+     "effect": "Move any fighter up to 2 spaces. After moving, deal 1 damage to the moved fighter for each Sister adjacent to them."
+    },
+    "fighters": [
+     "the-sisters"
+    ]
+   }
+  ]
+ },
+ {
+  "id": "jekyll-hyde",
+  "name": "Jekyll & Hyde",
+  "set": "Cobble & Fog",
+  "color": "#96ce82",
+  "move": 2,
+  "ability": "Start the game as Dr. Jekyll. At the start of your turn, you may transform into Dr. Jekyll or Mr. Hyde. While Mr. Hyde, after you maneuver, take 1 damage.",
+  "description": "Two sides of the same man - the scheming Dr. Jekyll and the force of nature Mr. Hyde. Who will be the author of your end?",
+  "fighters": [
+   {
+    "id": "jekyll-hyde",
+    "name": "Jekyll & Hyde",
+    "hero": true,
+    "attack": "melee",
+    "hp": 16,
+    "count": 1
+   }
+  ],
+  "cards": [
+   {
+    "index": 1,
+    "title": "Forever Hyde",
+    "type": "attack",
+    "value": 5,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Mr. Hyde",
+    "text": {
+     "during": "You may discard Dr. Jekyll cards. Add 2 to this card's value for each card discarded."
+    },
+    "fighters": [
+     "jekyll-hyde"
+    ]
+   },
+   {
+    "index": 2,
+    "title": "Skirmish",
+    "type": "versatile",
+    "value": 4,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "after": "If you won the combat, choose one of the fighters in the combat and move them up to 2 spaces."
+    },
+    "fighters": []
+   },
+   {
+    "index": 3,
+    "title": "Pure Evil",
+    "type": "scheme",
+    "value": null,
+    "boost": 3,
+    "copies": 3,
+    "usedBy": "Mr. Hyde",
+    "text": {
+     "effect": "Place Mr. Hyde in any space in his zone. Mr. Hyde deals 2 damage to all adjacent fighters."
+    },
+    "fighters": [
+     "jekyll-hyde"
+    ]
+   },
+   {
+    "index": 4,
+    "title": "Distracted Triage",
+    "type": "versatile",
+    "value": 3,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Dr. Jekyll",
+    "text": {
+     "after": "If you won the combat, recover 2 health."
+    },
+    "fighters": [
+     "jekyll-hyde"
+    ]
+   },
+   {
+    "index": 5,
+    "title": "Strange Case",
+    "type": "scheme",
+    "value": null,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Mr. Hyde",
+    "text": {
+     "effect": "Reveal the top card of your deck. Deal damage equal to its BOOST value to one adjacent fighter. Put the card in your hand."
+    },
+    "fighters": [
+     "jekyll-hyde"
+    ]
+   },
+   {
+    "index": 6,
+    "title": "Succumb to Compulsion",
+    "type": "versatile",
+    "value": 2,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Dr. Jekyll",
+    "text": {
+     "after": "Move up to 2 spaces. Transform to Mr. Hyde."
+    },
+    "fighters": [
+     "jekyll-hyde"
+    ]
+   },
+   {
+    "index": 7,
+    "title": "Calming Research",
+    "type": "scheme",
+    "value": null,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Dr. Jekyll",
+    "text": {
+     "effect": "Recover 2 health. Draw up to 3 cards. Keep one and put any others on the bottom of your deck in any order."
+    },
+    "fighters": [
+     "jekyll-hyde"
+    ]
+   },
+   {
+    "index": 8,
+    "title": "Madness Relents",
+    "type": "versatile",
+    "value": 4,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Mr. Hyde",
+    "text": {
+     "after": "Transform to Dr. Jekyll."
+    },
+    "fighters": [
+     "jekyll-hyde"
+    ]
+   },
+   {
+    "index": 9,
+    "title": "Recoiling Blow",
+    "type": "attack",
+    "value": 5,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Mr. Hyde",
+    "text": {
+     "after": "Place Mr. Hyde in any space in his zone. Transform to Dr. Jekyll."
+    },
+    "fighters": [
+     "jekyll-hyde"
+    ]
+   },
+   {
+    "index": 10,
+    "title": "With Haste!",
+    "type": "defense",
+    "value": 4,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Dr. Jekyll",
+    "text": {
+     "after": "Move Dr. Jekyll up to 4 spaces."
+    },
+    "fighters": [
+     "jekyll-hyde"
+    ]
+   },
+   {
+    "index": 11,
+    "title": "Scientific Method",
+    "type": "defense",
+    "value": 2,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Dr. Jekyll",
+    "text": {
+     "after": "Draw a number of cards equal to the damage you were dealt."
+    },
+    "fighters": [
+     "jekyll-hyde"
+    ]
+   },
+   {
+    "index": 12,
+    "title": "Duality of Man",
+    "type": "versatile",
+    "value": 3,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "during": "If you are Dr. Jekyll and playing this card to defend, this card's value is 6 instead. If you are Mr. Hyde and playing this card to attack, this card's value is 6 instead."
+    },
+    "fighters": []
+   },
+   {
+    "index": 13,
+    "title": "Feint",
+    "type": "versatile",
+    "value": 2,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "immediately": "Cancel all effects on your opponent's card."
+    },
+    "fighters": []
+   }
+  ]
+ },
+ {
+  "id": "invisible-man",
+  "name": "Invisible Man",
+  "set": "Cobble & Fog",
+  "color": "#89c4d7",
+  "move": 2,
+  "ability": "At the start of the game, after you place Invisible Man, place 3 fog tokens in separate spaces in his zone. When Invisible Man is on a space with a fog token, add 1 to the value of his defense cards. Invisible Man may move between two spaces with fog tokens as if they were adjacent.",
+  "description": "How can you defend what you cannot see? A glint of metal amidst the gloom, but it's too late. A surprise attack before he slips away again into rolling fog.",
+  "fighters": [
+   {
+    "id": "invisible-man",
+    "name": "Invisible Man",
+    "hero": true,
+    "attack": "melee",
+    "hp": 15,
+    "count": 1
+   }
+  ],
+  "cards": [
+   {
+    "index": 1,
+    "title": "Into Thin Air",
+    "type": "defense",
+    "value": 4,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "Invisible Man",
+    "text": {
+     "after": "Move Invisible Man up to 1 space. Your opponent then moves a fog token up to 3 spaces."
+    },
+    "fighters": [
+     "invisible-man"
+    ]
+   },
+   {
+    "index": 2,
+    "title": "Confound",
+    "type": "versatile",
+    "value": 3,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Invisible Man",
+    "text": {
+     "after": "Your opponent may choose to discard 1 card. If they do not, you may move each fog token to any other space."
+    },
+    "fighters": [
+     "invisible-man"
+    ]
+   },
+   {
+    "index": 3,
+    "title": "Dreaming of Revenge",
+    "type": "versatile",
+    "value": 3,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "Invisible Man",
+    "text": {
+     "after": "If Invisible Man is on a space with a fog token, all opposing fighters on spaces with fog tokens take 1 damage."
+    },
+    "fighters": [
+     "invisible-man"
+    ]
+   },
+   {
+    "index": 4,
+    "title": "Impossible to See",
+    "type": "versatile",
+    "value": 2,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Invisible Man",
+    "text": {
+     "immediately": "The value of your opponent's attack or defense is 0 and cannot be changed by card effects. (Other card effects still happen.)"
+    },
+    "fighters": [
+     "invisible-man"
+    ]
+   },
+   {
+    "index": 5,
+    "title": "Rolling Fog",
+    "type": "scheme",
+    "value": null,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "Invisible Man",
+    "text": {
+     "effect": "Move 1 fog token to another space. Gain 1 action."
+    },
+    "fighters": [
+     "invisible-man"
+    ]
+   },
+   {
+    "index": 6,
+    "title": "Step Lightly",
+    "type": "scheme",
+    "value": null,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "Invisible Man",
+    "text": {
+     "effect": "Deal 1 damage to one adjacent fighter. If Invisible Man is on a space with a fog token, deal 3 damage instead. Your opponent then moves a fog token up to 2 spaces."
+    },
+    "fighters": [
+     "invisible-man"
+    ]
+   },
+   {
+    "index": 7,
+    "title": "Surprise Attack",
+    "type": "attack",
+    "value": 5,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "Invisible Man",
+    "text": {
+     "immediately": "Cancel all effects on your opponent's card.",
+     "after": "If Invisible Man is on a space with a fog token, move that fog token to another space."
+    },
+    "fighters": [
+     "invisible-man"
+    ]
+   },
+   {
+    "index": 8,
+    "title": "Coded Notes",
+    "type": "defense",
+    "value": 3,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Invisible Man",
+    "text": {
+     "after": "Draw 3 cards, then choose 2 cards from your hand and put them on top of your deck in any order."
+    },
+    "fighters": [
+     "invisible-man"
+    ]
+   },
+   {
+    "index": 9,
+    "title": "Covert Preparation",
+    "type": "versatile",
+    "value": 2,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Invisible Man",
+    "text": {
+     "after": "Draw 1 card. Move 1 fog token up to 2 spaces, then your opponent moves a different fog token up to 2 spaces."
+    },
+    "fighters": [
+     "invisible-man"
+    ]
+   },
+   {
+    "index": 10,
+    "title": "Emerge From Mist",
+    "type": "attack",
+    "value": 3,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Invisible Man",
+    "text": {
+     "during": "If Invisible Man started this turn on a space with a fog token, this card's value is 5 instead."
+    },
+    "fighters": [
+     "invisible-man"
+    ]
+   },
+   {
+    "index": 11,
+    "title": "Lurking",
+    "type": "defense",
+    "value": 2,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Invisible Man",
+    "text": {
+     "after": "Draw 1 card and choose 1 effect: - move Invisible Man to a space with a fog token - move 1 fog token up to 3 spaces"
+    },
+    "fighters": [
+     "invisible-man"
+    ]
+   },
+   {
+    "index": 12,
+    "title": "Vanish",
+    "type": "scheme",
+    "value": null,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Invisible Man",
+    "text": {
+     "effect": "Recover 1 health. Remove Invisible Man from the board. At the start of your next turn, place Invisible Man in any space. (If you played this as your first action, end your turn.)"
+    },
+    "fighters": [
+     "invisible-man"
+    ]
+   },
+   {
+    "index": 13,
+    "title": "Reign of Terror",
+    "type": "scheme",
+    "value": null,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "Invisible Man",
+    "text": {
+     "effect": "If Invisible Man is on a space with a fog token, deal 2 damage to any one opposing fighter."
+    },
+    "fighters": [
+     "invisible-man"
+    ]
+   },
+   {
+    "index": 14,
+    "title": "Slip Away",
+    "type": "attack",
+    "value": 3,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Invisible Man",
+    "text": {
+     "after": "Move 1 fog token to a space without a fighter, then place Invisible Man on that space."
+    },
+    "fighters": [
+     "invisible-man"
+    ]
+   }
+  ]
+ },
+ {
+  "id": "sinbad",
+  "name": "Sinbad",
+  "set": "Battle of Legends, Volume One",
+  "color": "#e37617",
+  "move": 2,
+  "ability": "When you maneuver, you may move fighters +1 space for each VOYAGE card in your discard pile.",
+  "description": "With every thrilling voyage, he grows in wisdom and power. Get to him and the faithful Porter quickly, before his experience makes him nigh unstoppable and your story ends too soon.",
+  "fighters": [
+   {
+    "id": "sinbad",
+    "name": "Sinbad",
+    "hero": true,
+    "attack": "melee",
+    "hp": 15,
+    "count": 1
+   },
+   {
+    "id": "the-porter",
+    "name": "The Porter",
+    "hero": false,
+    "attack": "melee",
+    "hp": 6,
+    "count": 1
+   }
+  ],
+  "cards": [
+   {
+    "index": 1,
+    "title": "Exploit",
+    "type": "versatile",
+    "value": 4,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "after": "Draw 1 card."
+    },
+    "fighters": []
+   },
+   {
+    "index": 2,
+    "title": "Feint",
+    "type": "versatile",
+    "value": 2,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "immediately": "Cancel all effects on your opponent's card."
+    },
+    "fighters": []
+   },
+   {
+    "index": 3,
+    "title": "Momentous Shift",
+    "type": "versatile",
+    "value": 3,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "during": "If your fighter started this turn in a different space, this card's value is 5 instead."
+    },
+    "fighters": []
+   },
+   {
+    "index": 4,
+    "title": "Toil and Danger",
+    "type": "versatile",
+    "value": 3,
+    "boost": 1,
+    "copies": 4,
+    "usedBy": "Sinbad",
+    "text": {
+     "after": "Move Sinbad up to 3 spaces."
+    },
+    "fighters": [
+     "sinbad"
+    ]
+   },
+   {
+    "index": 5,
+    "title": "Voyage to the Cannibals With the Root of Madness",
+    "type": "attack",
+    "value": 2,
+    "boost": null,
+    "copies": 1,
+    "usedBy": "Sinbad",
+    "text": {
+     "during": "This card's value is +1 for each other VOYAGE card in your discard pile.",
+     "after": "You may move Sinbad up to 2 spaces."
+    },
+    "fighters": [
+     "sinbad"
+    ]
+   },
+   {
+    "index": 6,
+    "title": "Voyage to the Creature With Eyes Like Coals of Fire",
+    "type": "attack",
+    "value": 2,
+    "boost": null,
+    "copies": 1,
+    "usedBy": "Sinbad",
+    "text": {
+     "during": "This card's value is +1 for each other VOYAGE card in your discard pile.",
+     "after": "Your opponent discards 1 random card."
+    },
+    "fighters": [
+     "sinbad"
+    ]
+   },
+   {
+    "index": 7,
+    "title": "Voyage to the City of the King of Serendib",
+    "type": "attack",
+    "value": 2,
+    "boost": null,
+    "copies": 1,
+    "usedBy": "Sinbad",
+    "text": {
+     "during": "This card's value is +1 for each other VOYAGE card in your discard pile.",
+     "after": "Draw 1 card."
+    },
+    "fighters": [
+     "sinbad"
+    ]
+   },
+   {
+    "index": 8,
+    "title": "Voyage to the Valley of the Giant Snakes",
+    "type": "attack",
+    "value": 2,
+    "boost": null,
+    "copies": 1,
+    "usedBy": "Sinbad",
+    "text": {
+     "during": "This card's value is +1 for each other VOYAGE card in your discard pile.",
+     "after": "Look at your opponent's hand."
+    },
+    "fighters": [
+     "sinbad"
+    ]
+   },
+   {
+    "index": 9,
+    "title": "Regroup",
+    "type": "versatile",
+    "value": 1,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "after": "Draw 1 card. If you won the combat, draw 2 cards instead."
+    },
+    "fighters": []
+   },
+   {
+    "index": 10,
+    "title": "By Fortune and Fate",
+    "type": "attack",
+    "value": 3,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "The Potter",
+    "text": {
+     "after": "Draw 2 cards."
+    },
+    "fighters": [
+     "the-porter"
+    ]
+   },
+   {
+    "index": 11,
+    "title": "Commanding Impact",
+    "type": "attack",
+    "value": 5,
+    "boost": 2,
+    "copies": 1,
+    "usedBy": "Any",
+    "text": {
+     "after": "Draw 1 card."
+    },
+    "fighters": []
+   },
+   {
+    "index": 12,
+    "title": "Leap Away",
+    "type": "versatile",
+    "value": 4,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "after": "If you won the combat, choose one of the fighters in the combat and move them up to 4 spaces."
+    },
+    "fighters": []
+   },
+   {
+    "index": 13,
+    "title": "Riches Beyond Compare",
+    "type": "scheme",
+    "value": null,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "Sinbad",
+    "text": {
+     "effect": "Draw 3 cards."
+    },
+    "fighters": [
+     "sinbad"
+    ]
+   },
+   {
+    "index": 14,
+    "title": "Voyage Home",
+    "type": "attack",
+    "value": 2,
+    "boost": 1,
+    "copies": 1,
+    "usedBy": "Sinbad",
+    "text": {
+     "during": "This card's value is +1 for each other VOYAGE card in your discard pile.",
+     "after": "Take all other VOYAGE cards from your discard pile and add them to your hand."
+    },
+    "fighters": [
+     "sinbad"
+    ]
+   },
+   {
+    "index": 15,
+    "title": "Voyage to the City of the Man-Eating Apes",
+    "type": "attack",
+    "value": 2,
+    "boost": null,
+    "copies": 1,
+    "usedBy": "Sinbad",
+    "text": {
+     "during": "This card's value is +1 for each other VOYAGE card in your discard pile.",
+     "after": "Deal 2 damage to the opposing fighter."
+    },
+    "fighters": [
+     "sinbad"
+    ]
+   },
+   {
+    "index": 16,
+    "title": "Voyage to the Island That Was a Whale",
+    "type": "attack",
+    "value": 2,
+    "boost": null,
+    "copies": 1,
+    "usedBy": "Sinbad",
+    "text": {
+     "during": "This card's value is +1 for each other VOYAGE card in your discard pile.",
+     "after": "Sinbad recovers 2 health."
+    },
+    "fighters": [
+     "sinbad"
+    ]
+   }
+  ]
+ },
+ {
+  "id": "the-genie",
+  "name": "The Genie",
+  "set": "Houdini vs. The Genie",
+  "color": "#9662a1",
+  "move": 3,
+  "ability": "INFINITE POWER\nAt the start of your turn, you may discard 1 card to gain 1 action.",
+  "description": "Freed from the lamp and simmering with imprisoned wrath. This is no mere parlor trick. Be careful what you wish for, because, in the end, he grants you only death.",
+  "fighters": [
+   {
+    "id": "the-genie",
+    "name": "The Genie",
+    "hero": true,
+    "attack": "ranged",
+    "hp": 16,
+    "count": 1
+   }
+  ],
+  "cards": [
+   {
+    "index": 1,
+    "title": "I've Made Sultans Out of Less",
+    "type": "versatile",
+    "value": 2,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "The Genie",
+    "text": {
+     "after": "Look at your opponent's hand and choose a card for them to discard."
+    },
+    "fighters": [
+     "the-genie"
+    ]
+   },
+   {
+    "index": 2,
+    "title": "Prisoner's Torment",
+    "type": "defense",
+    "value": 1,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "The Genie",
+    "text": {
+     "after": "Draw cards equal to the amount of combat damage you took."
+    },
+    "fighters": [
+     "the-genie"
+    ]
+   },
+   {
+    "index": 3,
+    "title": "I Am Freed",
+    "type": "attack",
+    "value": 3,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "The Genie",
+    "text": {
+     "after": "Place the Genie in any empty space. Then, deal 1 damage to each adjacent fighter."
+    },
+    "fighters": [
+     "the-genie"
+    ]
+   },
+   {
+    "index": 4,
+    "title": "Feint",
+    "type": "versatile",
+    "value": 2,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "The Genie",
+    "text": {
+     "immediately": "Cancel all effects on your opponent's card."
+    },
+    "fighters": [
+     "the-genie"
+    ]
+   },
+   {
+    "index": 5,
+    "title": "This is No Parlor Trick",
+    "type": "versatile",
+    "value": 1,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "The Genie",
+    "text": {
+     "during": "The value of your opponent's card is equal to its BOOST value."
+    },
+    "fighters": [
+     "the-genie"
+    ]
+   },
+   {
+    "index": 6,
+    "title": "Wishing For More Wishes",
+    "type": "versatile",
+    "value": 3,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "The Genie",
+    "text": {
+     "after": "Your opponent draws 1 card. Draw 3 cards."
+    },
+    "fighters": [
+     "the-genie"
+    ]
+   },
+   {
+    "index": 7,
+    "title": "Back In The Lamp",
+    "type": "defense",
+    "value": 0,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "The Genie",
+    "text": {
+     "immediately": "The Genie recovers 4 health."
+    },
+    "fighters": [
+     "the-genie"
+    ]
+   },
+   {
+    "index": 8,
+    "title": "Careful What You Wish For",
+    "type": "attack",
+    "value": 4,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "The Genie",
+    "text": {
+     "after": "If you lost the combat, deal 1 damage to an adjacent opposing fighter."
+    },
+    "fighters": [
+     "the-genie"
+    ]
+   },
+   {
+    "index": 9,
+    "title": "I Grant You Death",
+    "type": "versatile",
+    "value": 2,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "The Genie",
+    "text": {
+     "after": "You may deal 1 damage to an adjacent fighter."
+    },
+    "fighters": [
+     "the-genie"
+    ]
+   },
+   {
+    "index": 10,
+    "title": "Imprisoned Wrath",
+    "type": "attack",
+    "value": 3,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "The Genie",
+    "text": {
+     "after": "You may discard 2 cards to deal 2 damage to an adjacent opposing fighter."
+    },
+    "fighters": [
+     "the-genie"
+    ]
+   },
+   {
+    "index": 11,
+    "title": "Three Wishes",
+    "type": "scheme",
+    "value": null,
+    "boost": 3,
+    "copies": 3,
+    "usedBy": "The Genie",
+    "text": {
+     "effect": "Gain 1 action and choose one effect: - draw 5 cards - for the rest of your turn, your cards' values are 4 and cannot be changed - each opponent discards 2 cards"
+    },
+    "fighters": [
+     "the-genie"
+    ]
+   },
+   {
+    "index": 12,
+    "title": "Your Wish is My Command",
+    "type": "attack",
+    "value": 3,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "The Genie",
+    "text": {
+     "after": "If you won the combat, you may discard 2 cards to gain 1 action."
+    },
+    "fighters": [
+     "the-genie"
+    ]
+   }
+  ]
+ },
+ {
+  "id": "harry-houdini",
+  "name": "Harry Houdini",
+  "set": "Houdini vs. The Genie",
+  "color": "#5b714c",
+  "move": 2,
+  "ability": "ESCAPE ARTIST\nWhen you take the maneuver action and BOOST, you may place Houdini in any space instead of moving. (Bess moves as normal.)",
+  "description": "With the help of the beautiful Bess, he'll set the stage. Then it's a bit of misdirection and some sleight of hand. When you think you have the advantage, you'll discover: It's all part of the show!",
+  "fighters": [
+   {
+    "id": "harry-houdini",
+    "name": "Harry Houdini",
+    "hero": true,
+    "attack": "melee",
+    "hp": 14,
+    "count": 1
+   },
+   {
+    "id": "bess",
+    "name": "Bess",
+    "hero": false,
+    "attack": "melee",
+    "hp": 5,
+    "count": 1
+   }
+  ],
+  "cards": [
+   {
+    "index": 1,
+    "title": "A Magician Never Reveals His Secrets",
+    "type": "scheme",
+    "value": null,
+    "boost": 4,
+    "copies": 1,
+    "usedBy": "Houdini",
+    "text": {
+     "effect": "Draw 2 cards. Gain 1 action. If an effect would let an opponent look at your hand, you may reveal this card and cancel that effect."
+    },
+    "fighters": [
+     "harry-houdini"
+    ]
+   },
+   {
+    "index": 2,
+    "title": "And the Beautiful Bess!",
+    "type": "versatile",
+    "value": 3,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "Bess",
+    "text": {
+     "effect": "If you discard this card as a result of an opponent's effect, draw 1 card.",
+     "boosted": "BOOSTED WITH: If it's your turn, gain 1 action."
+    },
+    "fighters": [
+     "bess"
+    ]
+   },
+   {
+    "index": 3,
+    "title": "All Part of the Show",
+    "type": "defense",
+    "value": 2,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "effect": "This card's effect cannot be canceled.",
+     "after": "If your fighter was defeated, set their health to 4 instead and place them in any space. (This effect happens even if Houdini was defeated.)",
+     "boosted": "BOOSTED WITH: Houdini recovers 2 health."
+    },
+    "fighters": []
+   },
+   {
+    "index": 4,
+    "title": "Flourish",
+    "type": "attack",
+    "value": 3,
+    "boost": 2,
+    "copies": 4,
+    "usedBy": "Any",
+    "text": {
+     "during": "You may BOOST this card.",
+     "boosted": "BOOSTED WITH: Draw 1 card."
+    },
+    "fighters": []
+   },
+   {
+    "index": 5,
+    "title": "An Illusion of My Own Design",
+    "type": "attack",
+    "value": 4,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "Houdini",
+    "text": {
+     "immediately": "Your opponent may BOOST their card.",
+     "during": "You may BOOST this card."
+    },
+    "fighters": [
+     "harry-houdini"
+    ]
+   },
+   {
+    "index": 6,
+    "title": "Grand Escape",
+    "type": "defense",
+    "value": 2,
+    "boost": 3,
+    "copies": 3,
+    "usedBy": "Houdini",
+    "text": {
+     "during": "You may BOOST this card.",
+     "after": "If you won the combat, place your fighter in any space."
+    },
+    "fighters": [
+     "harry-houdini"
+    ]
+   },
+   {
+    "index": 7,
+    "title": "Set the Stage",
+    "type": "scheme",
+    "value": null,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Bess",
+    "text": {
+     "effect": "Draw 3 cards. Then, put a card in your hand on top of your deck.",
+     "boosted": "BOOSTED WITH: Look at an opponent's hand and choose a card for them to discard."
+    },
+    "fighters": [
+     "bess"
+    ]
+   },
+   {
+    "index": 8,
+    "title": "Sleight of Hand",
+    "type": "attack",
+    "value": 1,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "immediately": "You may return this card to your hand and choose a different card to play. Resolve all effects on that card as normal.",
+     "boosted": "BOOSTED WITH: Draw 1 card."
+    },
+    "fighters": []
+   },
+   {
+    "index": 9,
+    "title": "The Big Reveal",
+    "type": "attack",
+    "value": 2,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Houdini",
+    "text": {
+     "during": "You may BOOST this card twice.",
+     "after": "Return one card you boosted with to your hand."
+    },
+    "fighters": [
+     "harry-houdini"
+    ]
+   },
+   {
+    "index": 10,
+    "title": "For My Next Trick",
+    "type": "attack",
+    "value": 2,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "after": "Move one of your fighters up to 1 space. Draw 1 card. Gain 1 action."
+    },
+    "fighters": []
+   },
+   {
+    "index": 11,
+    "title": "Misdirection",
+    "type": "versatile",
+    "value": 2,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "immediately": "Cancel all effects on your opponent's card.",
+     "boosted": "BOOSTED WITH: Deal 2 damage to any fighter."
+    },
+    "fighters": []
+   },
+   {
+    "index": 12,
+    "title": "Smoke and Mirrors",
+    "type": "versatile",
+    "value": 3,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "immediately": "Houdini and Bess may swap spaces. If they do, your other fighter is now in the combat."
+    },
+    "fighters": []
+   },
+   {
+    "index": 13,
+    "title": "Vanishing Act",
+    "type": "versatile",
+    "value": 2,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Houdini",
+    "text": {
+     "after": "Choose one of the fighters in the combat and move them up to 3 spaces. They may move through their opposing fighters."
+    },
+    "fighters": [
+     "harry-houdini"
+    ]
+   }
+  ]
+ },
+ {
+  "id": "blackbeard",
+  "name": "Blackbeard",
+  "set": "Battle of Legends, Volume Three",
+  "color": "#000000",
+  "move": 2,
+  "ability": "PRIVATEER TURNED PIRATE\nStart the game with 1 doubloon in the treasury, you have the other 2.\n- At the start of your turn, you may pay 1 doubloon to gain 1 action.\n- When Blackbeard takes combat damage, pay 1 doubloon.\n\nBLACKBEARD'S DOUBLOONS\nDoubloons that Blackbeard doesn't have are kept in the Treasury.\n\nBlackbeard pays a doubloon to the Treasury when he takes combat damage. He may also pay a doubloon at the start of his turn to gain an extra action.\n\nThe effects on many of Blackbeard's cards can be ignored by paying a ransom. Any opponent can pay the amount of doubloons shown at the end of an effect to ignore that effect. These doubloons are taken from the Treasury and given to Blackbeard.",
+  "description": "Avast! your only hope to defeat the Scourge of the Sevens Seas and his salty sea dogs is to pay him his doubloons!",
+  "fighters": [
+   {
+    "id": "blackbeard",
+    "name": "Blackbeard",
+    "hero": true,
+    "attack": "ranged",
+    "hp": 13,
+    "count": 1
+   },
+   {
+    "id": "seadog",
+    "name": "Seadog",
+    "hero": false,
+    "attack": "melee",
+    "hp": 1,
+    "count": 2
+   }
+  ],
+  "cards": [
+   {
+    "index": 1,
+    "title": "Light the fuse",
+    "type": "attack",
+    "value": 2,
+    "boost": 3,
+    "copies": 3,
+    "usedBy": "Sea dog",
+    "text": {
+     "after": "Move your fighter up to 2 spaces. Then, deal 1 damage to each fighter adjacent to them."
+    },
+    "fighters": [
+     "seadog"
+    ]
+   },
+   {
+    "index": 2,
+    "title": "Plunder",
+    "type": "scheme",
+    "value": null,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Blackbeard",
+    "text": {
+     "effect": "Move each of your fighters up to 3 spaces. They may move through opposing fighters. Steal 1 doubloon from the treasury."
+    },
+    "fighters": [
+     "blackbeard"
+    ]
+   },
+   {
+    "index": 3,
+    "title": "A brace of primed pistols",
+    "type": "attack",
+    "value": 2,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Blackbeard",
+    "text": {
+     "after": "Deal 3 damage to an opposing fighter in Blackbeard's zone unless 🪙 🪙."
+    },
+    "fighters": [
+     "blackbeard"
+    ]
+   },
+   {
+    "index": 4,
+    "title": "Scourge of the seven seas",
+    "type": "scheme",
+    "value": null,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Blackbeard",
+    "text": {
+     "effect": "Blackbeard recovers 2 health unless 🪙. Summon a Sea Dog in any space unless 🪙. Gain 1 action unless 🪙."
+    },
+    "fighters": [
+     "blackbeard"
+    ]
+   },
+   {
+    "index": 5,
+    "title": "Avast Ye!",
+    "type": "attack",
+    "value": 5,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Blackbeard",
+    "text": {
+     "immediately": "Your opponent discards 1 random card unless 🪙.",
+     "after": "Deal 1 damage to each opposing fighter in Blackbeard's zone unless 🪙."
+    },
+    "fighters": [
+     "blackbeard"
+    ]
+   },
+   {
+    "index": 6,
+    "title": "Give no quarter",
+    "type": "attack",
+    "value": 3,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "during": "If another friendly fighter is adjacent to the opposing fighter, this card's value is 5 instead.",
+     "after": "Gain 1 action unless 🪙."
+    },
+    "fighters": []
+   },
+   {
+    "index": 7,
+    "title": "Parley",
+    "type": "versatile",
+    "value": 3,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "immediately": "Cancel all effects on your opponent's card unless🪙 🪙."
+    },
+    "fighters": []
+   },
+   {
+    "index": 8,
+    "title": "Fearsome and calculating",
+    "type": "versatile",
+    "value": 3,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Blackbeard",
+    "text": {
+     "immediately": "Look at your opponent's hand and choose 1 card for them to discard unless 🪙."
+    },
+    "fighters": [
+     "blackbeard"
+    ]
+   },
+   {
+    "index": 9,
+    "title": "Intimidating visage",
+    "type": "defense",
+    "value": 4,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "Blackbeard",
+    "text": {
+     "after": "If Blackbeard is adjacent to an opposing fighter, he recovers 2 health."
+    },
+    "fighters": [
+     "blackbeard"
+    ]
+   },
+   {
+    "index": 10,
+    "title": "Show a leg!",
+    "type": "versatile",
+    "value": 2,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "after": "Summon a Sea Dog in Blackbeard's zone."
+    },
+    "fighters": []
+   },
+   {
+    "index": 11,
+    "title": "No prey, no pay",
+    "type": "versatile",
+    "value": 2,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "during": "You may BOOST this card.",
+     "after": "If you won the combat, draw 1 card."
+    },
+    "fighters": []
+   },
+   {
+    "index": 12,
+    "title": "Queen Anne's revenge",
+    "type": "versatile",
+    "value": 7,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Blackbeard",
+    "text": {
+     "during": "Subtract 2 from this card's value for each doubloon your opponent pays.",
+     "effect": "This card's effects cannot be canceled."
+    },
+    "fighters": [
+     "blackbeard"
+    ]
+   }
+  ]
+ },
+ {
+  "id": "annie-christmas",
+  "name": "Annie Christmas",
+  "set": "Adventures: Tales to Amaze",
+  "color": "#555187",
+  "move": 2,
+  "ability": "NECKLACE OF PEARLS\nAdd +2 to the value of Annie's attacks if she has less health than the defender.",
+  "description": "Seven feet tall and strong as the Mighty Mississippi.",
+  "fighters": [
+   {
+    "id": "annie-christmas",
+    "name": "Annie Christmas",
+    "hero": true,
+    "attack": "melee",
+    "hp": 14,
+    "count": 1
+   },
+   {
+    "id": "charlie",
+    "name": "Charlie",
+    "hero": false,
+    "attack": "ranged",
+    "hp": 8,
+    "count": 1
+   }
+  ],
+  "cards": [
+   {
+    "index": 1,
+    "title": "Captain's Orders",
+    "type": "scheme",
+    "value": null,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Annie",
+    "text": {
+     "effect": "Place Annie in any space in her zone. Then, place another friendly fighter in any space in Annie's zone. Gain 1 action."
+    },
+    "fighters": [
+     "annie-christmas"
+    ]
+   },
+   {
+    "index": 2,
+    "title": "Lagniappe",
+    "type": "attack",
+    "value": 5,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Annie",
+    "text": {
+     "immediately": "Deal up to 2 damage to Annie to draw that many cards. (This may cause her special ability to apply.)"
+    },
+    "fighters": [
+     "annie-christmas"
+    ]
+   },
+   {
+    "index": 3,
+    "title": "A Few More Pearls",
+    "type": "scheme",
+    "value": null,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Annie",
+    "text": {
+     "effect": "Deal 2 damage to each opposing fighter adjacent to Annie."
+    },
+    "fighters": [
+     "annie-christmas"
+    ]
+   },
+   {
+    "index": 4,
+    "title": "Long Shot",
+    "type": "versatile",
+    "value": 3,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "during": "If the opposing fighter is not adjacent to your fighter, this card's value is 5 instead."
+    },
+    "fighters": []
+   },
+   {
+    "index": 5,
+    "title": "Slick Talker",
+    "type": "defense",
+    "value": 3,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "immediately": "Annie and Charlie may swap spaces. If they do, your other fighter is now the defender."
+    },
+    "fighters": []
+   },
+   {
+    "index": 6,
+    "title": "The Turn and the River",
+    "type": "versatile",
+    "value": 2,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Charlie",
+    "text": {
+     "after": "Draw 2 cards."
+    },
+    "fighters": [
+     "charlie"
+    ]
+   },
+   {
+    "index": 7,
+    "title": "Quite a Pair",
+    "type": "versatile",
+    "value": 3,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "immediately": "You may reveal two cards from your hand with the same name. If you do, cancel all effects on your opponent's card."
+    },
+    "fighters": []
+   },
+   {
+    "index": 8,
+    "title": "Better Together",
+    "type": "versatile",
+    "value": 4,
+    "boost": 1,
+    "copies": 4,
+    "usedBy": "Any",
+    "text": {
+     "after": "If your fighter is adjacent to a friendly fighter, your fighter and each friendly fighter adjacent to them recover 1 health."
+    },
+    "fighters": []
+   },
+   {
+    "index": 9,
+    "title": "Bottom Dealing",
+    "type": "attack",
+    "value": 3,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Charlie",
+    "text": {
+     "during": "Reveal the bottom card of your deck. Increase the value of this card by the BOOST value of the revealed card, then put the revealed card on the top or the bottom of your deck."
+    },
+    "fighters": [
+     "charlie"
+    ]
+   },
+   {
+    "index": 10,
+    "title": "Keep Your Hands to Yourself",
+    "type": "versatile",
+    "value": 3,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Annie",
+    "text": {
+     "after": "Move each fighter in the combat up to 2 spaces."
+    },
+    "fighters": [
+     "annie-christmas"
+    ]
+   },
+   {
+    "index": 11,
+    "title": "Mississippi Queen",
+    "type": "defense",
+    "value": 2,
+    "boost": 3,
+    "copies": 3,
+    "usedBy": "Annie",
+    "text": {
+     "immediately": "Damage cannot reduce Annie's health below 1 this turn."
+    },
+    "fighters": [
+     "annie-christmas"
+    ]
+   },
+   {
+    "index": 12,
+    "title": "Striking Beauty",
+    "type": "versatile",
+    "value": 1,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Annie",
+    "text": {
+     "after": "Deal 1 damage to the opposing fighter. If you won the combat, deal 2 damage instead."
+    },
+    "fighters": [
+     "annie-christmas"
+    ]
+   }
+  ]
+ },
+ {
+  "id": "nikola-tesla",
+  "name": "Nikola Tesla",
+  "set": "Adventures: Tales to Amaze",
+  "color": "#c67a62",
+  "move": 2,
+  "ability": "ELECTRICAL OVERFLOW\nStart the game with 1 coil charged.\nAt the end of your turn, charge 1 coil.\nAt the start of your turn, if both coils are charged, deal 1 damage to each opposing fighter adjacent to Tesla and move them up to 1 space.",
+  "description": "His coils crackle with the power of electricity.",
+  "fighters": [
+   {
+    "id": "nikola-tesla",
+    "name": "Nikola Tesla",
+    "hero": true,
+    "attack": "ranged",
+    "hp": 14,
+    "count": 1
+   }
+  ],
+  "cards": [
+   {
+    "index": 1,
+    "title": "Death Ray",
+    "type": "attack",
+    "value": 3,
+    "boost": 4,
+    "copies": 3,
+    "usedBy": "Tesla",
+    "text": {
+     "during": "You may discharge coils: - 1 Coil: This card's value is 5. - 2 Coils: Instead, this card's value is 7."
+    },
+    "fighters": [
+     "nikola-tesla"
+    ]
+   },
+   {
+    "index": 2,
+    "title": "Intense Experimentation",
+    "type": "defense",
+    "value": 3,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Tesla",
+    "text": {
+     "after": "Draw 1 card. You may discharge coils: - 1 Coil: Instead, draw 2 cards. - 2 Coils: Instead, draw 3 cards and Tesla recovers 1 health."
+    },
+    "fighters": [
+     "nikola-tesla"
+    ]
+   },
+   {
+    "index": 3,
+    "title": "Lightning Storm",
+    "type": "versatile",
+    "value": 3,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Tesla",
+    "text": {
+     "after": "You may discharge coils: - 1 Coil: Deal 1 damage to each opposing fighter in your zone. - 2 Coils: Instead, deal 2 damage."
+    },
+    "fighters": [
+     "nikola-tesla"
+    ]
+   },
+   {
+    "index": 4,
+    "title": "Polyphase Coils",
+    "type": "versatile",
+    "value": 3,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Tesla",
+    "text": {
+     "immediately": "You may discharge coils: - 1 Coil: Cancel all effects on your opponent's card. - 2 Coils: Also, ignore that card's value."
+    },
+    "fighters": [
+     "nikola-tesla"
+    ]
+   },
+   {
+    "index": 5,
+    "title": "X-Ray Radiation",
+    "type": "versatile",
+    "value": 4,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Tesla",
+    "text": {
+     "during": "Reveal the top card of your opponent's deck. You may discharge coils: - 1 Coil: Discard that card. - 2 Coils: Also, add its boost value to this card's value."
+    },
+    "fighters": [
+     "nikola-tesla"
+    ]
+   },
+   {
+    "index": 6,
+    "title": "7 Hertz",
+    "type": "attack",
+    "value": 4,
+    "boost": 3,
+    "copies": 3,
+    "usedBy": "Tesla",
+    "text": {
+     "after": "You may discharge coils: - 1 Coil: Gain 1 action. - 2 Coils: Also, draw 1 card."
+    },
+    "fighters": [
+     "nikola-tesla"
+    ]
+   },
+   {
+    "index": 7,
+    "title": "Repulsion Blast",
+    "type": "versatile",
+    "value": 2,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Tesla",
+    "text": {
+     "after": "Move the opposing fighter up to 2 spaces. You may discharge coils: - 1 Coil: Also, move Tesla up to 2 spaces. - 2 Coils: Also, your opponent discards 1 random card."
+    },
+    "fighters": [
+     "nikola-tesla"
+    ]
+   },
+   {
+    "index": 8,
+    "title": "Fully Charged",
+    "type": "scheme",
+    "value": null,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "Tesla",
+    "text": {
+     "effect": "Charge both coils. Gain 1 action."
+    },
+    "fighters": [
+     "nikola-tesla"
+    ]
+   },
+   {
+    "index": 9,
+    "title": "Kinetic Induction",
+    "type": "versatile",
+    "value": 2,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Tesla",
+    "text": {
+     "after": "Charge one coil. If you won the combat, charge both."
+    },
+    "fighters": [
+     "nikola-tesla"
+    ]
+   },
+   {
+    "index": 10,
+    "title": "Remote Control",
+    "type": "scheme",
+    "value": null,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Tesla",
+    "text": {
+     "effect": "Move all opposing fighters up to 2 spaces. Gain 1 action."
+    },
+    "fighters": [
+     "nikola-tesla"
+    ]
+   },
+   {
+    "index": 11,
+    "title": "The Alternating Current",
+    "type": "attack",
+    "value": 5,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Tesla",
+    "text": {
+     "after": "Choose one: - Charge both coils - Discharge both coils to have Tesla recover 2 health"
+    },
+    "fighters": [
+     "nikola-tesla"
+    ]
+   }
+  ]
+ },
+ {
+  "id": "golden-bat",
+  "name": "Golden Bat",
+  "set": "Adventures: Tales to Amaze",
+  "color": "#ebcb1b",
+  "move": 3,
+  "ability": "THE FIRST SUPERHERO\nIf you haven't taken a Maneuver action this turn, add +2 to the value of Golden Bat's attacks.",
+  "description": "The World's First Superhero arrives just in time.",
+  "fighters": [
+   {
+    "id": "golden-bat",
+    "name": "Golden Bat",
+    "hero": true,
+    "attack": "melee",
+    "hp": 18,
+    "count": 1
+   }
+  ],
+  "cards": [
+   {
+    "index": 1,
+    "title": "Terrifying Roar",
+    "type": "versatile",
+    "value": 3,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Golden Bat",
+    "text": {
+     "immediately": "Fighters cannot leave their spaces for the rest of the turn."
+    },
+    "fighters": [
+     "golden-bat"
+    ]
+   },
+   {
+    "index": 2,
+    "title": "Vaporizing Eyebeams",
+    "type": "attack",
+    "value": 2,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Golden Bat",
+    "text": {
+     "after": "Your opponent discards 1 random card."
+    },
+    "fighters": [
+     "golden-bat"
+    ]
+   },
+   {
+    "index": 3,
+    "title": "Alpine Fortress",
+    "type": "scheme",
+    "value": null,
+    "boost": 3,
+    "copies": 3,
+    "usedBy": "Golden Bat",
+    "text": {
+     "effect": "Choose a card in your discard pile and shuffle it into your deck. Draw 2 cards. Move Golden Bat up to 4 spaces."
+    },
+    "fighters": [
+     "golden-bat"
+    ]
+   },
+   {
+    "index": 4,
+    "title": "He Laughs at Your Feebleness",
+    "type": "defense",
+    "value": 5,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Golden Bat",
+    "text": {},
+    "fighters": [
+     "golden-bat"
+    ]
+   },
+   {
+    "index": 5,
+    "title": "Imposing Presence",
+    "type": "defense",
+    "value": 3,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Golden Bat",
+    "text": {
+     "immediately": "Cancel all effects on your opponent's card."
+    },
+    "fighters": [
+     "golden-bat"
+    ]
+   },
+   {
+    "index": 6,
+    "title": "Like a Flash of Golden Light",
+    "type": "versatile",
+    "value": 2,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Golden Bat",
+    "text": {
+     "during": "If Golden Bat shares no zones with the space he started this turn in, this card's value is 4 instead.",
+     "after": "Move Golden Bat up to 5 spaces."
+    },
+    "fighters": [
+     "golden-bat"
+    ]
+   },
+   {
+    "index": 7,
+    "title": "Skirmish",
+    "type": "versatile",
+    "value": 4,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "Golden Bat",
+    "text": {
+     "after": "If you won the combat, choose one of the fighters in the combat and move them up to 2 spaces."
+    },
+    "fighters": [
+     "golden-bat"
+    ]
+   },
+   {
+    "index": 8,
+    "title": "A Punch to Shake the Earth",
+    "type": "attack",
+    "value": 1,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Golden Bat",
+    "text": {
+     "after": "Deal 1 damage to each opposing fighter in Golden Bat's zone. If you won the combat, deal 2 damage instead."
+    },
+    "fighters": [
+     "golden-bat"
+    ]
+   },
+   {
+    "index": 9,
+    "title": "Arrive Just in Time",
+    "type": "scheme",
+    "value": null,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Golden Bat",
+    "text": {
+     "effect": "Place Golden Bat in any space."
+    },
+    "fighters": [
+     "golden-bat"
+    ]
+   },
+   {
+    "index": 10,
+    "title": "Insight of the Ancients",
+    "type": "versatile",
+    "value": 3,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Golden Bat",
+    "text": {
+     "after": "If you won the combat, return a random card in your discard pile to your hand."
+    },
+    "fighters": [
+     "golden-bat"
+    ]
+   },
+   {
+    "index": 11,
+    "title": "Sight Beyond Sight",
+    "type": "versatile",
+    "value": 2,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Golden Bat",
+    "text": {
+     "after": "Look at the top 3 cards of your opponent's deck. Put them back in any order."
+    },
+    "fighters": [
+     "golden-bat"
+    ]
+   },
+   {
+    "index": 12,
+    "title": "Super Strength",
+    "type": "attack",
+    "value": 5,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "Golden Bat",
+    "text": {},
+    "fighters": [
+     "golden-bat"
+    ]
+   }
+  ]
+ },
+ {
+  "id": "ciri",
+  "name": "Ciri",
+  "set": "The Witcher - Steel & Silver",
+  "color": "#7ec2c0",
+  "move": 2,
+  "ability": "UNCONTAINABLE POWER\n🔵 x7 | Effects on Ciri's cards cannot be canceled.",
+  "description": "The Child of the Elder Blood and The Lady of Space and Time. Ihuarraquax will help her master her abilities.",
+  "fighters": [
+   {
+    "id": "ciri",
+    "name": "Ciri",
+    "hero": true,
+    "attack": "melee",
+    "hp": 15,
+    "count": 1
+   },
+   {
+    "id": "ihuarraquax",
+    "name": "Ihuarraquax",
+    "hero": false,
+    "attack": "melee",
+    "hp": 7,
+    "count": 1
+   }
+  ],
+  "cards": [
+   {
+    "index": 1,
+    "title": "Pushed to the brink",
+    "type": "versatile",
+    "value": 3,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Ciri",
+    "text": {
+     "after": "🔵 x2 Deal 1 damage to the opposing fighter. 🔵 x7 Deal 2 damage to an opposing fighter within 3 spaces of Ciri."
+    },
+    "fighters": [
+     "ciri"
+    ]
+   },
+   {
+    "index": 2,
+    "title": "Zireael",
+    "type": "versatile",
+    "value": 2,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Ciri",
+    "text": {
+     "during": "🔵 x3 This card's value is 4 instead. 🔵 x5 This card's value is 4 instead, and your opponent discards 1 random card."
+    },
+    "fighters": [
+     "ciri"
+    ]
+   },
+   {
+    "index": 3,
+    "title": "Child of the Elder Blood",
+    "type": "scheme",
+    "value": null,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Ciri",
+    "text": {
+     "effect": "🔵 x4 Deal 1 damage to each other fighter in Ciri's zone. 🔵 x9 Deal 3 damage to each other fighter in Ciri's zone."
+    },
+    "fighters": [
+     "ciri"
+    ]
+   },
+   {
+    "index": 4,
+    "title": "Lion cub of Cintra",
+    "type": "attack",
+    "value": 2,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Ciri",
+    "text": {
+     "during": "🔵 x1 This card's value is 4 instead. 🔵 x5 This card's value is 7 instead."
+    },
+    "fighters": [
+     "ciri"
+    ]
+   },
+   {
+    "index": 5,
+    "title": "Bane of the Aen Elle",
+    "type": "attack",
+    "value": 4,
+    "boost": 4,
+    "copies": 3,
+    "usedBy": "Ihuarraquax",
+    "text": {
+     "after": "Move Ihuarraquax up to 4 spaces. He may move through opposing fighters. Then, deal 1 damage to an opposing fighter he moved through."
+    },
+    "fighters": [
+     "ihuarraquax"
+    ]
+   },
+   {
+    "index": 6,
+    "title": "Blink",
+    "type": "versatile",
+    "value": 4,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Ciri",
+    "text": {
+     "after": "Move Ciri up to 3 spaces. She may move through opposing fighters."
+    },
+    "fighters": [
+     "ciri"
+    ]
+   },
+   {
+    "index": 7,
+    "title": "Channel the source",
+    "type": "attack",
+    "value": 2,
+    "boost": 3,
+    "copies": 3,
+    "usedBy": "Ciri",
+    "text": {
+     "during": "You may discard any number of 🔵 cards from your hand. Add +2 to this card's value for each 🔵 card you discarded."
+    },
+    "fighters": [
+     "ciri"
+    ]
+   },
+   {
+    "index": 8,
+    "title": "Parry",
+    "type": "defense",
+    "value": 3,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "immediately": "Cancel all effects on your opponent's card."
+    },
+    "fighters": []
+   },
+   {
+    "index": 9,
+    "title": "Searching strike",
+    "type": "versatile",
+    "value": 3,
+    "boost": 3,
+    "copies": 3,
+    "usedBy": "Ihuarraquax",
+    "text": {
+     "after": "If you won the combat, you may search your deck for a 🔵 card, reveal it, and add it to your hand."
+    },
+    "fighters": [
+     "ihuarraquax"
+    ]
+   },
+   {
+    "index": 10,
+    "title": "The lady of space and time",
+    "type": "versatile",
+    "value": 2,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Ciri",
+    "text": {
+     "after": "🔵 x3 Return a card from your discard pile to the top of your deck. 🔵 x8 Return a card from your discard pile to your hand. Draw 1 card."
+    },
+    "fighters": [
+     "ciri"
+    ]
+   },
+   {
+    "index": 11,
+    "title": "Unicorn ally",
+    "type": "scheme",
+    "value": null,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "effect": "Ciri recovers 2 health.",
+     "ongoing": "After each combat your fighter is in, draw 1 card. Discard this card at the end of your turn if you have 5 or more cards in your hand."
+    },
+    "fighters": []
+   }
+  ]
+ },
+ {
+  "id": "hamlet",
+  "name": "Hamlet",
+  "set": "Slings and Arrows",
+  "color": "#d92b41",
+  "move": 2,
+  "ability": "THE QUESTION\nAt the start of your turn, choose TO BE or NOT TO BE. If you choose NOT TO BE, deal 2 damage to one of your fighters.\nTO BE: When you maneuver, draw 1 additional card.\nNOT TO BE: Add +2 to the value of Hamlet's attacks.",
+  "description": "To Be, and draw cards, or Not To Be, and empower thine attacks, that is the question ... and also the strategy you must master to avoid a murder most foul.",
+  "fighters": [
+   {
+    "id": "hamlet",
+    "name": "Hamlet",
+    "hero": true,
+    "attack": "melee",
+    "hp": 15,
+    "count": 1
+   },
+   {
+    "id": "rosencrantz-guildenstern",
+    "name": "Rosencrantz & Guildenstern",
+    "hero": false,
+    "attack": "melee",
+    "hp": 6,
+    "count": 1
+   }
+  ],
+  "cards": [
+   {
+    "index": 1,
+    "title": "The Ghost",
+    "type": "scheme",
+    "value": null,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "Hamlet",
+    "text": {
+     "effect": "Choose one: - Hamlet recovers 2 health, - place Hamlet in any space in his zone and gain 1 action"
+    },
+    "fighters": [
+     "hamlet"
+    ]
+   },
+   {
+    "index": 2,
+    "title": "The Readiness Is All",
+    "type": "versatile",
+    "value": 2,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "after": "Place one of the fighters in the combat in any space. The cannot leave that space this turn."
+    },
+    "fighters": []
+   },
+   {
+    "index": 3,
+    "title": "To Sleep, Perchance To Dream",
+    "type": "attack",
+    "value": 3,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "after": "If you won the combat, move the opposing fighter a number of spaces up to the amount of combat damage dealt. If you lost the combat, Hamlet recovers 1 health."
+    },
+    "fighters": []
+   },
+   {
+    "index": 4,
+    "title": "Blood Will Have Blood",
+    "type": "versatile",
+    "value": 2,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Hamlet",
+    "text": {
+     "after": "If Hamlet took damage this turn, deal 1 damage to the opposing fighter."
+    },
+    "fighters": [
+     "hamlet"
+    ]
+   },
+   {
+    "index": 5,
+    "title": "Maddening Insight",
+    "type": "defense",
+    "value": 0,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "during": "The value of this card is equal to the number of cards in your hand.",
+     "after": "If you won the combat, your opponent discards 1 card."
+    },
+    "fighters": []
+   },
+   {
+    "index": 6,
+    "title": "Nothing Either Good Or Bad",
+    "type": "defense",
+    "value": 2,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "after": "If your opponent played a versatile card, deal 2 damage to the opposing fighter."
+    },
+    "fighters": []
+   },
+   {
+    "index": 7,
+    "title": "Outrageous Fortune",
+    "type": "versatile",
+    "value": 1,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Hamlet",
+    "text": {
+     "during": "Discard the top card of your deck. Add its BOOST value to this card's value.",
+     "after": "If you lost the combat, return the card you discarded to your hand."
+    },
+    "fighters": [
+     "hamlet"
+    ]
+   },
+   {
+    "index": 8,
+    "title": "The Play's The Thing",
+    "type": "versatile",
+    "value": 3,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "after": "Your opponent discards 1 random card. If you won the combat, Hamlet recovers health equal to its BOOST value."
+    },
+    "fighters": []
+   },
+   {
+    "index": 9,
+    "title": "The Rest Is Silence",
+    "type": "defense",
+    "value": 2,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Hamlet",
+    "text": {
+     "after": "End the turn."
+    },
+    "fighters": [
+     "hamlet"
+    ]
+   },
+   {
+    "index": 10,
+    "title": "Uncertain Doom",
+    "type": "attack",
+    "value": 2,
+    "boost": 3,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "during": "If your opponent played a versatile card, ignore its value."
+    },
+    "fighters": []
+   },
+   {
+    "index": 11,
+    "title": "Cruel To Be Kind",
+    "type": "attack",
+    "value": 2,
+    "boost": 4,
+    "copies": 2,
+    "usedBy": "Hamlet",
+    "text": {
+     "during": "You may BOOST this card."
+    },
+    "fighters": [
+     "hamlet"
+    ]
+   },
+   {
+    "index": 12,
+    "title": "Method In The Madness",
+    "type": "scheme",
+    "value": null,
+    "boost": 3,
+    "copies": 3,
+    "usedBy": "Hamlet",
+    "text": {
+     "effect": "Put any number of cards in your hand on the bottom of your deck. Then, draw up to that many cards. Gain 1 action."
+    },
+    "fighters": [
+     "hamlet"
+    ]
+   }
+  ]
+ },
+ {
+  "id": "leonardo",
+  "name": "Leonardo",
+  "set": "Adventures: Teenage Mutant Ninja Turtles",
+  "color": "#0662ae",
+  "move": 2,
+  "ability": "TEAM TACTICS\nAt the start of your turn, move any fighter up to 1 space.",
+  "description": "The leader - he puts the pieces into place!",
+  "fighters": [
+   {
+    "id": "leonardo",
+    "name": "Leonardo",
+    "hero": true,
+    "attack": "melee",
+    "hp": 16,
+    "count": 1
+   },
+   {
+    "id": "splinter",
+    "name": "Splinter",
+    "hero": false,
+    "attack": "melee",
+    "hp": 9,
+    "count": 1
+   }
+  ],
+  "cards": [
+   {
+    "index": 1,
+    "title": "Protective father",
+    "type": "scheme",
+    "value": null,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Splinter",
+    "text": {
+     "effect": "Splinter may swap spaces with another friendly fighter. If he does, they both recover 2 health. Gain 1 action."
+    },
+    "fighters": [
+     "splinter"
+    ]
+   },
+   {
+    "index": 2,
+    "title": "Quick strike",
+    "type": "versatile",
+    "value": 3,
+    "boost": 3,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "after": "Draw 1 card."
+    },
+    "fighters": []
+   },
+   {
+    "index": 3,
+    "title": "Spatial awareness",
+    "type": "versatile",
+    "value": 3,
+    "boost": 3,
+    "copies": 3,
+    "usedBy": "Splinter",
+    "text": {
+     "after": "If the opposing fighter is in fewer zones than Splinter, deal 1 damage to the opposing fighter and draw 1 card."
+    },
+    "fighters": [
+     "splinter"
+    ]
+   },
+   {
+    "index": 4,
+    "title": "Turtle power!",
+    "type": "attack",
+    "value": 3,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Leonardo",
+    "text": {
+     "during": "You may BOOST this card."
+    },
+    "fighters": [
+     "leonardo"
+    ]
+   },
+   {
+    "index": 5,
+    "title": "Wise beyond his years",
+    "type": "versatile",
+    "value": 2,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Leonardo",
+    "text": {
+     "after": "If the opposing fighter is in fewer zones than Leonardo, deal 2 damage to the opposing fighter."
+    },
+    "fighters": [
+     "leonardo"
+    ]
+   },
+   {
+    "index": 6,
+    "title": "Eat, sleep, and breath ninjutsu",
+    "type": "versatile",
+    "value": 3,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "after": "Place each fighter adjacent to your fighter in another space in their zone."
+    },
+    "fighters": []
+   },
+   {
+    "index": 7,
+    "title": "Fearless leader",
+    "type": "attack",
+    "value": 3,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "during": "Add +2 to this card value for each other friendly fighter adjacent to the opposing fighter."
+    },
+    "fighters": []
+   },
+   {
+    "index": 8,
+    "title": "For Sensei",
+    "type": "attack",
+    "value": 4,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "after": "Move both fighters in the combat up to 1 space each. You may discard 1 card to gain 1 action."
+    },
+    "fighters": []
+   },
+   {
+    "index": 9,
+    "title": "Heroes in a half shell",
+    "type": "defense",
+    "value": 5,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Leonardo",
+    "text": {},
+    "fighters": [
+     "leonardo"
+    ]
+   },
+   {
+    "index": 10,
+    "title": "I have a plan",
+    "type": "versatile",
+    "value": 2,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "immediately": "You may discard 1 card. Of you do, cancel all effects on your opponent's card and ignore its value."
+    },
+    "fighters": []
+   },
+   {
+    "index": 11,
+    "title": "Katana",
+    "type": "attack",
+    "value": 6,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Leonardo",
+    "text": {},
+    "fighters": [
+     "leonardo"
+    ]
+   },
+   {
+    "index": 12,
+    "title": "Leonardo leads",
+    "type": "scheme",
+    "value": null,
+    "boost": 4,
+    "copies": 2,
+    "usedBy": "Leonardo",
+    "text": {
+     "effect": "Move each friendly fighter up to 3 spaces. Draw 1 card."
+    },
+    "fighters": [
+     "leonardo"
+    ]
+   }
+  ]
+ },
+ {
+  "id": "donatello",
+  "name": "Donatello",
+  "set": "Adventures: Teenage Mutant Ninja Turtles",
+  "color": "#8a3e7c",
+  "move": 2,
+  "ability": "INVENTIVE\nWhen you maneuver, you may draw 2 cards instead of 1. If you do, put a card in your hand on the bottom of your deck.\nAfter you play an invention, tuck it under this card. For the rest of the game, its invention bonus applies.",
+  "description": "His wicked cool gadgets will save the day!",
+  "fighters": [
+   {
+    "id": "donatello",
+    "name": "Donatello",
+    "hero": true,
+    "attack": "melee",
+    "hp": 14,
+    "count": 1
+   },
+   {
+    "id": "metalhead",
+    "name": "Metalhead",
+    "hero": false,
+    "attack": "melee",
+    "hp": 7,
+    "count": 1
+   }
+  ],
+  "cards": [
+   {
+    "index": 1,
+    "title": "Party wagon!",
+    "type": "scheme",
+    "value": null,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Donatello",
+    "text": {
+     "effect": "Move a friendly fighter up to 5 spaces. They may move through opposing fighters. Then, deal 2 damage to an opposing fighter they moved through."
+    },
+    "fighters": [
+     "donatello"
+    ]
+   },
+   {
+    "index": 2,
+    "title": "Heroes in a half shell",
+    "type": "defense",
+    "value": 5,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "Donatello",
+    "text": {},
+    "fighters": [
+     "donatello"
+    ]
+   },
+   {
+    "index": 3,
+    "title": "Smoke bomb",
+    "type": "scheme",
+    "value": null,
+    "boost": 3,
+    "copies": 1,
+    "usedBy": "Donatello",
+    "text": {
+     "effect": "Remove up to 4 scheme cards in your discard pile from the game. Gain that many actions. PERMANENT. When you play a scheme, gain 1 action."
+    },
+    "fighters": [
+     "donatello"
+    ]
+   },
+   {
+    "index": 4,
+    "title": "Self defense grid",
+    "type": "defense",
+    "value": 2,
+    "boost": 3,
+    "copies": 1,
+    "usedBy": "Donatello",
+    "text": {
+     "effect": "PERMANENT. Add +1 to the value of your defenses.",
+     "after": "Remove up to 4 defense or versatile cards in your descard pile from the game. Donatello recovers that much health."
+    },
+    "fighters": [
+     "donatello"
+    ]
+   },
+   {
+    "index": 5,
+    "title": "Quick strike",
+    "type": "versatile",
+    "value": 3,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "after": "Draw 1 card."
+    },
+    "fighters": []
+   },
+   {
+    "index": 6,
+    "title": "Shift focus",
+    "type": "versatile",
+    "value": 2,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Donatello",
+    "text": {
+     "after": "Move another fighter in Donatello's zone up to 3 spaces. They may move through oothe fighters."
+    },
+    "fighters": [
+     "donatello"
+    ]
+   },
+   {
+    "index": 7,
+    "title": "Short circuit",
+    "type": "versatile",
+    "value": 3,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "immediately": "Cancel all effects AFTER COMBAT effects on your opponent's card."
+    },
+    "fighters": []
+   },
+   {
+    "index": 8,
+    "title": "Untested enhancements",
+    "type": "versatile",
+    "value": 3,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Metalhead",
+    "text": {
+     "during": "Discard the bottom card of your deck. Add its BOOST value to this card's value."
+    },
+    "fighters": [
+     "metalhead"
+    ]
+   },
+   {
+    "index": 9,
+    "title": "Donatello does machines",
+    "type": "scheme",
+    "value": null,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Donatello",
+    "text": {
+     "effect": "You and each other friendly player may return an attack, versatile, or defense card in their discard pile to their hand. Draw 1 card."
+    },
+    "fighters": [
+     "donatello"
+    ]
+   },
+   {
+    "index": 10,
+    "title": "The future of Ninjutsu",
+    "type": "scheme",
+    "value": null,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "Metalhead",
+    "text": {
+     "effect": "Look at the top card of any deck. You may put it on the bottom. Draw 1 card. Gain 1 action."
+    },
+    "fighters": [
+     "metalhead"
+    ]
+   },
+   {
+    "index": 11,
+    "title": "Electro grenade",
+    "type": "attack",
+    "value": 2,
+    "boost": 3,
+    "copies": 1,
+    "usedBy": "Donatello",
+    "text": {
+     "during": "Remove up to 4 attack or versatile cards in your discard pile from the game. Add +1 to this card's value for each card removed.",
+     "effect": "PERMANENT. Add +1 to the value of your attacks."
+    },
+    "fighters": [
+     "donatello"
+    ]
+   },
+   {
+    "index": 12,
+    "title": "Thinking ahead",
+    "type": "attack",
+    "value": 3,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "after": "If you won the combat, you may put a card in your discard pile on the bottom of your deck."
+    },
+    "fighters": []
+   },
+   {
+    "index": 13,
+    "title": "Turtle power!",
+    "type": "attack",
+    "value": 3,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "during": "You may BOOST this card."
+    },
+    "fighters": []
+   },
+   {
+    "index": 14,
+    "title": "Bo staff",
+    "type": "defense",
+    "value": 3,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Donatello",
+    "text": {
+     "after": "Deal 1 damage to an opposing fighter adjacent to Donatello. Draw 1 card."
+    },
+    "fighters": [
+     "donatello"
+    ]
+   }
+  ]
+ },
+ {
+  "id": "michelangelo",
+  "name": "Michelangelo",
+  "set": "Adventures: Teenage Mutant Ninja Turtles",
+  "color": "#f38421",
+  "move": 3,
+  "ability": "PIZZA PARTY\nAfter you attack or scheme, draw 1 card.\nYour starting and maximum hand size is 3.",
+  "description": "",
+  "fighters": [
+   {
+    "id": "michelangelo",
+    "name": "Michelangelo",
+    "hero": true,
+    "attack": "melee",
+    "hp": 14,
+    "count": 1
+   },
+   {
+    "id": "april-o-neil",
+    "name": "April O'neil",
+    "hero": false,
+    "attack": "ranged",
+    "hp": 6,
+    "count": 1
+   }
+  ],
+  "cards": [
+   {
+    "index": 1,
+    "title": "Heroes in a half shell",
+    "type": "defense",
+    "value": 5,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Michelangelo",
+    "text": {},
+    "fighters": [
+     "michelangelo"
+    ]
+   },
+   {
+    "index": 2,
+    "title": "Back for seconds",
+    "type": "defense",
+    "value": 2,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "after": "Shuffle 2 random cards from your discard pile back into your deck."
+    },
+    "fighters": []
+   },
+   {
+    "index": 3,
+    "title": "Hi-yaaaaah!!",
+    "type": "attack",
+    "value": 4,
+    "boost": 3,
+    "copies": 3,
+    "usedBy": "Michelangelo",
+    "text": {
+     "after": "Deal 1 damage to an adjacent opposing fighter. You may put a card from your hand on the bottom of your deck to gain 1 action."
+    },
+    "fighters": [
+     "michelangelo"
+    ]
+   },
+   {
+    "index": 4,
+    "title": "Boisterous beatdown",
+    "type": "attack",
+    "value": 2,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Michelangelo",
+    "text": {
+     "after": "Gain 1 action. If you won the combat, gain 2 actions instead."
+    },
+    "fighters": [
+     "michelangelo"
+    ]
+   },
+   {
+    "index": 5,
+    "title": "Let's go",
+    "type": "versatile",
+    "value": 3,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "after": "Move a friendly fighter up to 3 spaces."
+    },
+    "fighters": []
+   },
+   {
+    "index": 6,
+    "title": "Michelangelo is a party dude!!",
+    "type": "scheme",
+    "value": null,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Michelangelo",
+    "text": {
+     "effect": "Each friendly fighter recovers 1 health."
+    },
+    "fighters": [
+     "michelangelo"
+    ]
+   },
+   {
+    "index": 7,
+    "title": "Cowabunga!!",
+    "type": "versatile",
+    "value": 3,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Michelangelo",
+    "text": {
+     "during": "Add +1 to this card's value for each other card you played this turn."
+    },
+    "fighters": [
+     "michelangelo"
+    ]
+   },
+   {
+    "index": 8,
+    "title": "Nunchaku",
+    "type": "scheme",
+    "value": null,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Michelangelo",
+    "text": {
+     "effect": "Add +1 to the value of Michelangelo's attacks this turn. Gain 1 action."
+    },
+    "fighters": [
+     "michelangelo"
+    ]
+   },
+   {
+    "index": 9,
+    "title": "Guaranteed delivery",
+    "type": "versatile",
+    "value": 3,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "immediately": "You may put a card from your hand on the bottom of your deck to cancel all effects on your opponent's card.",
+     "after": "If your hand is empty, draw 2 cards."
+    },
+    "fighters": []
+   },
+   {
+    "index": 10,
+    "title": "Shell insertion",
+    "type": "scheme",
+    "value": null,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "April",
+    "text": {
+     "effect": "Chose two different effects: - each opponent discards 1 card - move a friendly fighter up to 2 spaces - put a card from your hand on the bottom of your deck to gain 1 action - shuffle 2 random cards from your discard pile back into your deck"
+    },
+    "fighters": [
+     "april-o-neil"
+    ]
+   },
+   {
+    "index": 11,
+    "title": "Turtle power!",
+    "type": "attack",
+    "value": 3,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Michelangelo",
+    "text": {
+     "during": "You may BOOST this attack."
+    },
+    "fighters": [
+     "michelangelo"
+    ]
+   },
+   {
+    "index": 12,
+    "title": "Hard-hitting investigation",
+    "type": "attack",
+    "value": 0,
+    "boost": 3,
+    "copies": 3,
+    "usedBy": "April",
+    "text": {
+     "after": "Deal 1 damage to the opposing fighter. Gain 1 action."
+    },
+    "fighters": [
+     "april-o-neil"
+    ]
+   }
+  ]
+ },
+ {
+  "id": "shredder",
+  "name": "Shredder",
+  "set": "TMNT: Shredder vs Krang",
+  "color": "#4e3d73",
+  "move": 3,
+  "ability": "MASTER OF THE CLAN\nAt the start of your turn, deploy a Foot soldier to a path adjacent to a friendly fighter.\n\nYou may attack opposing fighters adjacent to Foot soldiers.\n\nIf an opponents boosts their maneuver, they may remove any Foot soldier their hero moves through.",
+  "description": "Shredder is the ruthless leader of the Foot Clan and the Teenage Mutant Ninja Turtles’ greatest enemy. A master martial artist clad in bladed armor, he is cold, calculating, and driven by a desire for power and revenge, especially against Splinter!",
+  "fighters": [
+   {
+    "id": "shredder",
+    "name": "Shredder",
+    "hero": true,
+    "attack": "melee",
+    "hp": 15,
+    "count": 1
+   },
+   {
+    "id": "bebop-rocksteady",
+    "name": "Bebop & Rocksteady",
+    "hero": false,
+    "attack": "melee",
+    "hp": 7,
+    "count": 1
+   }
+  ],
+  "cards": [
+   {
+    "index": 1,
+    "title": "Gruff Escort",
+    "type": "attack",
+    "value": 4,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Bebop & Rocksteady",
+    "text": {
+     "after": "Deploy 2 Foot soldiers anywhere. Move Shredder up to 2 spaces."
+    },
+    "fighters": [
+     "bebop-rocksteady"
+    ]
+   },
+   {
+    "index": 2,
+    "title": "Master of the Foot",
+    "type": "versatile",
+    "value": 2,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Shredder",
+    "text": {
+     "after": "Deal 1 damage to each opposing fighter adjacent to a Foot soldier."
+    },
+    "fighters": [
+     "shredder"
+    ]
+   },
+   {
+    "index": 3,
+    "title": "Disrupting Strike",
+    "type": "versatile",
+    "value": 3,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "Shredder",
+    "text": {
+     "immediately": "The value of your opponent's card is equal to its printed value and cannot be changed."
+    },
+    "fighters": [
+     "shredder"
+    ]
+   },
+   {
+    "index": 4,
+    "title": "Obedient Subjects",
+    "type": "scheme",
+    "value": null,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Shredder",
+    "text": {
+     "effect": "Gain 1 action for each Foot soldier adjacent to Shredder."
+    },
+    "fighters": [
+     "shredder"
+    ]
+   },
+   {
+    "index": 5,
+    "title": "All According to Plan",
+    "type": "defense",
+    "value": 3,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Shredder",
+    "text": {
+     "after": "Your opponent gains 1 action. At the end of this turn, if they didn't play a scheme, they discard 2 cards."
+    },
+    "fighters": [
+     "shredder"
+    ]
+   },
+   {
+    "index": 6,
+    "title": "Swarming Strike",
+    "type": "attack",
+    "value": 5,
+    "boost": 3,
+    "copies": 3,
+    "usedBy": "Shredder",
+    "text": {
+     "during": "Add +1 to this card's value for each adjacent Foot soldier."
+    },
+    "fighters": [
+     "shredder"
+    ]
+   },
+   {
+    "index": 7,
+    "title": "Think Hard",
+    "type": "versatile",
+    "value": 3,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Bebop & Rocksteady",
+    "text": {
+     "after": "Draw 1 card for each Foot soldier adjacent to the opposing fighter."
+    },
+    "fighters": [
+     "bebop-rocksteady"
+    ]
+   },
+   {
+    "index": 8,
+    "title": "Back to work!",
+    "type": "scheme",
+    "value": null,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Shredder",
+    "text": {
+     "effect": "Bebop & Rocksteady recover 3 health, even if they are defeated. Place them in a space as close as possible to Shredder."
+    },
+    "fighters": [
+     "shredder"
+    ]
+   },
+   {
+    "index": 9,
+    "title": "Gang Up",
+    "type": "attack",
+    "value": 3,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Bebop & Rocksteady",
+    "text": {
+     "during": "If the opposing fighter is adjacent to 2 or more Foot soldiers, this card's value is 6 instead."
+    },
+    "fighters": [
+     "bebop-rocksteady"
+    ]
+   },
+   {
+    "index": 10,
+    "title": "Long Shot",
+    "type": "versatile",
+    "value": 3,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "during": "If the opposing fighter is not adjacent to your fighter, this card's value is 5 instead."
+    },
+    "fighters": []
+   },
+   {
+    "index": 11,
+    "title": "Masterful Defense",
+    "type": "defense",
+    "value": 2,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Shredder",
+    "text": {
+     "after": "Shredder recovers 1 health for each adjacent Foot soldier."
+    },
+    "fighters": [
+     "shredder"
+    ]
+   },
+   {
+    "index": 12,
+    "title": "Perplexing Tactics",
+    "type": "versatile",
+    "value": 2,
+    "boost": 3,
+    "copies": 3,
+    "usedBy": "Shredder",
+    "text": {
+     "immediately": "Cancel all effects on your opponent's card. If 10 or more Foot soldiers are deployed, also ignore that card's value."
+    },
+    "fighters": [
+     "shredder"
+    ]
+   },
+   {
+    "index": 13,
+    "title": "Savagery",
+    "type": "attack",
+    "value": 4,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "after": "If you won the combat, deal 1 damage to each fighter adjacent to your fighter."
+    },
+    "fighters": []
+   }
+  ]
+ },
+ {
+  "id": "krang",
+  "name": "Krang",
+  "set": "TMNT: Shredder vs Krang",
+  "color": "#e28bad",
+  "move": 1,
+  "ability": "DOOOOOM!\nKrang has 3 doomsday machines.\nStart with one machine active.\n\nAfter you roll the Dice of Ultimate Destruction, you can deactivate an active machine to reroll the die.\n\nAdd +1 to your move value for each active machine.",
+  "description": "Krang is a brilliant but cruel alien warlord from Dimension X. Often seen as a pink, brain-like creature inside a robotic body, he uses advanced technology and schemes to conquer Earth, frequently working with Shredder to defeat the Teenage Mutant Ninja Turtles.",
+  "fighters": [
+   {
+    "id": "krang",
+    "name": "Krang",
+    "hero": true,
+    "attack": "melee",
+    "hp": 16,
+    "count": 1
+   }
+  ],
+  "cards": [
+   {
+    "index": 1,
+    "title": "Android arms: Wings",
+    "type": "scheme",
+    "value": null,
+    "boost": 3,
+    "copies": 3,
+    "usedBy": "Krang",
+    "text": {
+     "effect": "Move Krang up to ? spaces. Krang may move through opposing fighters. Then, deal 1 damage to each opposing fighter Krang moved through. Gain 1 action."
+    },
+    "fighters": [
+     "krang"
+    ]
+   },
+   {
+    "index": 2,
+    "title": "Molecular Amplification Unit",
+    "type": "versatile",
+    "value": 2,
+    "boost": 2,
+    "copies": 4,
+    "usedBy": "Krang",
+    "text": {
+     "immediately": "Activate a machine.",
+     "during": "Increase this card's value by?."
+    },
+    "fighters": [
+     "krang"
+    ]
+   },
+   {
+    "index": 3,
+    "title": "Android arms: Missiles",
+    "type": "attack",
+    "value": 1,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Krang",
+    "text": {
+     "during": "Increase this card's value by ?.",
+     "effect": "You may play this card face up as a ranged attack."
+    },
+    "fighters": [
+     "krang"
+    ]
+   },
+   {
+    "index": 4,
+    "title": "Warlord of Dimension X",
+    "type": "versatile",
+    "value": 3,
+    "boost": 3,
+    "copies": 3,
+    "usedBy": "Krang",
+    "text": {
+     "after": "Reveal the top card of your deck and your opponent's deck. If your card's name is longer, draw it."
+    },
+    "fighters": [
+     "krang"
+    ]
+   },
+   {
+    "index": 5,
+    "title": "Android arms: Chain Flail",
+    "type": "attack",
+    "value": 2,
+    "boost": 3,
+    "copies": 3,
+    "usedBy": "Krang",
+    "text": {
+     "after": "If the printed value of your opponent's card is less than ?, or they didn't play a card, they discard 2 cards."
+    },
+    "fighters": [
+     "krang"
+    ]
+   },
+   {
+    "index": 6,
+    "title": "Android arms: Powerbomb",
+    "type": "attack",
+    "value": 3,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Krang",
+    "text": {
+     "during": "You may BOOST this card.",
+     "after": "Move the opposing fighter a number of spaces up to the amount of combat damage dealt."
+    },
+    "fighters": [
+     "krang"
+    ]
+   },
+   {
+    "index": 7,
+    "title": "IQ of 968",
+    "type": "scheme",
+    "value": null,
+    "boost": null,
+    "copies": 3,
+    "usedBy": "Krang",
+    "text": {
+     "effect": "Activate all machines. Draw ? cards. Krang recovers ? health"
+    },
+    "fighters": [
+     "krang"
+    ],
+    "dieBoost": true
+   },
+   {
+    "index": 8,
+    "title": "Minimizer",
+    "type": "defense",
+    "value": 0,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Krang",
+    "text": {
+     "immediately": "Decrease the value of your opponent's card by 4.",
+     "after": "End the turn."
+    },
+    "fighters": [
+     "krang"
+    ]
+   },
+   {
+    "index": 9,
+    "title": "Pan-dimensional Portal",
+    "type": "versatile",
+    "value": 3,
+    "boost": null,
+    "copies": 2,
+    "usedBy": "Krang",
+    "text": {
+     "after": "Place a fighter in the combat in any space. They can't leave that space this turn. Both players put ? random cards from their hands on the bottom of their decks, then both draw 2 cards."
+    },
+    "fighters": [
+     "krang"
+    ],
+    "dieBoost": true
+   },
+   {
+    "index": 10,
+    "title": "Welcome to the Technodrome!",
+    "type": "versatile",
+    "value": 2,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Krang",
+    "text": {
+     "immediately": "Choose one: - cancel all effects on your opponent's card - activate a machine"
+    },
+    "fighters": [
+     "krang"
+    ]
+   }
+  ]
+ },
+ {
+  "id": "moon-knight",
+  "name": "Moon Knight",
+  "set": "Redemption Row",
+  "color": "#a0b7b6",
+  "move": 3,
+  "ability": "Moon Knight\nAt the start of your turn, move up to 2 spaces.\n\nKhonshu\nKhonshu adds +2 to the value of his attack cards. He does not take damage from effects other than combat damage.\n\nMr. Knight\nMr. Knight adds +1 to all his defense values.\n\nAt the end of your turn, change to your next identity (In order, Moon Knight -> Khonshu -> Mr. Knight, repeating).",
+  "description": "Perhaps you could hope to challenge a masked vigilante or a ruthless investigator or even an Egyptian god. Here's the thing though: \"We're all in this together\".",
+  "fighters": [
+   {
+    "id": "moon-knight",
+    "name": "Moon Knight",
+    "hero": true,
+    "attack": "melee",
+    "hp": 16,
+    "count": 1
+   }
+  ],
+  "cards": [
+   {
+    "index": 1,
+    "title": "Let Your Insanity Guide You",
+    "type": "versatile",
+    "value": 1,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "after": "Discard the top card of your deck. Draw cards equal to that card's BOOST value."
+    },
+    "fighters": []
+   },
+   {
+    "index": 2,
+    "title": "Travelers of The Night",
+    "type": "scheme",
+    "value": null,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "effect": "Move your fighter up to 4 spaces. They may move through opposing fighters. Gain 1 action."
+    },
+    "fighters": []
+   },
+   {
+    "index": 3,
+    "title": "That's The Part I Like",
+    "type": "versatile",
+    "value": 3,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "after": "If you won the combat, you may look at the top 3 cards of your opponent's deck and discard one of them. Place the other 2 back in any order."
+    },
+    "fighters": []
+   },
+   {
+    "index": 4,
+    "title": "We're All In This Together",
+    "type": "defense",
+    "value": 3,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "after": "If you won the combat, draw 1 card."
+    },
+    "fighters": []
+   },
+   {
+    "index": 5,
+    "title": "I'm Not Real",
+    "type": "attack",
+    "value": 4,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "after": "You may change to your next identity."
+    },
+    "fighters": []
+   },
+   {
+    "index": 6,
+    "title": "That's Why I Always Win",
+    "type": "attack",
+    "value": 3,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "during": "You may BOOST this attack."
+    },
+    "fighters": []
+   },
+   {
+    "index": 7,
+    "title": "Madness Will Keep You Alive",
+    "type": "scheme",
+    "value": null,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "effect": "Recover 2 health. If you started your turn in a different space, gain 1 action."
+    },
+    "fighters": []
+   },
+   {
+    "index": 8,
+    "title": "A Totally Sane Thing To Do",
+    "type": "versatile",
+    "value": 2,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "after": "You may deal 2 damage to both fighters in the combat."
+    },
+    "fighters": []
+   },
+   {
+    "index": 9,
+    "title": "Fist of Khonshu",
+    "type": "versatile",
+    "value": 3,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "after": "If you won the combat, move the opposing fighter up to 4 spaces."
+    },
+    "fighters": []
+   },
+   {
+    "index": 10,
+    "title": "Past and Present Intermingle",
+    "type": "versatile",
+    "value": 2,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "during": "Add the BOOST value of the top card of your discard pile to this card's value."
+    },
+    "fighters": []
+   },
+   {
+    "index": 11,
+    "title": "Good Enough For Us",
+    "type": "versatile",
+    "value": 4,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "after": "You may draw 2 cards. If you do, take 2 damage."
+    },
+    "fighters": []
+   },
+   {
+    "index": 12,
+    "title": "Feint",
+    "type": "versatile",
+    "value": 2,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "immediately": "Cancel all effects on your opponent's card."
+    },
+    "fighters": []
+   }
+  ]
+ },
+ {
+  "id": "eredin",
+  "name": "Eredin",
+  "set": "The Witcher - Realms Fall",
+  "color": "#413f42",
+  "move": 2,
+  "ability": "KING OF THE WILD HUNT\nWhile all of your Red Riders are defeated, Eredin is ENRAGED.\nIf Eredin is ENRAGED, add +1 to the value of your combat cards, and your move value is 3.",
+  "description": "King of the Wild Hunt, Eredin is ruthless. His Red Riders would gladly give their lives for\ntheir leader.",
+  "fighters": [
+   {
+    "id": "eredin",
+    "name": "Eredin",
+    "hero": true,
+    "attack": "melee",
+    "hp": 14,
+    "count": 1
+   },
+   {
+    "id": "red-rider",
+    "name": "Red Rider",
+    "hero": false,
+    "attack": "melee",
+    "hp": 1,
+    "count": 4
+   }
+  ],
+  "cards": [
+   {
+    "index": 1,
+    "title": "Brutal strike",
+    "type": "attack",
+    "value": 2,
+    "boost": 3,
+    "copies": 3,
+    "usedBy": "Eredin",
+    "text": {
+     "during": "If your opponent's card has an IMMEDIATELY effect, ignore their card's value.",
+     "effect": "This card's effects cannot be canceled."
+    },
+    "fighters": [
+     "eredin"
+    ]
+   },
+   {
+    "index": 2,
+    "title": "Unyielding hordes",
+    "type": "attack",
+    "value": 1,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Red Rider",
+    "text": {
+     "immediately": "Return a defeated Red Rider to any space.",
+     "during": "Add +1 to this card's value for each other friendly fighter adjacent to the opposing fighter."
+    },
+    "fighters": [
+     "red-rider"
+    ]
+   },
+   {
+    "index": 3,
+    "title": "Portal defense",
+    "type": "defense",
+    "value": 0,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "Eredin",
+    "text": {
+     "immediately": "Eredin swaps spaces with an adjacent friendly fighter. That fighter is ow the defender.",
+     "after": "If Eredin is ENRAGED, draw 2 cards."
+    },
+    "fighters": [
+     "eredin"
+    ]
+   },
+   {
+    "index": 4,
+    "title": "Icy guile",
+    "type": "versatile",
+    "value": 2,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "immediately": "If Eredin is ENRAGED, cancel all effects on your opponent's card.",
+     "during": "You may defeat a Red Riper to ignore the value of your opponent's card."
+    },
+    "fighters": []
+   },
+   {
+    "index": 5,
+    "title": "Close for the kill",
+    "type": "scheme",
+    "value": null,
+    "boost": 4,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "effect": "Draw 2 cards. Move each of your fighters up to 3 spaces. They may move through opposing fighters."
+    },
+    "fighters": []
+   },
+   {
+    "index": 6,
+    "title": "Backhand",
+    "type": "attack",
+    "value": 4,
+    "boost": 3,
+    "copies": 3,
+    "usedBy": "Eredin",
+    "text": {
+     "after": "Your opponent puts 1 random card from their hand on top of their deck. If Eredin is ENRAGED, they discard it instead."
+    },
+    "fighters": [
+     "eredin"
+    ]
+   },
+   {
+    "index": 7,
+    "title": "Foul purpose",
+    "type": "attack",
+    "value": 3,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "effect": "If Eredin is ENRAGED, you may play this card face-up to target a fighter in any space.",
+     "after": "You may defeat a Red Rider to return this card to your hand."
+    },
+    "fighters": []
+   },
+   {
+    "index": 8,
+    "title": "Implacable",
+    "type": "defense",
+    "value": 3,
+    "boost": 3,
+    "copies": 3,
+    "usedBy": "Eredin",
+    "text": {
+     "during": "You may BOOST this card.",
+     "effect": "If Eredin is ENRAGED, you may play this card as an attack."
+    },
+    "fighters": [
+     "eredin"
+    ]
+   },
+   {
+    "index": 9,
+    "title": "Might of the Aen Elle",
+    "type": "scheme",
+    "value": null,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Eredin",
+    "text": {
+     "effect": "Draw 1 card. Gain 1 action.",
+     "ongoing": "Eredin does not take damage except combat damage or from exhaustion. Discard this card at the end of your turn if you didn't attack."
+    },
+    "fighters": [
+     "eredin"
+    ]
+   },
+   {
+    "index": 10,
+    "title": "Skirmish",
+    "type": "versatile",
+    "value": 4,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "after": "If you won the combat, choose one of the fighters in the combat and move them up to 2 spaces."
+    },
+    "fighters": []
+   },
+   {
+    "index": 11,
+    "title": "Wild hunt",
+    "type": "versatile",
+    "value": 3,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "after": "Deal 1 damage to each opposing fighter that is adjacent to at least one of your fighters. If Eredin is ENRAGED, deal 2 damage instead."
+    },
+    "fighters": []
+   }
+  ]
+ },
+ {
+  "id": "philippa",
+  "name": "Philippa",
+  "set": "The Witcher - Realms Fall",
+  "color": "#c7595a",
+  "move": 2,
+  "ability": "TWO STEPS AHEAD\nAt the end of your turn, you may draw until you have a hand of 4 cards.",
+  "description": "Equal parts sorceress and schemer, Philippa has a spell for every setback and a hand in every plot.",
+  "fighters": [
+   {
+    "id": "philippa",
+    "name": "Philippa",
+    "hero": true,
+    "attack": "ranged",
+    "hp": 12,
+    "count": 1
+   },
+   {
+    "id": "dijkstra",
+    "name": "Dijkstra",
+    "hero": false,
+    "attack": "melee",
+    "hp": 6,
+    "count": 1
+   }
+  ],
+  "cards": [
+   {
+    "index": 1,
+    "title": "Owlform",
+    "type": "attack",
+    "value": 3,
+    "boost": 3,
+    "copies": 3,
+    "usedBy": "Philippa",
+    "text": {
+     "during": "Discard any number of cards from your hand. Add +1 to this card's value for each card discarded."
+    },
+    "fighters": [
+     "philippa"
+    ]
+   },
+   {
+    "index": 2,
+    "title": "Lightning bolt",
+    "type": "attack",
+    "value": 3,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Philippa",
+    "text": {
+     "after": "If you haven't taken a maneuver action this turn, deal 1 damage to each opposing fighter in Philippa's zone."
+    },
+    "fighters": [
+     "philippa"
+    ]
+   },
+   {
+    "index": 3,
+    "title": "Paralyzing fetters",
+    "type": "defense",
+    "value": 2,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Philippa",
+    "text": {
+     "immediately": "The value of your opponent's card is equal to its printed value and cannot be changed."
+    },
+    "fighters": [
+     "philippa"
+    ]
+   },
+   {
+    "index": 4,
+    "title": "Spellbreaker",
+    "type": "versatile",
+    "value": 2,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Philippa",
+    "text": {
+     "immediately": "Cancel all effects on your opponent's card.",
+     "after": "End the turn."
+    },
+    "fighters": [
+     "philippa"
+    ]
+   },
+   {
+    "index": 5,
+    "title": "Redanian plot",
+    "type": "versatile",
+    "value": 2,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "immediately": "Your opponent may discard 1 card. If they don't, ignore their card's value."
+    },
+    "fighters": []
+   },
+   {
+    "index": 6,
+    "title": "Regicide",
+    "type": "attack",
+    "value": 4,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "during": "If the opposing fighter is a hero, this card's value is 6 instead."
+    },
+    "fighters": []
+   },
+   {
+    "index": 7,
+    "title": "Spymaster's ruse",
+    "type": "scheme",
+    "value": null,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Djkstra",
+    "text": {
+     "effect": "Choose an opponent. They reveal 4 cards from their hand. Choose 2 of those cards for them to discard. Then, they draw 2 cards."
+    },
+    "fighters": [
+     "dijkstra"
+    ]
+   },
+   {
+    "index": 8,
+    "title": "Backup plan",
+    "type": "scheme",
+    "value": null,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Philippa",
+    "text": {
+     "effect": "Choose one: - set Philippa's health to 5 - draw 3 cards"
+    },
+    "fighters": [
+     "philippa"
+    ]
+   },
+   {
+    "index": 9,
+    "title": "Blinding dust",
+    "type": "defense",
+    "value": 2,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Philippa",
+    "text": {
+     "after": "You may discard 1 card. If you do, deal damage to the opposing fighter equal to its BOOST value."
+    },
+    "fighters": [
+     "philippa"
+    ]
+   },
+   {
+    "index": 10,
+    "title": "Chain lightning",
+    "type": "attack",
+    "value": 2,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Philippa",
+    "text": {
+     "after": "Choose a zone Philippa is in. Deal 1 damage to each opposing fighter in that zone."
+    },
+    "fighters": [
+     "philippa"
+    ]
+   },
+   {
+    "index": 11,
+    "title": "Cunning",
+    "type": "versatile",
+    "value": 4,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "after": "Your opponent may discard 1 card. If they don't, deal 2 damage to the opposing fighter."
+    },
+    "fighters": []
+   },
+   {
+    "index": 12,
+    "title": "Do my bidding",
+    "type": "defense",
+    "value": 3,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "immediately": "Return your opponent's card to their hand. Look at their hand and choose a card for them to play. (It may be the same card.)"
+    },
+    "fighters": []
+   },
+   {
+    "index": 13,
+    "title": "Polymorphy",
+    "type": "scheme",
+    "value": null,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Philippa",
+    "text": {
+     "effect": "Place Philippa in any space.",
+     "ongoing": "Philippa's move value is 5. Discard this card at the end of your turn if Philippa it not in a zone with an opposing fighter."
+    },
+    "fighters": [
+     "philippa"
+    ]
+   }
+  ]
+ },
+ {
+  "id": "yennefer-triss",
+  "name": "Yennefer & Triss",
+  "set": "The Witcher - Realms Fall",
+  "color": "#eca632",
+  "move": 2,
+  "ability": "At the beginning of the game, choose Yennefer or Triss to be your hero.\n\nSorceress of Vengerberg\nIMMEDIATELY: If Yennefer is attacking, you may BOOST her attack. (This effect cannot be canceled.)\n\nMerigold the Fearless\nAfter Triss plays a scheme, deal 2 damage to a fighter adjacent to Triss.",
+  "description": "Powerful sorceresses with a complicated history, Yennefer and Triss make a loyal and adaptable duo.",
+  "fighters": [
+   {
+    "id": "yennefer-triss",
+    "name": "Yennefer & Triss",
+    "hero": true,
+    "attack": "ranged",
+    "hp": 14,
+    "count": 1
+   },
+   {
+    "id": "triss",
+    "name": "Triss",
+    "hero": false,
+    "attack": "ranged",
+    "hp": 6,
+    "count": 1
+   },
+   {
+    "id": "yennefer",
+    "name": "Yennefer",
+    "hero": false,
+    "attack": "ranged",
+    "hp": 6,
+    "count": 1
+   }
+  ],
+  "cards": [
+   {
+    "index": 1,
+    "title": "Merigold's Hailstorm",
+    "type": "attack",
+    "value": 4,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Triss",
+    "text": {
+     "after": "Your opponent chooses one: - they discard 2 cards - deal 3 damage to their hero - they discard the top 4 cards of their deck"
+    },
+    "fighters": [
+     "yennefer-triss"
+    ]
+   },
+   {
+    "index": 2,
+    "title": "Quick and ready",
+    "type": "versatile",
+    "value": 2,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "after": "Place your fighter in any space in their zone. Draw 1 card."
+    },
+    "fighters": []
+   },
+   {
+    "index": 3,
+    "title": "Paralyzing fetters",
+    "type": "defense",
+    "value": 2,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "immediately": "The value of your opponent's card is equal to its printed value and cannot be changed."
+    },
+    "fighters": []
+   },
+   {
+    "index": 4,
+    "title": "Incinerate",
+    "type": "attack",
+    "value": 7,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Yennefer",
+    "text": {
+     "during": "Your opponent may discard 2 cards to ignore this card's value.",
+     "effect": "This card's effect cannot be canceled."
+    },
+    "fighters": [
+     "yennefer-triss"
+    ]
+   },
+   {
+    "index": 5,
+    "title": "Magical barrier",
+    "type": "defense",
+    "value": 4,
+    "boost": 3,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "immediately": "Your fighter recovers 1 health."
+    },
+    "fighters": []
+   },
+   {
+    "index": 6,
+    "title": "Portal to anywhere",
+    "type": "attack",
+    "value": 1,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "after": "Place a fighter in the combat in any space. Gain 1 action."
+    },
+    "fighters": []
+   },
+   {
+    "index": 7,
+    "title": "Ball lightning",
+    "type": "versatile",
+    "value": 3,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "after": "If you won the combat, your opponent discards 1 card. Otherwise, both players discard 1 card."
+    },
+    "fighters": []
+   },
+   {
+    "index": 8,
+    "title": "Echoing blast",
+    "type": "attack",
+    "value": 3,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "after": "If you won the combat, return this card to your hand."
+    },
+    "fighters": []
+   },
+   {
+    "index": 9,
+    "title": "Lodge of sorceresses",
+    "type": "scheme",
+    "value": null,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "effect": "Each player simultaneously reveals a card from their hand and draws cards equal to their card's BOOST value. Then, the player(s) who drew the most cards deals that much damage to their hero."
+    },
+    "fighters": []
+   },
+   {
+    "index": 10,
+    "title": "Advisor to the king",
+    "type": "scheme",
+    "value": null,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "effect": "Each of your fighters recovers 1 health. Draw 1 card.",
+     "ongoing": "Your BOOST values are +1. Discard this card at the end of your turn if you didn't attack."
+    },
+    "fighters": []
+   },
+   {
+    "index": 11,
+    "title": "Telepathy",
+    "type": "versatile",
+    "value": 3,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "immediately": "Your opponent may discard 1 card. If they don't cancel all effects on their card."
+    },
+    "fighters": []
+   }
+  ]
+ },
+ {
+  "id": "loki",
+  "name": "Loki",
+  "set": "Battle of Legends, Volume Three",
+  "color": "#5a7a4f",
+  "move": 2,
+  "ability": "MISCHIEF-MONGER\nAfter you play a TRICK, put that card into your opponent's hand instead of your discard pile.\nIf an opponent discards a TRICK from their hand, return that card to your hand or the top of your deck.\nAdd +1 to your move value for each\nTRICK in your opponents hands.",
+  "description": "Meddlesome shape-shifter, underhanded mischiel-maker, god of chaos. Known by many names and as many faces. the legendary trickster is in a generous mood. I'm giving out cards. Hope you enjoy them.\" they say with a wink and a grin.",
+  "fighters": [
+   {
+    "id": "loki",
+    "name": "Loki",
+    "hero": true,
+    "attack": "melee",
+    "hp": 16,
+    "count": 1
+   }
+  ],
+  "cards": [
+   {
+    "index": 1,
+    "title": "Trick: Baldr's downfall",
+    "type": "attack",
+    "value": 4,
+    "boost": null,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "after": "Loki. Draw 1 card. Not Loki. Deal 2 damage to your hero."
+    },
+    "fighters": []
+   },
+   {
+    "index": 2,
+    "title": "TRICK: FREYJA'S RESCUE",
+    "type": "versatile",
+    "value": 2,
+    "boost": null,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "during": "Loki. Swap the values of your card and your opponent's card.",
+     "after": "Not Loki. Loki recovers 3 health."
+    },
+    "fighters": []
+   },
+   {
+    "index": 3,
+    "title": "Shapershifter",
+    "type": "attack",
+    "value": 0,
+    "boost": 2,
+    "copies": 4,
+    "usedBy": "Loki",
+    "text": {
+     "during": "Choose one effect: - add +1 to this card's value for each card in your opponent's hand - gain 1 action"
+    },
+    "fighters": [
+     "loki"
+    ]
+   },
+   {
+    "index": 4,
+    "title": "RAGNARÖK",
+    "type": "attack",
+    "value": 0,
+    "boost": 3,
+    "copies": 2,
+    "usedBy": "Loki",
+    "text": {
+     "during": "Add +3 to this card's value for each TRICK in your opponent's hand.",
+     "effect": "This card's effects cannot be canceled."
+    },
+    "fighters": [
+     "loki"
+    ]
+   },
+   {
+    "index": 5,
+    "title": "GOD OF MISCHIEF",
+    "type": "versatile",
+    "value": 2,
+    "boost": 3,
+    "copies": 3,
+    "usedBy": "Loki",
+    "text": {
+     "immediately": "If your opponent played a TRICK, ignore that card's value. Otherwise, cancel all effects on your opponent's card."
+    },
+    "fighters": [
+     "loki"
+    ]
+   },
+   {
+    "index": 6,
+    "title": "LAEVATEINN",
+    "type": "versatile",
+    "value": 2,
+    "boost": 3,
+    "copies": 3,
+    "usedBy": "Loki",
+    "text": {
+     "during": "Reveal a card in your opponent's hand. Add its BOOST value to this card's value. If you reveal a TRICK, put it in your hand."
+    },
+    "fighters": [
+     "loki"
+    ]
+   },
+   {
+    "index": 7,
+    "title": "Looking for trouble",
+    "type": "attack",
+    "value": 4,
+    "boost": 3,
+    "copies": 3,
+    "usedBy": "Loki",
+    "text": {
+     "immediately": "If your opponent played a card, return it to their hand, look at their hand, and choose a card for them to play."
+    },
+    "fighters": [
+     "loki"
+    ]
+   },
+   {
+    "index": 8,
+    "title": "MALICIOUS FLYTING",
+    "type": "versatile",
+    "value": 3,
+    "boost": 3,
+    "copies": 3,
+    "usedBy": "Loki",
+    "text": {
+     "after": "Draw 1 card. If your opponent played a TRICK, draw 2 cards instead."
+    },
+    "fighters": [
+     "loki"
+    ]
+   },
+   {
+    "index": 9,
+    "title": "TRICK: SINDRI'S BET",
+    "type": "defense",
+    "value": 3,
+    "boost": null,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "during": "Loki. Your opponent may discard a card. If they don't, subtract 3 from their card's value.",
+     "after": "Not Loki. Loki returns the top card of their discard pile to their hand."
+    },
+    "fighters": []
+   },
+   {
+    "index": 10,
+    "title": "TRICK: SVADILFARI'S LURE",
+    "type": "scheme",
+    "value": null,
+    "boost": null,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "effect": "Loki. Place an opposing fighter adjacent to Loki. Not Loki. Loki reveals a card in your hand. Discard that card."
+    },
+    "fighters": []
+   },
+   {
+    "index": 11,
+    "title": "UNDERHANDED",
+    "type": "versatile",
+    "value": 3,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Loki",
+    "text": {
+     "during": "If your opponent has more cards in their hand than you, this card's value is 6 instead."
+    },
+    "fighters": [
+     "loki"
+    ]
+   }
+  ]
+ },
+ {
+  "id": "sun-wukong",
+  "name": "Sun Wukong",
+  "set": "Battle of Legends, Volume Two",
+  "color": "#f0c833",
+  "move": 2,
+  "ability": "At the start of your turn, you may take 1 damage to summon a Clone in an empty space adjacent to Sun Wukong.\nDo not start with any Clones on the board.",
+  "description": "Ox, tortoise, phoenix, sly monkey. He and his army of clones will bewilder you with their taunting laughter as much as their infinite strikes.",
+  "fighters": [
+   {
+    "id": "sun-wukong",
+    "name": "Sun Wukong",
+    "hero": true,
+    "attack": "melee",
+    "hp": 17,
+    "count": 1
+   },
+   {
+    "id": "clones",
+    "name": "Clones",
+    "hero": false,
+    "attack": "melee",
+    "hp": 1,
+    "count": 3
+   }
+  ],
+  "cards": [
+   {
+    "index": 1,
+    "title": "Ruyi Jingo Bang",
+    "type": "attack",
+    "value": 0,
+    "boost": 3,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "after": "If your opponent played a defense card, TRICKED YOU. TRICKED YOU: 4 ATK"
+    },
+    "fighters": []
+   },
+   {
+    "index": 2,
+    "title": "Ox Form",
+    "type": "attack",
+    "value": 7,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "during": "If your opponent played a card, they may BOOST it.",
+     "effect": "This card's effects cannot be canceled."
+    },
+    "fighters": []
+   },
+   {
+    "index": 3,
+    "title": "Taunting Laughter",
+    "type": "attack",
+    "value": 3,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "immediately": "Your opponent may discard 1 card from their hand. If they don't, ignore their card's value."
+    },
+    "fighters": []
+   },
+   {
+    "index": 4,
+    "title": "Tortoise Form",
+    "type": "defense",
+    "value": 5,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "during": "Your opponent may BOOST their attack."
+    },
+    "fighters": []
+   },
+   {
+    "index": 5,
+    "title": "Fiery Eyes That See",
+    "type": "scheme",
+    "value": null,
+    "boost": 1,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "effect": "Look at an opponent's hand and choose a card. Put that card on the bottom of their deck. You each draw 1 card."
+    },
+    "fighters": []
+   },
+   {
+    "index": 6,
+    "title": "Golden Chain Mail",
+    "type": "defense",
+    "value": 4,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "during": "Any combat damage you would take is dealt to the opposing fighter instead."
+    },
+    "fighters": []
+   },
+   {
+    "index": 7,
+    "title": "72 Transformations",
+    "type": "versatile",
+    "value": 2,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "after": "Take an OX FORM, TORTOISE FORM, or PHOENIX FORM from your discard pile and return it to your hand."
+    },
+    "fighters": []
+   },
+   {
+    "index": 8,
+    "title": "Bewilderment",
+    "type": "defense",
+    "value": 0,
+    "boost": 2,
+    "copies": 2,
+    "usedBy": "Any",
+    "text": {
+     "during": "Prevent all damage",
+     "after": "You may place your fighter in any space."
+    },
+    "fighters": []
+   },
+   {
+    "index": 9,
+    "title": "Infinite Strikes",
+    "type": "attack",
+    "value": 2,
+    "boost": 2,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "during": "For each other friendly fighter adjacent to the opposing fighter, increase the value of this card by +1.",
+     "after": "Gain 1 action."
+    },
+    "fighters": []
+   },
+   {
+    "index": 10,
+    "title": "Phoenix Form",
+    "type": "scheme",
+    "value": null,
+    "boost": 1,
+    "copies": 1,
+    "usedBy": "Any",
+    "text": {
+     "effect": "Sun Wukong recovers 1 health for each Clone on the board."
+    },
+    "fighters": []
+   },
+   {
+    "index": 11,
+    "title": "Sly Monkey",
+    "type": "versatile",
+    "value": 2,
+    "boost": 3,
+    "copies": 4,
+    "usedBy": "Any",
+    "text": {
+     "after": "If Sun Wukong played this card, summon a Clone in Sun Wukong's space, then place Sun Wukong in a space in his zone."
+    },
+    "fighters": []
+   },
+   {
+    "index": 12,
+    "title": "Wily Fighting",
+    "type": "versatile",
+    "value": 3,
+    "boost": 1,
+    "copies": 3,
+    "usedBy": "Any",
+    "text": {
+     "after": "Deal 1 damage to each opposing fighter adjacent to your fighter."
+    },
+    "fighters": []
+   }
+  ]
+ }
+]

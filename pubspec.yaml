@@ -1,0 +1,158 @@
+name: unmatched_game
+description: "Unmatched fan game"
+# The following line prevents the package from being accidentally published to
+# pub.dev using `flutter pub publish`. This is preferred for private packages.
+publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+
+# The following defines the version and build number for your application.
+# A version number is three numbers separated by dots, like 1.2.43
+# followed by an optional build number separated by a +.
+# Both the version and the builder number may be overridden in flutter
+# build by specifying --build-name and --build-number, respectively.
+# In Android, build-name is used as versionName while build-number used as versionCode.
+# Read more about Android versioning at https://developer.android.com/studio/publish/versioning
+# In iOS, build-name is used as CFBundleShortVersionString while build-number is used as CFBundleVersion.
+# Read more about iOS versioning at
+# https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
+# In Windows, build-name is used as the major, minor, and patch parts
+# of the product and file versions while build-number is used as the build suffix.
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.13.1
+
+# Dependencies specify other packages that your package needs in order to work.
+# To automatically upgrade your package dependencies to the latest versions
+# consider running `flutter pub upgrade --major-versions`. Alternatively,
+# dependencies can be manually updated by changing the version numbers below to
+# the latest version available on pub.dev. To see which dependencies have newer
+# versions available, run `flutter pub outdated`.
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # The following adds the Cupertino Icons font to your application.
+  # Use with the CupertinoIcons class for iOS style icons.
+  cupertino_icons: ^1.0.8
+  audioplayers: ^6.8.1
+  shared_preferences: ^2.5.6
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  # The "flutter_lints" package below contains a set of recommended lints to
+  # encourage good coding practices. The lint set provided by the package is
+  # activated in the `analysis_options.yaml` file located at the root of your
+  # package. See that file for information about deactivating specific lint
+  # rules and activating additional ones.
+  flutter_lints: ^6.0.0
+
+# For information on the generic Dart part of this file, see the
+# following page: https://dart.dev/tools/pub/pubspec
+
+# The following section is specific to Flutter packages.
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/data/
+    - assets/audio/
+    - assets/ui/
+    - assets/cards/achilles/
+    - assets/cards/alice/
+    - assets/cards/ancient-leshen/
+    - assets/cards/annie-christmas/
+    - assets/cards/beowulf/
+    - assets/cards/bigfoot/
+    - assets/cards/black-widow/
+    - assets/cards/blackbeard/
+    - assets/cards/ciri/
+    - assets/cards/doctor-strange/
+    - assets/cards/donatello/
+    - assets/cards/dracula/
+    - assets/cards/eredin/
+    - assets/cards/geralt-of-rivia/
+    - assets/cards/golden-bat/
+    - assets/cards/hamlet/
+    - assets/cards/harry-houdini/
+    - assets/cards/invisible-man/
+    - assets/cards/jekyll-hyde/
+    - assets/cards/king-arthur/
+    - assets/cards/krang/
+    - assets/cards/leonardo/
+    - assets/cards/little-red/
+    - assets/cards/loki/
+    - assets/cards/medusa/
+    - assets/cards/michelangelo/
+    - assets/cards/moon-knight/
+    - assets/cards/nikola-tesla/
+    - assets/cards/philippa/
+    - assets/cards/robin-hood/
+    - assets/cards/sherlock-holmes/
+    - assets/cards/shredder/
+    - assets/cards/sinbad/
+    - assets/cards/sun-wukong/
+    - assets/cards/the-genie/
+    - assets/cards/titania/
+    - assets/cards/willow/
+    - assets/cards/yennefer-triss/
+    - assets/cards/yennenga/
+    - assets/heroes/achilles/
+    - assets/heroes/alice/
+    - assets/heroes/ancient-leshen/
+    - assets/heroes/annie-christmas/
+    - assets/heroes/beowulf/
+    - assets/heroes/bigfoot/
+    - assets/heroes/black-widow/
+    - assets/heroes/blackbeard/
+    - assets/heroes/ciri/
+    - assets/heroes/doctor-strange/
+    - assets/heroes/donatello/
+    - assets/heroes/dracula/
+    - assets/heroes/eredin/
+    - assets/heroes/geralt-of-rivia/
+    - assets/heroes/golden-bat/
+    - assets/heroes/hamlet/
+    - assets/heroes/harry-houdini/
+    - assets/heroes/invisible-man/
+    - assets/heroes/jekyll-hyde/
+    - assets/heroes/king-arthur/
+    - assets/heroes/krang/
+    - assets/heroes/leonardo/
+    - assets/heroes/little-red/
+    - assets/heroes/loki/
+    - assets/heroes/medusa/
+    - assets/heroes/michelangelo/
+    - assets/heroes/moon-knight/
+    - assets/heroes/nikola-tesla/
+    - assets/heroes/philippa/
+    - assets/heroes/robin-hood/
+    - assets/heroes/sherlock-holmes/
+    - assets/heroes/shredder/
+    - assets/heroes/sinbad/
+    - assets/heroes/sun-wukong/
+    - assets/heroes/the-genie/
+    - assets/heroes/titania/
+    - assets/heroes/willow/
+    - assets/heroes/yennefer-triss/
+    - assets/heroes/yennenga/
+  fonts:
+    - family: Saira
+      fonts:
+        - asset: assets/fonts/SairaCondensed-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/SairaCondensed-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/SairaCondensed-ExtraBold.ttf
+          weight: 800
+    - family: Barlow
+      fonts:
+        - asset: assets/fonts/BarlowSemiCondensed-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/BarlowSemiCondensed-MediumItalic.ttf
+          weight: 500
+          style: italic
+        - asset: assets/fonts/BarlowSemiCondensed-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/BarlowSemiCondensed-Bold.ttf
+          weight: 700
