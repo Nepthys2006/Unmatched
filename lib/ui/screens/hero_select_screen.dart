@@ -16,18 +16,36 @@ import '../widgets.dart';
 import 'vs_screen.dart';
 
 class HeroSelectScreen extends StatefulWidget {
-  const HeroSelectScreen({super.key, required this.mode, required this.players, required this.map, required this.ai});
+  const HeroSelectScreen({super.key, required this.mode, required this.players, required this.map, required this.ai})
+    : pickOnly = false,
+      initial = null,
+      taken = const {};
+
+  /// Multiplayer lobby: choose a hero and return its id (Navigator.pop) instead of starting a
+  /// match. Heroes in [taken] are already someone else's.
+  const HeroSelectScreen.pick({super.key, required this.map, this.initial, this.taken = const {}})
+    : pickOnly = true,
+      mode = GameMode.duel,
+      players = 2,
+      ai = AiLevel.medium;
+
   final GameMode mode;
   final int players;
   final MapDef map;
   final AiLevel ai;
+  final bool pickOnly;
+  final String? initial;
+  final Set<String> taken;
   @override
   State<HeroSelectScreen> createState() => _HeroSelectScreenState();
 }
 
 class _HeroSelectScreenState extends State<HeroSelectScreen> {
   late final List<HeroDef> _heroes = context.services.data.heroes.values.toList()..sort((a, b) => a.name.compareTo(b.name));
-  late HeroDef _hero = _heroes[math.Random().nextInt(_heroes.length)];
+  late HeroDef _hero = widget.initial != null && context.services.data.heroes.containsKey(widget.initial)
+      ? context.services.data.hero(widget.initial!)
+      : _free[math.Random().nextInt(_free.length)];
+  List<HeroDef> get _free => _heroes.where((h) => !widget.taken.contains(h.id)).toList();
   final _grid = ScrollController();
 
   @override
@@ -37,7 +55,7 @@ class _HeroSelectScreenState extends State<HeroSelectScreen> {
   }
 
   void _random() {
-    final others = _heroes.where((h) => h != _hero).toList();
+    final others = _free.where((h) => h != _hero).toList();
     setState(() => _hero = others[math.Random().nextInt(others.length)]);
     final i = _heroes.indexOf(_hero);
     if (_grid.hasClients) {
@@ -54,6 +72,10 @@ class _HeroSelectScreenState extends State<HeroSelectScreen> {
   int _perRow = 4;
 
   void _fight() {
+    if (widget.pickOnly) {
+      Navigator.of(context).pop(_hero.id);
+      return;
+    }
     final data = context.services.data;
     final config = MatchConfig(
       mode: widget.mode,
@@ -110,7 +132,9 @@ class _HeroSelectScreenState extends State<HeroSelectScreen> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        '${widget.players - 1} AI ${widget.players == 2 ? 'opponent is' : 'heroes are'} picked at random · ${widget.map.name} · AI ${widget.ai.label}',
+                        widget.pickOnly
+                            ? (widget.taken.contains(_hero.id) ? '${_hero.name} is already taken in this lobby' : 'Choose your hero · ${widget.map.name}')
+                            : '${widget.players - 1} AI ${widget.players == 2 ? 'opponent is' : 'heroes are'} picked at random · ${widget.map.name} · AI ${widget.ai.label}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: bodyStyle(14, color: Palette.muted),
@@ -126,14 +150,14 @@ class _HeroSelectScreenState extends State<HeroSelectScreen> {
                     ),
                     const SizedBox(width: 12),
                     PlateButton(
-                      label: 'Fight as ${_hero.name}',
+                      label: widget.pickOnly ? 'Choose ${_hero.name}' : 'Fight as ${_hero.name}',
                       icon: Icons.bolt_rounded,
                       style: PlateStyle.hero,
                       color: color,
                       point: true,
                       height: 50,
                       fontSize: 18,
-                      onPressed: _fight,
+                      onPressed: widget.pickOnly && widget.taken.contains(_hero.id) ? null : _fight,
                     ),
                   ],
                 ),

@@ -1120,7 +1120,8 @@ class ResultView extends StatelessWidget {
   final Player? winner;
   final String reason;
   final int turns;
-  final VoidCallback onRematch;
+  /// Null in multiplayer (start a new lobby instead).
+  final VoidCallback? onRematch;
   final VoidCallback onMenu;
 
   @override
@@ -1178,8 +1179,10 @@ class ResultView extends StatelessWidget {
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            PlateButton(label: 'Rematch', icon: Icons.replay_rounded, height: 52, fontSize: 19, onPressed: onRematch),
-                            const SizedBox(width: 12),
+                            if (onRematch != null) ...[
+                              PlateButton(label: 'Rematch', icon: Icons.replay_rounded, height: 52, fontSize: 19, onPressed: onRematch),
+                              const SizedBox(width: 12),
+                            ],
                             PlateButton(label: 'Menu', style: PlateStyle.secondary, height: 52, fontSize: 19, onPressed: onMenu),
                           ],
                         ),

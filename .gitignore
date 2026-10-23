@@ -46,3 +46,8 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# Secrets: Supabase keys and database password (see .env)
+.env
+.env.*
+Private.md

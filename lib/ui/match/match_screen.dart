@@ -15,11 +15,13 @@ import '../../engine/combat.dart';
 import '../../engine/events.dart';
 import '../../engine/game.dart';
 import '../../engine/hero_script.dart' show FighterPlacedAtStart;
+import '../../engine/portable_random.dart';
 import '../../engine/prompt.dart';
 import '../../engine/state.dart';
 import '../audio.dart';
 import '../board/board_painter.dart';
 import '../board3d/board3d.dart';
+import '../../net/session.dart';
 import '../screens/settings_screen.dart';
 import '../settings.dart';
 import '../services.dart';
@@ -40,7 +42,10 @@ class _Abandoned implements Exception {
 }
 
 class MatchScreen extends StatefulWidget {
-  const MatchScreen({super.key, required this.config, this.seed, this.autoplay = _autoplay});
+  const MatchScreen({super.key, required this.config, this.seed, this.autoplay = _autoplay, this.net});
+
+  /// LAN / online: who sits where and how decisions travel. Null for a game against the AI.
+  final NetMatch? net;
   final MatchConfig config;
 
   /// An AI answers your prompts too (dev builds and tests only).
@@ -57,7 +62,7 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
   late final Services _s = context.services;
   late Game game;
   late BoardGeometry geo;
-  Player get me => game.players[0];
+  Player get me => game.players[widget.net?.localSeat ?? 0];
 
   // Prompt state.
   Prompt? _prompt;
@@ -144,33 +149,66 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
       heroIds: cfg.heroIds,
       teams: cfg.teams,
       seed: widget.seed,
+      random: widget.net == null ? null : PortableRandom(widget.net!.seed),
       presenter: _present,
       agents: [
-        HumanAgent(_onPrompt),
-        for (var i = 1; i < cfg.heroIds.length; i++)
-          PacedAgent(
-            AiAgent(level: level),
-            think: (p) =>
-                p.ask == Ask.action ? (650 * _speed).round() : (p.ask == Ask.card || p.ask == Ask.space ? (260 * _speed).round() : 0),
-            onThinking: (p) {
-              if (!_disposed && _thinking != p.player) setState(() => _thinking = p.player);
-            },
-          ),
+        for (var i = 0; i < cfg.heroIds.length; i++) _agentFor(i, level),
       ],
     );
-    me
-      ..label = _s.settings.username
-      ..isAI = false;
-    for (final p in game.players.skip(1)) {
-      p
-        ..label = 'AI ${level.label}'
-        ..isAI = true;
+    final net = widget.net;
+    if (net == null) {
+      me
+        ..label = _s.settings.username
+        ..isAI = false;
+      for (final p in game.players.skip(1)) {
+        p
+          ..label = 'AI ${level.label}'
+          ..isAI = true;
+      }
+    } else {
+      _applyNames();
+      net.names.addListener(_applyNames);
+      net.lost.addListener(_onLost);
     }
     _s.audio.music(Music.battle);
     _ensure3d();
     // The 2D board image is only needed without the 3D map (made later if the 3D map fails).
     if (_b3 == null) unawaited(_bakeBoard());
     WidgetsBinding.instance.addPostFrameCallback((_) => _run());
+  }
+
+  Agent _agentFor(int seat, AiLevel level) {
+    final human = HumanAgent(_onPrompt);
+    final ai = PacedAgent(
+      AiAgent(level: level),
+      think: (p) => p.ask == Ask.action ? (650 * _speed).round() : (p.ask == Ask.card || p.ask == Ask.space ? (260 * _speed).round() : 0),
+      onThinking: (p) {
+        if (!_disposed && _thinking != p.player) setState(() => _thinking = p.player);
+      },
+    );
+    final net = widget.net;
+    if (net == null) return seat == 0 ? human : ai;
+    return net.agentFor(seat, human: human, ai: ai);
+  }
+
+  /// Multiplayer: names per seat (an AI takes over for anyone who leaves).
+  void _applyNames() {
+    final net = widget.net!;
+    final names = net.names.value;
+    for (final p in game.players) {
+      p
+        ..label = p == me ? _s.settings.username : names[p.seat]
+        ..isAI = net.aiSeats.contains(p.seat) || names[p.seat].endsWith('(AI)');
+    }
+    if (!_disposed && mounted) setState(() {});
+  }
+
+  /// Multiplayer: the connection is gone.
+  Future<void> _onLost() async {
+    final why = widget.net?.lost.value;
+    if (why == null || _disposed || !mounted || _result != null) return;
+    await showConfirm(context, title: 'Connection lost', message: why, confirm: 'Back to menu', cancel: 'Stay');
+    if (mounted) _toMenu();
   }
 
   Future<void> _run() async {
@@ -219,7 +257,7 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
       if (_boardImage == null) unawaited(_bakeBoard());
       return;
     }
-    final start = widget.config.map.spaces.where((s) => s.start == 1).firstOrNull;
+    final start = widget.config.map.spaces.where((s) => s.start == (widget.net?.localSeat ?? 0) + 1).firstOrNull;
     // The boards' print reads upright from the far (-y) side; seat the camera there unless your
     // start is clearly on the near half.
     final sy = start?.y ?? 0;
@@ -313,6 +351,9 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
     _boardImage?.dispose();
     _disposed = true;
     _drop3d();
+    widget.net?.names.removeListener(_applyNames);
+    widget.net?.lost.removeListener(_onLost);
+    widget.net?.leave();
     if (_answer != null && !_answer!.isCompleted) _answer!.completeError(const _Abandoned());
     _pulse.dispose();
     for (final c in [_banner, _moveA, _fxA, _camA, _shakeA]) {
@@ -492,6 +533,15 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
         _result = e;
         _clearPrompt();
         final won = game.winningTeam == me.team;
+        final net = widget.net;
+        if (net != null && net.isHost) {
+          // Online: the lobby is wiped; only who won and who played are kept.
+          final winners = [
+            for (final p in game.players)
+              if (p.team == game.winningTeam) p.label,
+          ];
+          unawaited(net.reportResult(winner: winners.isEmpty ? null : winners.join(' & '), players: [for (final p in game.players) p.label]));
+        }
         _s.audio.stopMusic();
         _s.audio.sfx(won ? Sfx.victory : Sfx.hit);
         _refresh();
@@ -972,6 +1022,7 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
   }
 
   void _toMenu() {
+    widget.net?.leave();
     _s.audio.music(Music.menu);
     Navigator.of(context).popUntil((r) => r.isFirst);
   }
@@ -1421,7 +1472,7 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
                     winner: _result!.winner,
                     reason: _result!.reason,
                     turns: game.turnNumber,
-                    onRematch: _rematch,
+                    onRematch: widget.net == null ? _rematch : null,
                     onMenu: _toMenu,
                   ),
                 ),

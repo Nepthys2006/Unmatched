@@ -36,13 +36,15 @@ class Game {
     required List<String> heroIds,
     required this.agents,
     int? seed,
+    Random? random,
     this.presenter,
     this.firstSeat,
     List<int>? teams,
     HeroScript Function(String heroId)? scripts,
   })  : // Real games shuffle with the OS's cryptographic RNG so decks can't be predicted;
         // a seed is only for reproducible tests.
-        rng = seed == null ? Random.secure() : Random(seed),
+        // [random] overrides both (multiplayer passes a PortableRandom so every platform agrees).
+        rng = random ?? (seed == null ? Random.secure() : Random(seed)),
         board = Board(map) {
     final make = scripts ?? createHeroScript;
     for (var i = 0; i < heroIds.length; i++) {

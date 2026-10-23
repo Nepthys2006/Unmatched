@@ -4,7 +4,7 @@ Builds the game's data and image assets from the Unmatched folder.
     python tool/build_assets.py [--images]
 
 Data (always):
-    assets/data/heroes.json   the playable heroes (the roster of ../3D Map/src/herodata.json):
+    assets/data/heroes.json   all 70 heroes of ../heroes.json (the app offers the scripted ones):
                               stats, fighters, ability text and every card. Card text comes from
                               ../heroes.json, corrected by tool/card_fixes.json after checking it
                               against the printed cards.
@@ -67,7 +67,10 @@ def match_fighter(label, fighters):
 
 def build_data():
     heroes = {h["name"]: h for h in json.load(open(os.path.join(ROOT, "heroes.json"), encoding="utf-8"))}
+    # The 3D table's 39 heroes first (their order is the original roster), then every other hero
+    # in ../heroes.json. The app only offers heroes whose scripts are done (engine registry).
     roster = list(json.load(open(os.path.join(ROOT, "3D Map", "src", "herodata.json"), encoding="utf-8")))
+    roster += [n for n in heroes if n not in roster]
     fixes = json.load(open(os.path.join(HERE, "card_fixes.json"), encoding="utf-8"))
     out, unresolved = [], []
     for name in roster:

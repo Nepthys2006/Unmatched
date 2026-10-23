@@ -12,6 +12,7 @@ import '../shapes.dart';
 import '../theme.dart';
 import '../widgets.dart';
 import 'settings_screen.dart';
+import 'multiplayer_screen.dart';
 import 'setup_screen.dart';
 
 class MenuScreen extends StatefulWidget {
@@ -39,12 +40,6 @@ class _MenuScreenState extends State<MenuScreen> with SingleTickerProviderStateM
   void dispose() {
     _intro.dispose();
     super.dispose();
-  }
-
-  void _soon(String what) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(gameSnack('$what is coming soon. For now, battle the AI.'));
   }
 
   Future<void> _open(Widget screen) async {
@@ -119,22 +114,20 @@ class _MenuScreenState extends State<MenuScreen> with SingleTickerProviderStateM
                           label: 'LAN',
                           subtitle: 'Same Wi-Fi or phone hotspot',
                           icon: Icons.wifi_tethering_rounded,
-                          badge: 'Coming soon',
                           style: PlateStyle.secondary,
                           height: plateH,
                           fontSize: font,
-                          onPressed: () => _soon('LAN play'),
+                          onPressed: () => _open(const MultiplayerScreen(online: false)),
                         ),
                         SizedBox(height: h * 0.03),
                         PlateButton(
                           label: 'Online',
                           subtitle: 'Play friends anywhere',
                           icon: Icons.public_rounded,
-                          badge: 'Coming soon',
                           style: PlateStyle.secondary,
                           height: plateH,
                           fontSize: font,
-                          onPressed: () => _soon('Online play'),
+                          onPressed: () => _open(const MultiplayerScreen(online: true)),
                         ),
                         SizedBox(height: h * 0.03),
                         PlateButton(

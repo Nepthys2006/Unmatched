@@ -12,10 +12,12 @@ import '../match/match_screen.dart';
 import '../services.dart';
 import '../shapes.dart';
 import '../theme.dart';
+import '../../net/session.dart';
 
 class VsScreen extends StatefulWidget {
-  const VsScreen({super.key, required this.config});
+  const VsScreen({super.key, required this.config, this.net});
   final MatchConfig config;
+  final NetMatch? net;
   @override
   State<VsScreen> createState() => _VsScreenState();
 }
@@ -49,7 +51,7 @@ class _VsScreenState extends State<VsScreen> with SingleTickerProviderStateMixin
       Navigator.of(context).pushReplacement(
         PageRouteBuilder<void>(
           transitionDuration: const Duration(milliseconds: 450),
-          pageBuilder: (_, _, _) => MatchScreen(config: widget.config),
+          pageBuilder: (_, _, _) => MatchScreen(config: widget.config, net: widget.net),
           transitionsBuilder: (_, a, _, child) => FadeTransition(opacity: a, child: child),
         ),
       ),
@@ -68,19 +70,20 @@ class _VsScreenState extends State<VsScreen> with SingleTickerProviderStateMixin
     final data = context.services.data;
     final heroes = [for (final id in c.heroIds) data.hero(id)];
     final teams = c.teams;
+    final me = widget.net?.localSeat ?? 0;
     final mine = <int>[
-      0,
+      me,
       if (teams != null) ...[
-        for (var i = 1; i < heroes.length; i++)
-          if (teams[i] == teams[0]) i,
+        for (var i = 0; i < heroes.length; i++)
+          if (i != me && teams[i] == teams[me]) i,
       ],
     ];
     final theirs = [
-      for (var i = 1; i < heroes.length; i++)
+      for (var i = 0; i < heroes.length; i++)
         if (!mine.contains(i)) i,
     ];
     final username = context.services.settings.username;
-    String who(int seat) => seat == 0 ? username : 'AI ${c.ai.label}';
+    String who(int seat) => seat == me ? username : (widget.net?.names.value[seat] ?? 'AI ${c.ai.label}');
 
     final inL = CurvedAnimation(
       parent: _a,
