@@ -152,7 +152,7 @@ function buildComposer() {
   const samples = !G.aa ? 0 : prMax >= 2.5 ? 0 : prMax >= 1.5 ? 2 : 4;
   if (built.bloom === fx.bloom && built.ao === fx.ao && built.aa === G.aa && built.samples === samples) return;
   built = { bloom: fx.bloom, ao: fx.ao, aa: G.aa, samples };
-  if (composer) { composer.dispose(); composer = null; }
+  disposeComposer();
   for (const p of pieces.values()) sizePiece(p);
   if (!fx.bloom && !fx.ao && !G.aa) return;
   const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples });
@@ -192,6 +192,16 @@ function buildComposer() {
   }
   composer.addPass(new OutputPass());
   invalidate();
+}
+
+/** EffectComposer.dispose frees only its own two targets; each pass (bloom's mip chain, GTAO's
+    buffers) has its own, which leaked every time the effects were rebuilt (a settings change, or
+    the governor turning bloom or AO off and on). */
+function disposeComposer() {
+  if (!composer) return;
+  for (const pass of composer.passes) if (pass.dispose) pass.dispose();
+  composer.dispose();
+  composer = null;
 }
 
 /** Runs a soft, full-screen pass at no more than `k` times the CSS resolution (glow and shading
@@ -1164,7 +1174,14 @@ function sizePiece(p) {
 
 function disposePiece(p) {
   scene.remove(p.group);
-  if (p.tail) scene.remove(p.tail);
+  if (p.tail) {
+    // the back-space knob shares the orb's sphere; its bar and both materials are its own
+    scene.remove(p.tail);
+    p.tail.traverse(o => {
+      if (o.geometry && o.geometry !== orbGeo) o.geometry.dispose();
+      if (o.material) o.material.dispose();
+    });
+  }
   p.group.traverse(o => {
     if (p.figure && o.geometry && o.geometry !== podiumGeo && o.parent && o.parent !== p.group) o.geometry.dispose();
     for (const m of [].concat(o.material || [])) {
@@ -1322,6 +1339,7 @@ function buildTokens(tokens) {
 
 /* ---------------------------------------------------------------- state */
 function applyState(s) {
+  if (!Array.isArray(s.fighters)) return; // not a board state
   if (!loaded) { pendingState = s; return; }
   pendingState = null;
   const seen = new Set();
@@ -1609,6 +1627,11 @@ function receive(raw) {
   let m;
   try { m = typeof raw === 'string' ? JSON.parse(raw) : raw; } catch (e) { return; }
   if (!m || !m.t) return;
+  // One bad message is reported and dropped; the board keeps going.
+  try { handle(m); } catch (e) { post({ t: 'error', msg: `${m.t}: ${e && e.message || e}` }); }
+}
+
+function handle(m) {
   switch (m.t) {
     case 'init': if (!renderer) { init(m); scene && (scene.add(markGroup), scene.add(tokenGroup)); } break;
     case 'state': applyState(m); break;
@@ -1636,7 +1659,11 @@ function receive(raw) {
 const toScreen = v => { const p = v.clone().project(camera); return [(p.x + 1) / 2 * innerWidth, (1 - p.y) / 2 * innerHeight]; };
 window.board = {
   receive,
-  stats: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, pixelRatio: prNow, pixelRatioMax: prMax, composer: !!composer, governor: gov.level, ...fxOn() }),
+  stats: () => ({
+    calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, frames: renderer.info.render.frame,
+    geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures,
+    pieces: pieces.size, pixelRatio: prNow, pixelRatioMax: prMax, composer: !!composer, governor: gov.level, ...fxOn(),
+  }),
   marked: () => ({
     spaces: (marks.spaces || []).filter(id => spaces.has(id)).map(id => toScreen(at(id))),
     fighters: [...(marks.select || []), ...(marks.targets || [])].map(id => pieces.get(id)).filter(Boolean)

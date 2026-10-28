@@ -60,7 +60,9 @@ class HeroEmblem extends StatelessWidget {
             child: DecoratedBox(
               decoration: ShapeDecoration(
                 color: Palette.bgDeep,
-                shape: DiamondBorder(side: BorderSide(color: rim, width: size * 0.055)),
+                shape: DiamondBorder(
+                  side: BorderSide(color: rim, width: size * 0.055),
+                ),
                 shadows: [
                   const BoxShadow(color: Color(0xAA000000), blurRadius: 8, offset: Offset(0, 3)),
                   if (active) BoxShadow(color: Palette.gold.withValues(alpha: 0.55), blurRadius: 14, spreadRadius: 1),
@@ -72,7 +74,10 @@ class HeroEmblem extends StatelessWidget {
             bottom: drop,
             child: Padding(
               padding: EdgeInsets.all(size * 0.075),
-              child: ClipPath(clipper: const ShapeBorderClipper(shape: DiamondBorder()), child: face),
+              child: ClipPath(
+                clipper: const ShapeBorderClipper(shape: DiamondBorder()),
+                child: face,
+              ),
             ),
           ),
           if (seat != null)
@@ -84,7 +89,9 @@ class HeroEmblem extends StatelessWidget {
               child: DecoratedBox(
                 decoration: ShapeDecoration(
                   color: Palette.bone,
-                  shape: DiamondBorder(side: BorderSide(color: Palette.bgDeep, width: badge * 0.08)),
+                  shape: DiamondBorder(
+                    side: BorderSide(color: Palette.bgDeep, width: badge * 0.08),
+                  ),
                 ),
                 child: Center(
                   child: Text('$seat', style: titleStyle(badge * 0.5, color: Palette.bgDeep, spacing: 0)),
@@ -100,7 +107,15 @@ class HeroEmblem extends StatelessWidget {
 /// One square on the plate's right end: an icon over a number (deck, move), or a heart with the
 /// health in it. Numbers pop when they change.
 class StatCell extends StatelessWidget {
-  const StatCell({super.key, required this.value, required this.size, required this.tooltip, this.icon, this.heart = false, this.low = false});
+  const StatCell({
+    super.key,
+    required this.value,
+    required this.size,
+    required this.tooltip,
+    this.icon,
+    this.heart = false,
+    this.low = false,
+  });
   final int value;
   final double size;
   final String tooltip;
@@ -134,8 +149,14 @@ class StatCell extends StatelessWidget {
         ),
         child: AnimatedSwitcher(
           duration: const Duration(milliseconds: 260),
-          transitionBuilder: (child, a) => ScaleTransition(scale: Tween(begin: 1.35, end: 1.0).animate(a), child: FadeTransition(opacity: a, child: child)),
-          child: KeyedSubtree(key: ValueKey(value), child: Center(child: content)),
+          transitionBuilder: (child, a) => ScaleTransition(
+            scale: Tween(begin: 1.35, end: 1.0).animate(a),
+            child: FadeTransition(opacity: a, child: child),
+          ),
+          child: KeyedSubtree(
+            key: ValueKey(value),
+            child: Center(child: content),
+          ),
         ),
       ),
     );
@@ -154,10 +175,7 @@ class CompanionsRow extends StatelessWidget {
   /// The fighters shown, grouped: one entry per fighter, or one per pack.
   static List<List<Fighter>> groups(Player player) {
     final heroes = player.heroes.toList();
-    final others = [
-      ...heroes.skip(1),
-      ...player.fighters.where((f) => f.isSidekick && (!f.reserve || f.defeated)),
-    ];
+    final others = [...heroes.skip(1), ...player.fighters.where((f) => f.isSidekick && (!f.reserve || f.defeated))];
     final out = <List<Fighter>>[];
     for (final f in others) {
       final pack = f.isSidekick && f.def.count > 2;

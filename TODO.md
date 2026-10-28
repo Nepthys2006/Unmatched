@@ -56,6 +56,14 @@ Last updated: 2026-10-24. For the full engine/API reference see `HANDOFF.md`.
   opponents down the right above the actions, each column shrinking to fit; prompt bar between
   the top corners; hand between your plate and the actions; camera controls open sideways.
   `test/hud_layout_test.dart` checks nothing overlaps at 7 screen sizes in every mode.
+- Tests for all of this: `test/hud_layout_test.dart` (no overlaps, 8 sizes, every mode),
+  `test/hud_interaction_test.dart` (every HUD control pressed on your turn and the match plays on;
+  a monkey taps, scrolls and opens panels through whole matches in every mode at 4 sizes down to
+  568x320) and `tool/board3d_stress.js` (the 3D page under hundreds of random messages, settings
+  flips and resizes: no errors, the loop keeps drawing, no memory growth; needs Node + Playwright).
+- The 3D page frees each effect pass when the effects are rebuilt (bloom's and AO's buffers used to
+  leak on every settings change or governor step), frees a large fighter's tail with it, and drops
+  a bad message instead of throwing.
 - GTAO (Ultra's ambient occlusion) skips sprites, see-through overlays and the backdrop (a
   texture background is drawn as a 2x2 plane there, which showed as a dark square mid-board).
 - The web view is laid out at the screen's real pixel density (`_NativeScale` in board3d.dart):

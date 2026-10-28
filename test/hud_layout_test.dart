@@ -1,4 +1,4 @@
-// The match HUD never covers itself: at every screen size, from a small phone to a full-HD
+// The match HUD never covers itself: at every screen size, from a tiny phone to a full-HD
 // desktop, and in every mode (1v1, 2v2, 3v3, free-for-all 5), the menu row, camera button, prompt
 // bar, every player plate (with its companions and skill), the action buttons and each hand card
 // sit side by side, whole and on screen. Set CAPTURE=true to also write screenshots to
@@ -15,6 +15,7 @@ import 'match_hud_test.dart' show shot;
 import 'widget_test.dart' show loadFonts, makeServices;
 
 const _sizes = {
+  'tiny phone': Size(568, 320),
   'small phone': Size(740, 360),
   'iphone se': Size(667, 375),
   'phone': Size(915, 412),
@@ -45,7 +46,7 @@ void main() {
   for (final (mode, gameMode, players, map, heroes) in _modes) {
     for (final MapEntry(key: sizeName, value: size) in _sizes.entries) {
       // Every size for 1v1; the crowded modes on the smallest and the commonest screens.
-      if (mode != '1v1' && !const ['small phone', 'phone', 'desktop'].contains(sizeName)) continue;
+      if (mode != '1v1' && !const ['tiny phone', 'small phone', 'phone', 'desktop'].contains(sizeName)) continue;
       testWidgets('HUD pieces never overlap: $mode, $sizeName', (t) async {
         final s = makeServices(speed: 0.05);
         await t.runAsync(() => s.loadData());
@@ -56,7 +57,10 @@ void main() {
         await t.pumpWidget(
           RepaintBoundary(
             key: const ValueKey('shot'),
-            child: UnmatchedApp(services: s, home: MatchScreen(config: config, seed: 5)),
+            child: UnmatchedApp(
+              services: s,
+              home: MatchScreen(config: config, seed: 5),
+            ),
           ),
         );
         final yourTurn = find.textContaining('choose an action');
@@ -96,7 +100,11 @@ void main() {
         final screen = Offset.zero & size;
 
         for (final MapEntry(key: name, value: r) in pieces.entries) {
-          expect(screen.inflate(1).contains(r.topLeft) && screen.inflate(1).contains(r.bottomRight), isTrue, reason: '$name $r is off screen $size');
+          expect(
+            screen.inflate(1).contains(r.topLeft) && screen.inflate(1).contains(r.bottomRight),
+            isTrue,
+            reason: '$name $r is off screen $size',
+          );
           for (final MapEntry(key: other, value: r2) in pieces.entries) {
             if (name.compareTo(other) >= 0) continue;
             expect(_overlaps(r, r2), isFalse, reason: '$name $r overlaps $other $r2 ($mode, $sizeName)');
