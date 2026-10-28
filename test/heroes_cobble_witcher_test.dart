@@ -193,6 +193,52 @@ void main() {
       expect(s.hero(s.p1).space, 9);
     });
 
+    test('"your opponent moves a fog token": the opponent is asked, and the token moves', () async {
+      final s = Scenario('invisible-man', 'medusa');
+      final im = setupFog(s, [4, 10]);
+      s.place(s.hero(s.p1), 4);
+      s.place(s.hero(s.p2), 6);
+      // Step Lightly: Medusa's player picks the fog at 10 and moves it to 8.
+      s.a2
+        ..then('Fog at 10')
+        ..then(sp(8));
+      await s.game.playScheme(s.p1, s.give(s.p1, 'Step Lightly'));
+      final fogAsks = s.a2.asked.where((p) => p.text.contains('fog')).toList();
+      expect(fogAsks, hasLength(2), reason: 'the opponent chooses the token and where it goes');
+      expect(fogAsks.first.text, contains('Step Lightly'));
+      expect(s.a1.asked.where((p) => p.text.contains('fog')), isEmpty, reason: "Invisible Man's player is not asked");
+      expect(im.fog.map((t) => t.space).toSet(), {4, 8});
+    });
+
+    test('Covert Preparation: he moves one fog, then the opponent moves a different one', () async {
+      final s = Scenario('invisible-man', 'medusa');
+      final im = setupFog(s, [2, 9]);
+      s.place(s.hero(s.p1), 4);
+      s.place(s.hero(s.p2), 5);
+      // An attack (versatile card): its AFTER COMBAT moves the fog.
+      await s.fight(s.hero(s.p1), s.hero(s.p2), 'Covert Preparation', null, then1: ['Fog at 2', sp(3)], then2: [sp(11)]);
+      expect(im.fog.map((t) => t.space).toSet(), {3, 11});
+      expect(s.a2.asked.last.text, contains('Covert Preparation'));
+    });
+
+    test('Vanish: off the board (not drawn, not targetable) until his next turn', () async {
+      final s = Scenario('invisible-man', 'medusa');
+      final im = setupFog(s, [0]);
+      s.place(s.hero(s.p1), 4);
+      s.place(s.hero(s.p2), 5);
+      await s.game.playScheme(s.p1, s.give(s.p1, 'Vanish'));
+      expect(s.game.fighters.where((f) => f.onBoard), isNot(contains(s.hero(s.p1))), reason: 'the board draws only onBoard fighters');
+      expect(im.status(), ['VANISHED']);
+      s.startTurn(s.p2);
+      await im.startOfTurn(s.game, s.p2);
+      expect(s.hero(s.p1).onBoard, isFalse, reason: "still gone during the opponent's turn");
+      s.startTurn(s.p1);
+      s.a1.then(sp(7));
+      await im.startOfTurn(s.game, s.p1);
+      expect(s.hero(s.p1).onBoard, isTrue);
+      expect(s.hero(s.p1).space, 7);
+    });
+
     test('Step Lightly deals 3 on fog; Reign of Terror needs fog', () async {
       final s = Scenario('invisible-man', 'medusa');
       setupFog(s, [4, 11]);

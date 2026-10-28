@@ -1,10 +1,12 @@
-/// First launch: the player names themselves. Saved on the device.
+/// First launch (and after signing out): sign in to an account, or create one. The same username
+/// and password work on every device; the device keeps a session token, not the password.
 library;
 
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../net/account.dart';
 import '../services.dart';
 import '../shapes.dart';
 import '../theme.dart';
@@ -28,8 +30,13 @@ class UsernameScreen extends StatefulWidget {
 }
 
 class _UsernameScreenState extends State<UsernameScreen> {
-  final _field = TextEditingController();
-  String? _error;
+  final _user = TextEditingController();
+  final _pass = TextEditingController();
+  final _passFocus = FocusNode();
+  bool _create = false;
+  bool _busy = false;
+  bool _showPass = false;
+  String? _userError, _passError, _formError;
   String? _mini;
 
   @override
@@ -44,25 +51,62 @@ class _UsernameScreenState extends State<UsernameScreen> {
 
   @override
   void dispose() {
-    _field.dispose();
+    _user.dispose();
+    _pass.dispose();
+    _passFocus.dispose();
     super.dispose();
   }
 
-  void _submit() {
-    final err = nameError(_field.text);
-    if (err != null) {
-      setState(() => _error = err);
-      return;
+  Future<void> _submit() async {
+    if (_busy) return;
+    final ue = usernameError(_user.text);
+    final pe = _create ? passwordError(_pass.text, username: _user.text) : (_pass.text.isEmpty ? 'Enter your password.' : null);
+    setState(() {
+      _userError = ue;
+      _passError = pe;
+      _formError = null;
+    });
+    if (ue != null || pe != null) return;
+    setState(() => _busy = true);
+    try {
+      final a = AccountService();
+      final r = _create ? await a.register(_user.text, _pass.text) : await a.signIn(_user.text, _pass.text);
+      if (!mounted) return;
+      context.services.settings.update((x) => x
+        ..username = r.username
+        ..accountToken = r.token);
+      await Navigator.of(context).pushReplacement(
+        PageRouteBuilder<void>(
+          transitionDuration: const Duration(milliseconds: 450),
+          pageBuilder: (_, _, _) => const MenuScreen(),
+          transitionsBuilder: (_, a, _, child) => FadeTransition(opacity: a, child: child),
+        ),
+      );
+    } catch (e) {
+      final msg = e is StateError ? e.message : 'Something went wrong. Try again.';
+      if (!mounted) return;
+      setState(() {
+        // Name problems go under the username, password problems under the password, the rest
+        // (wrong password, no connection) under the button.
+        if (msg.contains('username is taken') || msg.contains('Usernames are')) {
+          _userError = msg;
+        } else if (msg.contains('Passwords are') || msg.contains("can't be the same")) {
+          _passError = msg;
+        } else {
+          _formError = msg;
+        }
+      });
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
-    final s = context.services;
-    s.settings.update((x) => x.username = _field.text.trim());
-    Navigator.of(context).pushReplacement(
-      PageRouteBuilder<void>(
-        transitionDuration: const Duration(milliseconds: 450),
-        pageBuilder: (_, _, _) => const MenuScreen(),
-        transitionsBuilder: (_, a, _, child) => FadeTransition(opacity: a, child: child),
-      ),
-    );
+  }
+
+  void _mode(bool create) {
+    if (create == _create) return;
+    setState(() {
+      _create = create;
+      _userError = _passError = _formError = null;
+    });
   }
 
   @override
@@ -106,32 +150,108 @@ class _UsernameScreenState extends State<UsernameScreen> {
                     padding: const EdgeInsets.fromLTRB(16, 16, 40, 16),
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 440),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('WHO STEPS INTO\nTHE ARENA?', style: titleStyle((size.height * 0.085).clamp(26, 48), spacing: 1.5)),
-                          const SizedBox(height: 6),
-                          const DecoRule(width: 200, opacity: 0.4),
-                          const SizedBox(height: 14),
-                          Text('Your name goes on your name plate in every match.', style: bodyStyle(15, color: Palette.boneDim)),
-                          const SizedBox(height: 16),
-                          TextField(
-                            controller: _field,
-                            autofocus: true,
-                            maxLength: maxNameLength,
-                            textCapitalization: TextCapitalization.words,
-                            textInputAction: TextInputAction.done,
-                            onSubmitted: (_) => _submit(),
-                            onChanged: (_) {
-                              if (_error != null) setState(() => _error = null);
-                            },
-                            style: titleStyle(24, weight: FontWeight.w700, spacing: 0.6),
-                            decoration: nameFieldDecoration(_error),
-                          ),
-                          const SizedBox(height: 14),
-                          PlateButton(label: 'Continue', icon: Icons.arrow_forward_rounded, width: 220, onPressed: _submit),
-                        ],
+                      child: AutofillGroup(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _create ? 'CLAIM YOUR\nNAME' : 'WHO STEPS INTO\nTHE ARENA?',
+                              style: titleStyle((size.height * 0.075).clamp(24, 44), spacing: 1.5),
+                            ),
+                            const SizedBox(height: 6),
+                            const DecoRule(width: 200, opacity: 0.4),
+                            const SizedBox(height: 14),
+                            _Tabs(create: _create, onChanged: _busy ? null : _mode),
+                            const SizedBox(height: 14),
+                            TextField(
+                              controller: _user,
+                              autofocus: true,
+                              enabled: !_busy,
+                              maxLength: maxNameLength,
+                              autocorrect: false,
+                              enableSuggestions: false,
+                              autofillHints: [_create ? AutofillHints.newUsername : AutofillHints.username],
+                              textInputAction: TextInputAction.next,
+                              onSubmitted: (_) => _passFocus.requestFocus(),
+                              onChanged: (_) {
+                                if (_userError != null || _formError != null) setState(() => _userError = _formError = null);
+                              },
+                              style: titleStyle(22, weight: FontWeight.w700, spacing: 0.6),
+                              decoration: nameFieldDecoration(_userError).copyWith(
+                                hintText: 'Username',
+                                prefixIcon: const Icon(Icons.person_rounded, color: Palette.boneDim),
+                                helperText: _create ? 'Letters, numbers and _ · goes on your name plate' : null,
+                                helperStyle: bodyStyle(12.5, color: Palette.muted),
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            TextField(
+                              controller: _pass,
+                              focusNode: _passFocus,
+                              enabled: !_busy,
+                              obscureText: !_showPass,
+                              autocorrect: false,
+                              enableSuggestions: false,
+                              autofillHints: [_create ? AutofillHints.newPassword : AutofillHints.password],
+                              textInputAction: TextInputAction.done,
+                              onSubmitted: (_) => _submit(),
+                              onChanged: (_) {
+                                if (_passError != null || _formError != null) setState(() => _passError = _formError = null);
+                              },
+                              style: titleStyle(22, weight: FontWeight.w700, spacing: 0.6),
+                              decoration: nameFieldDecoration(_passError).copyWith(
+                                hintText: 'Password',
+                                counterText: '',
+                                prefixIcon: const Icon(Icons.lock_rounded, color: Palette.boneDim),
+                                suffixIcon: IconButton(
+                                  tooltip: _showPass ? 'Hide password' : 'Show password',
+                                  icon: Icon(_showPass ? Icons.visibility_off_rounded : Icons.visibility_rounded, color: Palette.boneDim),
+                                  onPressed: () => setState(() => _showPass = !_showPass),
+                                ),
+                                helperText: _create ? 'At least 6 characters' : null,
+                                helperStyle: bodyStyle(12.5, color: Palette.muted),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            Row(
+                              children: [
+                                PlateButton(
+                                  label: _busy ? (_create ? 'Creating…' : 'Signing in…') : (_create ? 'Create account' : 'Sign in'),
+                                  icon: _create ? Icons.person_add_alt_1_rounded : Icons.login_rounded,
+                                  width: 260,
+                                  onPressed: _busy ? null : _submit,
+                                ),
+                                if (_busy) ...[
+                                  const SizedBox(width: 14),
+                                  const SizedBox(
+                                    width: 22,
+                                    height: 22,
+                                    child: CircularProgressIndicator(strokeWidth: 2.4, color: Palette.boneDim),
+                                  ),
+                                ],
+                              ],
+                            ),
+                            if (_formError != null) ...[
+                              const SizedBox(height: 10),
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Icon(Icons.error_outline_rounded, size: 18, color: Palette.danger),
+                                  const SizedBox(width: 6),
+                                  Expanded(child: Text(_formError!, style: bodyStyle(14, color: Palette.danger))),
+                                ],
+                              ),
+                            ],
+                            const SizedBox(height: 12),
+                            Text(
+                              _create
+                                  ? 'One account for your phone, PC and the web. Names are unique: nobody else can take yours.'
+                                  : 'The same account works on every device.',
+                              style: bodyStyle(13.5, color: Palette.boneDim),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -143,6 +263,44 @@ class _UsernameScreenState extends State<UsernameScreen> {
       ),
     );
   }
+}
+
+/// SIGN IN | CREATE ACCOUNT: two cut plates, the chosen one filled bone.
+class _Tabs extends StatelessWidget {
+  const _Tabs({required this.create, required this.onChanged});
+  final bool create;
+  final ValueChanged<bool>? onChanged;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      for (final (label, value) in const [('SIGN IN', false), ('CREATE ACCOUNT', true)])
+        Padding(
+          padding: const EdgeInsets.only(right: 6),
+          child: Semantics(
+            button: true,
+            selected: create == value,
+            child: InkWell(
+              onTap: onChanged == null ? null : () => onChanged!(value),
+              customBorder: const ChamferBorder(cut: 7),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOutCubic,
+                constraints: const BoxConstraints(minHeight: 48),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                alignment: Alignment.center,
+                decoration: ShapeDecoration(
+                  color: create == value ? Palette.bone : const Color(0xCC0E0F12),
+                  shape: ChamferBorder(cut: 7, side: BorderSide(color: Palette.bone.withValues(alpha: create == value ? 1 : 0.35))),
+                ),
+                child: Text(label, style: titleStyle(15, color: create == value ? Palette.bgDeep : Palette.boneDim, spacing: 1.2)),
+              ),
+            ),
+          ),
+        ),
+    ],
+  );
 }
 
 /// The chamfered name input used here and in Settings.

@@ -50,6 +50,9 @@ class _MultiplayerScreenState extends State<MultiplayerScreen> {
       _sub = d.games.listen((g) => setState(() => _found = g));
       unawaited(d.start());
     }
+    // A browser that was handed the game by a LAN host joins that host.
+    final host = servedByLanHost;
+    if (!_online && host != null) _address.text = host;
     if (_online) {
       unawaited(_loadLobbies());
       _refresh = Timer.periodic(const Duration(seconds: 4), (_) => _loadLobbies());
@@ -281,6 +284,24 @@ class _MultiplayerScreenState extends State<MultiplayerScreen> {
   );
 
   List<Widget> _lanJoin() => [
+    if (servedByLanHost case final host?) ...[
+      PlateButton(
+        label: 'Join the game on $host',
+        subtitle: 'This page came from that host',
+        icon: Icons.login_rounded,
+        height: 58,
+        fontSize: 17,
+        onPressed: _busy ? null : () => _joinLan(host),
+      ),
+      const SizedBox(height: 12),
+    ] else if (!canJoinLan) ...[
+      Text(
+        "Browsers can't reach LAN games from this page. On the same Wi-Fi, open the address the host "
+        'shows under BROWSER (like http://192.168.1.5:47400), or play together with Online.',
+        style: bodyStyle(14, color: Palette.boneDim),
+      ),
+      const SizedBox(height: 12),
+    ],
     if (canDiscoverLan) ...[
       if (_found.isEmpty)
         Row(

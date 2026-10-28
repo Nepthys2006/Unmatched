@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:unmatched_game/engine/ai.dart';
 import 'package:unmatched_game/main.dart';
+import 'package:unmatched_game/ui/widgets.dart';
 import 'package:unmatched_game/ui/audio.dart';
 import 'package:unmatched_game/ui/match/hud.dart';
 import 'package:unmatched_game/ui/match/match_config.dart';
@@ -98,21 +99,40 @@ void main() {
   for (final size in [phone, smallPhone, desktop]) {
     final tag = sizeName(size);
 
-    testWidgets('first launch asks for a name, then shows the menu ($tag)', (t) async {
-      final s = await boot(t, size, username: '');
+    testWidgets('first launch asks to sign in; the form checks its fields before calling the server ($tag)', (t) async {
+      await boot(t, size, username: '');
       await pumpUntil(t, () => find.byType(UsernameScreen).evaluate().isNotEmpty);
-      expect(find.byType(UsernameScreen), findsOneWidget);
+      expect(find.text('SIGN IN'), findsWidgets);
+      expect(find.text('CREATE ACCOUNT'), findsOneWidget);
 
-      await t.tap(find.text('CONTINUE'));
+      // Empty: both fields say what is missing (no network call is made).
+      await t.tap(find.byType(PlateButton));
       await t.pump();
-      expect(find.text('Enter a name to continue.'), findsOneWidget);
+      expect(find.text('Enter a username.'), findsOneWidget);
+      expect(find.text('Enter your password.'), findsOneWidget);
 
-      await t.enterText(find.byType(TextField), '  Daryl ');
-      await t.tap(find.text('CONTINUE'));
-      await pumpUntil(t, () => find.byType(MenuScreen).evaluate().isNotEmpty);
-      expect(s.settings.username, 'Daryl');
+      // Create account: names are 3-16 letters/numbers/_; passwords 6+ and not the name.
+      await t.tap(find.text('CREATE ACCOUNT'));
+      await t.pump(const Duration(milliseconds: 300));
+      final fields = find.byType(TextField);
+      await t.enterText(fields.at(0), 'a b');
+      await t.enterText(fields.at(1), '123');
+      await t.tap(find.byType(PlateButton));
+      await t.pump();
+      expect(find.textContaining('3 to 16 letters'), findsOneWidget);
+      expect(find.text('At least 6 characters.'), findsOneWidget);
+      await t.enterText(fields.at(0), 'Daryl1');
+      await t.enterText(fields.at(1), 'daryl1');
+      await t.tap(find.byType(PlateButton));
+      await t.pump();
+      expect(find.text("Can't be the same as the username."), findsOneWidget);
+      await t.pump(const Duration(seconds: 1));
+    });
+
+    testWidgets('signed in: the menu, with LAN and Online live ($tag)', (t) async {
+      await boot(t, size, home: const MenuScreen());
+      await t.pump(const Duration(milliseconds: 500));
       expect(find.text('PLAY VS AI'), findsOneWidget);
-      // LAN and Online are live (no "Coming soon" badge any more).
       expect(find.text('LAN'), findsOneWidget);
       expect(find.text('ONLINE'), findsOneWidget);
       expect(find.text('COMING SOON'), findsNothing);

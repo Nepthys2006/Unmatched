@@ -7731,7 +7731,7 @@
    },
    {
     "index": 3,
-    "title": "Shapershifter",
+    "title": "Shapeshifter",
     "type": "attack",
     "value": 0,
     "boost": 2,
@@ -12593,7 +12593,7 @@
     "copies": 2,
     "usedBy": "Squirrel Girl",
     "text": {
-     "after": "Move your fighter up to 3 spaces."
+     "after": "Move Squirrel Girl up to 3 spaces."
     },
     "fighters": [
      "squirrel-girl"
@@ -12641,7 +12641,7 @@
      "during": "If there are four or more squirrels in the opposing fighter's zone, the value of this card is 5 instead."
     },
     "fighters": [
-     "squirrel-girl"
+     "squirrel"
     ]
    },
    {
@@ -13407,11 +13407,13 @@
     "copies": 1,
     "usedBy": "Shakespeare",
     "text": {
-     "during": "Increase the value of this card by +1 for each HORROR card in your line. Completion: Deal 1 damage to the opposing fighter for each other card in your line."
+     "during": "Increase the value of this card by +1 for each HORROR card in your line.",
+     "completion": "Deal 1 damage to the opposing fighter for each other card in your line."
     },
     "fighters": [
      "shakespeare"
-    ]
+    ],
+    "syllables": 2
    },
    {
     "index": 2,
@@ -13422,11 +13424,13 @@
     "copies": 2,
     "usedBy": "Shakespeare",
     "text": {
-     "after": "Return a defeated Actor to any space in Shakespeare's zone. Completion: Return all defeated Actors to spaces in Shakespeare's zone."
+     "after": "Return a defeated Actor to any space in Shakespeare's zone.",
+     "completion": "Return all defeated Actors to spaces in Shakespeare's zone."
     },
     "fighters": [
      "shakespeare"
-    ]
+    ],
+    "syllables": 6
    },
    {
     "index": 3,
@@ -13437,9 +13441,11 @@
     "copies": 3,
     "usedBy": "Any",
     "text": {
-     "immediately": "Cancel all effects on your opponent's card. Completion: Return this card to your hand."
+     "immediately": "Cancel all effects on your opponent's card.",
+     "completion": "Return this card to your hand."
     },
-    "fighters": []
+    "fighters": [],
+    "syllables": 2
    },
    {
     "index": 4,
@@ -13450,11 +13456,13 @@
     "copies": 1,
     "usedBy": "Shakespeare",
     "text": {
-     "during": "Increase the value of this card by +1 for each HORROR card in your line. Completion: Deal 1 damage to the opposing fighter for each other card in your line."
+     "during": "Increase the value of this card by +1 for each HORROR card in your line.",
+     "completion": "Deal 1 damage to the opposing fighter for each other card in your line."
     },
     "fighters": [
      "shakespeare"
-    ]
+    ],
+    "syllables": 2
    },
    {
     "index": 5,
@@ -13465,9 +13473,11 @@
     "copies": 2,
     "usedBy": "Any",
     "text": {
-     "after": "Draw 1 card. If you won the combat, draw 2 cards instead. Completion: Move each fighter up to 2 spaces. (This includes opposing fighters.)"
+     "after": "Draw 1 card. If you won the combat, draw 2 cards instead.",
+     "completion": "Move each fighter up to 2 spaces. (This includes opposing fighters.)"
     },
-    "fighters": []
+    "fighters": [],
+    "syllables": 2
    },
    {
     "index": 6,
@@ -13478,11 +13488,13 @@
     "copies": 1,
     "usedBy": "Shakespeare",
     "text": {
-     "during": "Increase the value of this card by +1 for each HORROR card in your line. Completion: Deal 1 damage to the opposing fighter for each other card in your line."
+     "during": "Increase the value of this card by +1 for each HORROR card in your line.",
+     "completion": "Deal 1 damage to the opposing fighter for each other card in your line."
     },
     "fighters": [
      "shakespeare"
-    ]
+    ],
+    "syllables": 2
    },
    {
     "index": 7,
@@ -13493,11 +13505,13 @@
     "copies": 1,
     "usedBy": "Shakespeare",
     "text": {
-     "during": "Increase the value of this card by +1 for each HORROR card in your line. Completion: Deal 1 damage to the opposing fighter for each other card in your line."
+     "during": "Increase the value of this card by +1 for each HORROR card in your line.",
+     "completion": "Deal 1 damage to the opposing fighter for each other card in your line."
     },
     "fighters": [
      "shakespeare"
-    ]
+    ],
+    "syllables": 2
    },
    {
     "index": 8,
@@ -13508,11 +13522,12 @@
     "copies": 3,
     "usedBy": "Shakespeare",
     "text": {
-     "effect": "Completion: Gain 2 actions."
+     "completion": "Gain 2 actions."
     },
     "fighters": [
      "shakespeare"
-    ]
+    ],
+    "syllables": 6
    },
    {
     "index": 9,
@@ -13523,11 +13538,13 @@
     "copies": 3,
     "usedBy": "Actor",
     "text": {
-     "after": "You may return the first card in your line to your hand (before you add this to your line). Completion: Draw 1 card."
+     "after": "You may return the first card in your line to your hand (before you add this to your line).",
+     "completion": "Draw 1 card."
     },
     "fighters": [
      "actor"
-    ]
+    ],
+    "syllables": 2
    },
    {
     "index": 10,
@@ -13538,11 +13555,13 @@
     "copies": 2,
     "usedBy": "Shakespeare",
     "text": {
-     "after": "If you lost the combat, Shakespeare recovers 1 health. Completion: Draw 2 cards. Shakespeare recovers 2 health."
+     "after": "If you lost the combat, Shakespeare recovers 1 health.",
+     "completion": "Draw 2 cards. Shakespeare recovers 2 health."
     },
     "fighters": [
      "shakespeare"
-    ]
+    ],
+    "syllables": 2
    },
    {
     "index": 11,
@@ -13553,9 +13572,11 @@
     "copies": 2,
     "usedBy": "Any",
     "text": {
-     "after": "Move each Actor up to 3 spaces. Completion: Place Shakespeare in a zone with no Actors."
+     "after": "Move each Actor up to 3 spaces.",
+     "completion": "Place Shakespeare in a zone with no Actors."
     },
-    "fighters": []
+    "fighters": [],
+    "syllables": 4
    },
    {
     "index": 12,
@@ -13566,11 +13587,12 @@
     "copies": 2,
     "usedBy": "Shakespeare",
     "text": {
-     "effect": "Completion: Deal 2 damage to any opposing fighter."
+     "completion": "Deal 2 damage to any opposing fighter."
     },
     "fighters": [
      "shakespeare"
-    ]
+    ],
+    "syllables": 4
    },
    {
     "index": 13,
@@ -13581,9 +13603,11 @@
     "copies": 2,
     "usedBy": "Any",
     "text": {
-     "after": "Deal 1 damage to each other fighter in your zone. Completion: Draw 1 card."
+     "after": "Deal 1 damage to each other fighter in your zone.",
+     "completion": "Draw 1 card."
     },
-    "fighters": []
+    "fighters": [],
+    "syllables": 4
    },
    {
     "index": 14,
@@ -13594,9 +13618,11 @@
     "copies": 2,
     "usedBy": "Any",
     "text": {
-     "during": "Increase the value of this card by +1 for each of your fighters adjacent to the opposing fighter. Completion: Place each of your fighters in any space."
+     "during": "Increase the value of this card by +1 for each of your fighters adjacent to the opposing fighter.",
+     "completion": "Place each of your fighters in any space."
     },
-    "fighters": []
+    "fighters": [],
+    "syllables": 4
    },
    {
     "index": 15,
@@ -13607,11 +13633,13 @@
     "copies": 1,
     "usedBy": "Shakespeare",
     "text": {
-     "during": "Increase the value of this card by +1 for each HORROR card in your line. Completion: Deal 1 damage to the opposing fighter for each other card in your line."
+     "during": "Increase the value of this card by +1 for each HORROR card in your line.",
+     "completion": "Deal 1 damage to the opposing fighter for each other card in your line."
     },
     "fighters": [
      "shakespeare"
-    ]
+    ],
+    "syllables": 2
    },
    {
     "index": 16,
@@ -13622,11 +13650,13 @@
     "copies": 2,
     "usedBy": "Actor",
     "text": {
-     "after": "Move your fighter up to 2 spaces. Completion: Draw 1 card."
+     "after": "Move your fighter up to 2 spaces.",
+     "completion": "Draw 1 card."
     },
     "fighters": [
      "actor"
-    ]
+    ],
+    "syllables": 4
    }
   ]
  },
@@ -13636,7 +13666,7 @@
   "set": "Slings and Arrows",
   "color": "#9fc858",
   "move": 2,
-  "ability": "Bubbling Brew\nYour cards go into your cauldron instead of your discard pile.\nAfter you attack, you may cast one spell that you have the ingredients for If you do, discard all the cards in your cauldron.",
+  "ability": "Bubbling Brew\nYour cards go into your cauldron instead of your discard pile.\nAfter you attack, you may cast one spell that you have the ingredients for. If you do, discard all the cards in your cauldron.",
   "description": "Lizard's leg, wool of bat, fillet of a fenny snake. Brew a charm of powerful trouble, and your opponent's life you're sure to take.",
   "fighters": [
    {
@@ -13645,7 +13675,7 @@
     "hero": true,
     "attack": "melee",
     "hp": 6,
-    "count": 1
+    "count": 3
    }
   ],
   "cards": [
@@ -13660,7 +13690,8 @@
     "text": {
      "immediately": "Return a card in your discard pile to your cauldron."
     },
-    "fighters": []
+    "fighters": [],
+    "ingredient": "bat"
    },
    {
     "index": 2,
@@ -13671,9 +13702,10 @@
     "copies": 2,
     "usedBy": "Any",
     "text": {
-     "effect": "Cast any spell. Then, cast a different spell. (Do not discard any cards from your cauldron to cast these spells.))"
+     "effect": "Cast any spell. Then, cast a different spell. (Do not discard any cards from your cauldron to cast these spells.)"
     },
-    "fighters": []
+    "fighters": [],
+    "ingredient": "bat"
    },
    {
     "index": 3,
@@ -13686,7 +13718,8 @@
     "text": {
      "after": "Place the opposing fighter in any space in your fighter's zone."
     },
-    "fighters": []
+    "fighters": [],
+    "ingredient": "bat"
    },
    {
     "index": 4,
@@ -13699,7 +13732,8 @@
     "text": {
      "after": "Return a card in your cauldron to your hand."
     },
-    "fighters": []
+    "fighters": [],
+    "ingredient": "bat"
    },
    {
     "index": 5,
@@ -13712,7 +13746,8 @@
     "text": {
      "after": "Deal damage to the opposing fighter equal to the amount of combat damage your fighter took."
     },
-    "fighters": []
+    "fighters": [],
+    "ingredient": "snake"
    },
    {
     "index": 6,
@@ -13725,7 +13760,8 @@
     "text": {
      "during": "Increase the value of this card by +1 for each different ingredient symbol in your cauldron."
     },
-    "fighters": []
+    "fighters": [],
+    "ingredient": "snake"
    },
    {
     "index": 7,
@@ -13738,7 +13774,8 @@
     "text": {
      "during": "Increase the value of this card by +1 for each different ingredient symbol in your cauldron."
     },
-    "fighters": []
+    "fighters": [],
+    "ingredient": "lizard"
    },
    {
     "index": 8,
@@ -13749,9 +13786,10 @@
     "copies": 2,
     "usedBy": "Any",
     "text": {
-     "effect": "Look at the top 4 cards of your deck. Add 2 of them to your hand and put the other 2 back on top of your deck, in any order."
+     "effect": "Look at the top 4 cards of your deck. Put 2 of them in your hand and the other 2 back on top of your deck in any order."
     },
-    "fighters": []
+    "fighters": [],
+    "ingredient": "lizard"
    },
    {
     "index": 9,
@@ -13764,7 +13802,8 @@
     "text": {
      "immediately": "Discard up to 3 cards from your cauldron. For each one, choose a fighter to recover 1 health. (You may choose the same fighter more than once)"
     },
-    "fighters": []
+    "fighters": [],
+    "ingredient": "snake"
    },
    {
     "index": 10,
@@ -13777,7 +13816,8 @@
     "text": {
      "during": "Reveal the top card of your deck. Your opponent chooses one: - put that card in your hand, - put that card in your cauldron and add its BOOST value to this card's value"
     },
-    "fighters": []
+    "fighters": [],
+    "ingredient": "snake"
    },
    {
     "index": 11,
@@ -13791,7 +13831,8 @@
      "immediately": "Return a card in your discard pile to your cauldron.",
      "after": "If you won the combat, look at the top card of your deck and put it in your hand or cauldron."
     },
-    "fighters": []
+    "fighters": [],
+    "ingredient": "lizard"
    },
    {
     "index": 12,
@@ -13804,7 +13845,8 @@
     "text": {
      "during": "The value of this card is equal to the number of different zones all of your fighters are in."
     },
-    "fighters": []
+    "fighters": [],
+    "ingredient": "lizard"
    }
   ]
  },
@@ -14189,7 +14231,7 @@
     "copies": 3,
     "usedBy": "Tomoe Gozen",
     "text": {
-     "after": "If you won the combat, choose one of the fighters in the combat and move them up to 2 spaces."
+     "after": "If you won the combat, move a fighter in the combat up to 2 spaces."
     },
     "fighters": [
      "tomoe-gozen"
@@ -14248,7 +14290,7 @@
     "copies": 3,
     "usedBy": "Raphael",
     "text": {
-     "immediately": "Cancel all DURING COMBAT and AFTER COMBAR effects on your opponent's card.",
+     "immediately": "Cancel all DURING COMBAT and AFTER COMBAT effects on your opponent's card.",
      "after": "If no effects were canceled this way, deal 2 damage to an adjacent opposing fighter."
     },
     "fighters": [
@@ -14333,7 +14375,7 @@
     "copies": 2,
     "usedBy": "Any",
     "text": {
-     "after": "Shuffle this card in your deck. Then, draw 1 card."
+     "after": "Shuffle this card into your deck. Then, draw 1 card."
     },
     "fighters": []
    },

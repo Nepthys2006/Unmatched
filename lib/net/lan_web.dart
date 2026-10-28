@@ -10,6 +10,13 @@ const lanPort = 47400;
 bool get canHostLan => false;
 bool get canDiscoverLan => false;
 
+/// When this page was served by a LAN host (`http://<host>:47400`), that host's address: the
+/// browser joins it directly. Null on any other page (an https page can't reach LAN hosts).
+String? get servedByLanHost => Uri.base.scheme == 'http' && Uri.base.port == lanPort ? Uri.base.host : null;
+
+/// Whether this page may open plain ws:// connections at all (browsers block them from https).
+bool get canJoinLan => Uri.base.scheme == 'http';
+
 typedef LanGame = ({String ip, String name, int players, int open});
 
 class LanHost implements HostLink {
@@ -20,6 +27,7 @@ class LanHost implements HostLink {
   Stream<LinkEvent> get events => const Stream.empty();
   @override
   String get address => '';
+  String get webAddress => '';
   @override
   void send(String peer, Msg m) {}
   @override

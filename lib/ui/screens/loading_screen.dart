@@ -6,6 +6,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../net/account.dart';
 import '../services.dart';
 import '../shapes.dart';
 import '../theme.dart';
@@ -74,9 +75,23 @@ class _LoadingScreenState extends State<LoadingScreen> with SingleTickerProvider
       final wait = const Duration(milliseconds: 1400) - DateTime.now().difference(started);
       if (wait > Duration.zero && s.preloadImages) await Future<void>.delayed(wait);
       if (!mounted) return;
-      final Widget next = _quickMatch.isNotEmpty
-          ? _quick(s)
-          : (s.settings.hasUsername ? const MenuScreen() : const UsernameScreen());
+      // Accounts: a saved session is checked with the server. Signed out elsewhere (or never
+      // signed in): the sign-in screen. Server unreachable: keep the saved name and play.
+      var account = s.settings.signedIn;
+      if (account) {
+        if (mounted) setState(() => _status = 'Signing in');
+        try {
+          final name = await AccountService().check(s.settings.accountToken);
+          if (name == null) {
+            account = false;
+            s.settings.update((x) => x.accountToken = '');
+          } else if (name != s.settings.username) {
+            s.settings.update((x) => x.username = name);
+          }
+        } catch (_) {}
+      }
+      if (!mounted) return;
+      final Widget next = _quickMatch.isNotEmpty ? _quick(s) : (account ? const MenuScreen() : const UsernameScreen());
       unawaited(
         Navigator.of(context).pushReplacement(
           PageRouteBuilder<void>(

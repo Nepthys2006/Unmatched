@@ -17,6 +17,8 @@ import 'legends.dart';
 import 'marvel_buffy.dart';
 import 'redemption_row.dart';
 import 'slings.dart';
+import 'squirrel_girl.dart';
+import 'suns_origin.dart';
 import 'teen_spirit.dart';
 import 'tmnt.dart';
 import 'witcher_rf.dart';
@@ -86,6 +88,13 @@ final Map<String, HeroScript Function()> heroScripts = {
   'ghost-rider': GhostRider.new,
   'luke-cage': LukeCage.new,
   'deadpool': Deadpool.new,
+  'squirrel-girl': SquirrelGirl.new,
+  'raphael': Raphael.new,
+  'dr-jill-trent': JillTrent.new,
+  'oda-nobunaga': OdaNobunaga.new,
+  'tomoe-gozen': TomoeGozen.new,
+  'shakespeare': Shakespeare.new,
+  'the-wayward-sisters': WaywardSisters.new,
 };
 
 /// Heroes whose ability and every card are scripted and tested.

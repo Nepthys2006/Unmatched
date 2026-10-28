@@ -5,8 +5,10 @@
    camera moves and taps here. Map coordinates: maps.json x -> world x, y -> world z, top at y 0.
 
    Flutter -> page (window.board.receive(json), WebView2 web messages, or iframe postMessage):
-     init   {glb, home, gfx, spaces:[{id,x,y}], links:[[a,b]]}      gfx {graphics settings}
-     state  {fighters:[{id,space,color,hero,hp,name}], marks:{...}, tokens:[...], focus:[id]}
+     init   {art|glb, home, gfx, spaces:[{id,x,y}], links:[[a,b]]}  gfx {graphics settings}
+            art {file, w, h, unitPx}: a printed map drawn on a slab (glb: a 3D Map model)
+     state  {fighters:[{id,space,color,hero,hp,name,mini,fid,v}], marks:{...}, tokens:[...], focus:[id]}
+            (mini: hero id, fid: fighter id, v: which of a hero's hero fighters; they pick the figure)
      move   {id, path:[space], ms}        fx {id, text, color, sparks, ms}        shake {}
      cam    {op:'fit'|'zoom'|'push'|'pull'|'turn'|'tilt', k, a, b, ms}
      drag {dx, dy} / orbit {dx, dy} (fractions of the view) / pinch {k, a} / pick {x, y}
@@ -105,7 +107,7 @@ function setup() {
 
 function applyResolution() {
   prMax = clamp(Math.min(window.devicePixelRatio || 1, 2) * G.scale, .5, 3);
-  prMin = Math.max(.6, prMax * .75); // never blurrier than 3/4 of the chosen resolution
+  prMin = Math.max(.75, prMax * .85); // never blurrier than 85% of the chosen resolution
   prNow = prMax;
   renderer.setPixelRatio(prNow);
   renderer.setSize(innerWidth, innerHeight);
@@ -117,7 +119,11 @@ function applyResolution() {
 function buildComposer() {
   if (composer) { composer.dispose(); composer = null; }
   if (!G.bloom && !G.ao) return;
-  const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: G.aa ? 4 : 0 });
+  const isWebGl2 = renderer.capabilities.isWebGL2;
+  const rt = new THREE.WebGLRenderTarget(1, 1, {
+    type: THREE.HalfFloatType,
+    samples: (G.aa && isWebGl2) ? 2 : 0,
+  });
   composer = new EffectComposer(renderer, rt);
   composer.setPixelRatio(prNow);
   composer.setSize(innerWidth, innerHeight);
@@ -129,7 +135,7 @@ function buildComposer() {
     ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 4, rings: 2, samples: 16 });
     composer.addPass(ao);
   }
-  if (G.bloom) composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), .32, .5, .88));
+  if (G.bloom) composer.addPass(new UnrealBloomPass(new THREE.Vector2(Math.floor(innerWidth / 2), Math.floor(innerHeight / 2)), .32, .5, .88));
   composer.addPass(new OutputPass());
 }
 
@@ -174,18 +180,14 @@ async function init(msg) {
   homeSide = msg.home || 1;
   for (const s of msg.spaces) spaces.set(s.id, { x: s.x, z: s.y, top: .003 });
   links = msg.links || [];
-  const loader = new GLTFLoader();
-  loader.setMeshoptDecoder(MeshoptDecoder);
-  let gltf;
   try {
-    gltf = await loader.loadAsync(msg.glb, e => { if (e.total) post({ t: 'progress', p: e.loaded / e.total }); });
+    boardRoot = msg.art ? await artBoard(msg.art) : (await loadGlb(msg.glb)).scene;
   } catch (e) {
     post({ t: 'error', fatal: true, msg: 'Could not load the map: ' + (e && e.message || e) });
     return;
   }
-  boardRoot = gltf.scene;
   boardRoot.updateMatrixWorld(true);
-  boardRoot = mergeStatic(boardRoot);
+  if (!msg.art) boardRoot = mergeStatic(boardRoot); // an art board is a single mesh already
   boardRoot.traverse(o => {
     if (!o.isMesh) return;
     o.userData.casts = isUnder(o, 'Scenery');
@@ -217,6 +219,7 @@ async function init(msg) {
   );
   table.position.y = box.min.y - .002;
   scene.add(table);
+  if (msg.art) printedLight(W, D);
 
   // Where each space's surface is (discs sit on plinths in diorama mode; bridges are raised).
   const ray = new THREE.Raycaster();
@@ -239,6 +242,59 @@ async function init(msg) {
   invalidate(3);
   // Two frames so the first picture is on screen before the cover is lifted.
   requestAnimationFrame(() => requestAnimationFrame(() => post({ t: 'ready' })));
+}
+
+/** A printed map is lit like the Map Viewer: bright, even, neutral light from above (a sky fill and
+    a sun that casts the shadows), true colours (no film tone curve), and a dark table round it.
+    The old 3D models keep their warm lamp. */
+function printedLight(W, D) {
+  renderer.toneMapping = THREE.NoToneMapping;
+  scene.environment = null;
+  scene.background = new THREE.Color('#101114');
+  scene.fog.color.set('#101114');
+  scene.traverse(o => { if (o.isHemisphereLight) { o.color.set('#fff6e8'); o.groundColor.set('#30302c'); o.intensity = 1.9; } });
+  scene.userData.fill.intensity = 0;
+  // the lamp becomes a sun: white, no fall-off, wide enough to cover the board evenly
+  const h = Math.max(W, D) * 1.4 + 6;
+  lamp.color.set('#ffffff');
+  lamp.decay = 0;
+  lamp.distance = 0;
+  lamp.intensity = 1.3 * Math.PI;
+  lamp.penumbra = 1;
+  lamp.position.set(-W * .3, h, D * .4);
+  lamp.target.position.set(0, 0, 0);
+  lamp.angle = Math.atan(Math.max(W, D) * .9 / h) + .15;
+  lamp.shadow.camera.near = h * .5;
+  lamp.shadow.camera.far = h * 2;
+  scene.traverse(o => {
+    if (o.isMesh && o.material && o.material.color && o.geometry.type === 'PlaneGeometry' && o.position.y < 0) o.material.color.set('#1c1b19');
+  });
+}
+
+function loadGlb(url) {
+  const loader = new GLTFLoader();
+  loader.setMeshoptDecoder(MeshoptDecoder);
+  return loader.loadAsync(url, e => { if (e.total) post({ t: 'progress', p: e.loaded / e.total }); });
+}
+
+/** A printed map as a board on the table: its art on top of a thin slab with a dark edge, the same
+    as the Map Viewer's flat GLBs. Map units are art pixels / unitPx from the picture's centre, so
+    the spaces land on the painted circles. */
+async function artBoard(art) {
+  const tex = await new THREE.TextureLoader().loadAsync(art.file);
+  post({ t: 'progress', p: 1 });
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const W = art.w / art.unitPx, D = art.h / art.unitPx, T = .14;
+  const edge = new THREE.MeshStandardMaterial({ color: '#1d1c1a', roughness: .8 });
+  const top = new THREE.MeshStandardMaterial({ map: tex, roughness: .82 });
+  const slab = new THREE.Mesh(new THREE.BoxGeometry(W, T, D), [edge, edge, top, edge, edge, edge]);
+  slab.position.y = -T / 2;
+  const board = new THREE.Group();
+  board.name = 'Board';
+  board.add(slab);
+  const root = new THREE.Group();
+  root.add(board);
+  return root;
 }
 
 /* The exported maps have ~190 meshes over ~35 materials. Nothing on the table moves, so meshes
@@ -431,9 +487,11 @@ const GLOW = canvasTex(128, 128, (g, w) => {
   r.addColorStop(.6, 'rgba(255,255,255,.16)'); r.addColorStop(1, 'rgba(255,255,255,0)');
   g.fillStyle = r; g.fillRect(0, 0, w, w);
 });
+// A fog puff: a lit cloud ball, grey-blue underneath, so it reads on light and dark boards alike.
 const PUFF = canvasTex(128, 128, (g, w) => {
-  const r = g.createRadialGradient(w / 2, w / 2, 0, w / 2, w / 2, w / 2);
-  r.addColorStop(0, 'rgba(226,231,238,.95)'); r.addColorStop(.55, 'rgba(214,220,228,.6)'); r.addColorStop(1, 'rgba(214,220,228,0)');
+  const r = g.createRadialGradient(w * .42, w * .38, w * .04, w / 2, w / 2, w / 2);
+  r.addColorStop(0, 'rgba(250,252,255,1)'); r.addColorStop(.45, 'rgba(206,214,228,.97)');
+  r.addColorStop(.8, 'rgba(120,132,156,.85)'); r.addColorStop(1, 'rgba(90,100,124,0)');
   g.fillStyle = r; g.fillRect(0, 0, w, w);
 });
 const RETICLE = canvasTex(256, 256, (g, w) => {
@@ -465,35 +523,310 @@ function heartPath(g, x, y, s) {
   g.closePath();
 }
 
-/** Name plate with the health heart, drawn into the fighter's label canvas. */
+/** Shield badge over the fighter: its portrait (hero avatar or sidekick token) in a shield rimmed
+    in the player's colour, and a name plate with the health heart. Redrawn when hp, name or colour
+    change, and once the portrait has loaded. */
 function drawLabel(p) {
   const c = p.label.material.map.image, g = c.getContext('2d'), W = c.width, H = c.height;
   g.clearRect(0, 0, W, H);
-  g.font = `700 ${H * .44}px ${fontFamily}`;
+  const sx = W * .22, sy = 6, sw = W * .56, sh = H * .58;
+  g.save();
+  g.shadowColor = 'rgba(0,0,0,.55)'; g.shadowBlur = 10; g.shadowOffsetY = 3;
+  shieldPath(g, sx, sy, sw, sh); g.fillStyle = p.color; g.fill();
+  g.restore();
+  const ix = sx + sw * .07, iy = sy + sw * .07, iw = sw * .86, ih = sh - sw * .16;
+  g.save();
+  shieldPath(g, ix, iy, iw, ih); g.clip();
+  g.fillStyle = '#1a1b20'; g.fillRect(ix, iy, iw, ih);
+  const img = p.portrait;
+  if (img && img.complete && img.naturalWidth) {
+    const s = Math.max(iw / img.naturalWidth, ih / img.naturalHeight);
+    const dw = img.naturalWidth * s, dh = img.naturalHeight * s;
+    // avatars are framed from the top (faces); round tokens are centred
+    g.drawImage(img, ix + (iw - dw) / 2, p.hero ? iy : iy + (ih - dh) / 2, dw, dh);
+  }
+  g.restore();
+  shieldPath(g, ix, iy, iw, ih); g.lineWidth = 3; g.strokeStyle = 'rgba(255,255,255,.75)'; g.stroke();
+
+  // name plate with the heart at its left end
+  const ph = H * .2, py = sh + 16;
+  g.font = `700 ${ph * .62}px ${fontFamily}`;
   const name = p.name.toUpperCase();
-  const tw = Math.min(g.measureText(name).width, W - H * 1.3);
-  const plateW = tw + H * .5, x0 = (W - plateW - H * .7) / 2 + H * .7;
-  g.fillStyle = 'rgba(14,15,18,.86)';
-  roundRect(g, x0, H * .22, plateW, H * .56, H * .08); g.fill();
+  const tw = Math.min(g.measureText(name).width, W - ph * 2.2);
+  const plateW = tw + ph * .9, x0 = (W - plateW + ph * .7) / 2;
+  g.fillStyle = 'rgba(14,15,18,.88)';
+  roundRect(g, x0, py, plateW, ph, ph * .14); g.fill();
   g.fillStyle = p.color;
-  g.fillRect(x0, H * .22, H * .06, H * .56);
+  g.fillRect(x0, py, ph * .1, ph);
   g.fillStyle = '#ece6d8';
   g.textBaseline = 'middle';
-  g.fillText(name, x0 + H * .24, H * .52, W - H * 1.3);
-  // Heart badge overlapping the plate's left end.
-  const hs = H * .9, hx = x0 - hs * .72, hy = (H - hs) / 2;
+  g.fillText(name, x0 + ph * .5, py + ph * .54, W - ph * 2.2);
+  const hs = ph * 1.35, hx = x0 - hs * .72, hy = py + (ph - hs) / 2;
   heartPath(g, hx, hy, hs); g.fillStyle = '#d8323a'; g.fill();
-  g.lineWidth = H * .05; g.strokeStyle = '#ece6d8'; g.stroke();
+  g.lineWidth = ph * .08; g.strokeStyle = '#ece6d8'; g.stroke();
   g.fillStyle = '#fff';
-  g.font = `800 ${H * .42}px ${fontFamily}`;
+  g.font = `800 ${hs * .46}px ${fontFamily}`;
   g.textAlign = 'center';
   g.fillText(String(p.hp), hx + hs / 2, hy + hs * .47);
   g.textAlign = 'left';
+
+  // the hero's pieces under the plate: a card with its name, tokens one by one, or a counter
+  const items = (p.items || []).slice(0, 2);
+  let ry = py + ph + 10;
+  const rh = ph * .82;
+  for (const it of items) {
+    const color = it.c || '#ece6d8';
+    let text = it.k === 'card' ? it.t : (it.k === 'tokens' && (it.m ?? it.n ?? 0) <= 6 ? '' : `${it.t} ${it.m != null ? `${it.n}/${it.m}` : it.n}`);
+    g.font = `700 ${rh * .56}px ${fontFamily}`;
+    const tokens = it.k === 'tokens' && (it.m ?? it.n ?? 0) <= 6 ? (it.m ?? it.n ?? 0) : 0;
+    const tw2 = Math.min(g.measureText(text).width, W - rh * 3);
+    const w = rh * 1.1 + (text ? tw2 + rh * .35 : 0) + tokens * rh * .78 + (tokens ? rh * .2 : 0);
+    const x = (W - w) / 2;
+    g.fillStyle = 'rgba(14,15,18,.9)';
+    roundRect(g, x, ry, w, rh, rh * .2); g.fill();
+    g.lineWidth = 3; g.strokeStyle = color; g.stroke();
+    g.font = `${rh * .62}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif`;
+    g.textBaseline = 'middle'; g.textAlign = 'left';
+    if (tokens) {
+      for (let k = 0; k < tokens; k++) {
+        g.globalAlpha = k < (it.n || 0) ? 1 : .25;
+        g.fillText(it.e, x + rh * .2 + k * rh * .78, ry + rh * .54);
+      }
+      g.globalAlpha = 1;
+      g.font = `700 ${rh * .5}px ${fontFamily}`; g.fillStyle = color;
+      g.fillText(it.t, x + rh * .3 + tokens * rh * .78, ry + rh * .54);
+    } else {
+      g.fillText(it.e, x + rh * .2, ry + rh * .54);
+      g.font = `700 ${rh * .56}px ${fontFamily}`; g.fillStyle = '#fff';
+      g.fillText(text, x + rh * 1.1, ry + rh * .56, W - rh * 3);
+    }
+    ry += rh + 6;
+  }
   p.label.material.map.needsUpdate = true;
+}
+function shieldPath(g, x, y, w, h) {
+  const r = w * .12;
+  g.beginPath();
+  g.moveTo(x + r, y);
+  g.lineTo(x + w - r, y);
+  g.quadraticCurveTo(x + w, y, x + w, y + r);
+  g.lineTo(x + w, y + h * .5);
+  g.bezierCurveTo(x + w, y + h * .78, x + w * .72, y + h * .9, x + w / 2, y + h);
+  g.bezierCurveTo(x + w * .28, y + h * .9, x, y + h * .78, x, y + h * .5);
+  g.lineTo(x, y + r);
+  g.quadraticCurveTo(x, y, x + r, y);
+  g.closePath();
 }
 function roundRect(g, x, y, w, h, r) {
   g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r);
   g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath();
+}
+
+/* ---------------------------------------------------------------- figures
+   Each fighter is its miniature render (assets/heroes/<hero>/figure*.webp, cut off its printed base
+   by tool/make_figures.py) sculpted into a rounded relief: every opaque pixel is raised by how far
+   it lies inside the silhouette (a quarter-circle profile, so edges roll over and thin parts stay
+   thin), with the render's fine shading pressed in on the front; the back is the same outline with
+   only the broad forms. Sidekicks are their round tokens as domed coins. Front and back meet at zero
+   thickness on the outline. Every figure turns about its own axis to face the camera. */
+let figureIndex = {};       // hero id -> [{file, w, h, baseW, baseX}] (figures.json)
+const figuresReady = fetch('figures.json').then(r => (r.ok ? r.json() : {})).then(j => { figureIndex = j || {}; }).catch(() => {});
+const figureCache = new Map();  // key -> Promise<{tex, geo}>
+const texLoader = new THREE.TextureLoader();
+
+function insideDistance(solid, w, h) {
+  const d = new Float32Array(w * h), D2 = Math.SQRT2;
+  for (let i = 0; i < d.length; i++) d[i] = solid[i] ? 1e9 : 0;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = y * w + x;
+    if (!d[i]) continue;
+    let v = Math.min(d[i], x > 0 ? d[i - 1] + 1 : 1, y > 0 ? d[i - w] + 1 : 1);
+    if (y > 0) v = Math.min(v, x > 0 ? d[i - w - 1] + D2 : D2, x < w - 1 ? d[i - w + 1] + D2 : D2);
+    d[i] = v;
+  }
+  for (let y = h - 1; y >= 0; y--) for (let x = w - 1; x >= 0; x--) {
+    const i = y * w + x;
+    if (!d[i]) continue;
+    let v = Math.min(d[i], x < w - 1 ? d[i + 1] + 1 : 1, y < h - 1 ? d[i + w] + 1 : 1);
+    if (y < h - 1) v = Math.min(v, x < w - 1 ? d[i + w + 1] + D2 : D2, x > 0 ? d[i + w - 1] + D2 : D2);
+    d[i] = v;
+  }
+  return d;
+}
+
+function boxBlur(src, w, h, r) {
+  const tmp = new Float32Array(w * h), out = new Float32Array(w * h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    let s = 0, n = 0;
+    for (let k = Math.max(0, x - r); k <= Math.min(w - 1, x + r); k++) { s += src[y * w + k]; n++; }
+    tmp[y * w + x] = s / n;
+  }
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    let s = 0, n = 0;
+    for (let k = Math.max(0, y - r); k <= Math.min(h - 1, y + r); k++) { s += tmp[k * w + x]; n++; }
+    out[y * w + x] = s / n;
+  }
+  return out;
+}
+
+/** Relief in picture space: x 0..1 across, y 0..1 up, z about ±1. Group 0 is the front, 1 the back. */
+function reliefGeometry(img, coin) {
+  // detail grid: enough for a figure's folds; a coin is a simple dome (keeps phones at 60 fps)
+  const s = Math.min(1, (coin ? 80 : 150) / Math.max(img.width, img.height));
+  const w = Math.max(8, Math.round(img.width * s)), h = Math.max(8, Math.round(img.height * s));
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const g = c.getContext('2d', { willReadFrequently: true });
+  g.drawImage(img, 0, 0, w, h);
+  const px = g.getImageData(0, 0, w, h).data;
+  const N = w * h, solid = new Uint8Array(N), lum = new Float32Array(N);
+  for (let i = 0; i < N; i++) {
+    solid[i] = px[i * 4 + 3] > 128 ? 1 : 0;
+    lum[i] = (.299 * px[i * 4] + .587 * px[i * 4 + 1] + .114 * px[i * 4 + 2]) / 255;
+  }
+  const dist = insideDistance(solid, w, h);
+  const R = coin ? Math.max(3, w * .1) : Math.max(4, Math.min(w, h * .6) * .2);
+  let z = new Float32Array(N);
+  for (let i = 0; i < N; i++) {
+    if (!solid[i]) continue;
+    const t = Math.min(1, Math.max(0, dist[i] - 1) / R);
+    z[i] = Math.sqrt(1 - (1 - t) * (1 - t));
+    if (!coin) z[i] *= .6 + .4 * Math.min(1, Math.max(0, dist[i] - 1) / (R * 2.5));
+  }
+  z = boxBlur(boxBlur(z, w, h, 1), w, h, 1);
+  const zb = new Float32Array(z);
+  if (!coin) {
+    const fine = boxBlur(lum, w, h, 1), soft = boxBlur(lum, w, h, 5), broad = boxBlur(lum, w, h, 10);
+    for (let i = 0; i < N; i++) {
+      if (!solid[i]) continue;
+      const e = Math.min(1, Math.max(0, dist[i] - 1) / R) ** 2;
+      z[i] = Math.max(0, z[i] + (fine[i] - soft[i]) * 1.1 * e);
+      zb[i] = Math.max(0, zb[i] + (soft[i] - broad[i]) * .8 * e);
+    }
+  }
+  for (let i = 0; i < N; i++) if (!solid[i] || dist[i] <= 1) z[i] = zb[i] = 0;
+
+  // vertices at pixel centres; quads touching any solid pixel (the texture's alpha trims the rest)
+  const index = new Int32Array(N).fill(-1), pos = [], uv = [], backZ = [], tris = [];
+  const vert = (x, y) => {
+    const i = y * w + x;
+    if (index[i] < 0) {
+      index[i] = pos.length / 3;
+      pos.push((x + .5) / w, 1 - (y + .5) / h, z[i]);
+      uv.push((x + .5) / w, 1 - (y + .5) / h);
+      backZ.push(zb[i]);
+    }
+    return index[i];
+  };
+  for (let y = 0; y < h - 1; y++) for (let x = 0; x < w - 1; x++) {
+    if (!(solid[y * w + x] || solid[y * w + x + 1] || solid[(y + 1) * w + x] || solid[(y + 1) * w + x + 1])) continue;
+    const a = vert(x, y), b = vert(x + 1, y), cc = vert(x, y + 1), d = vert(x + 1, y + 1);
+    tris.push(a, cc, b, b, cc, d);
+  }
+  // back: same outline the other way, wound the other way. A figure keeps the front's UVs; a coin
+  // flips them so its portrait reads the right way round from behind.
+  const n = pos.length / 3, front = tris.length;
+  for (let i = 0; i < n; i++) { pos.push(pos[i * 3], pos[i * 3 + 1], -backZ[i]); uv.push(coin ? 1 - uv[i * 2] : uv[i * 2], uv[i * 2 + 1]); }
+  for (let i = 0; i < front; i += 3) tris.push(tris[i] + n, tris[i + 2] + n, tris[i + 1] + n);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  geo.setIndex(tris);
+  geo.addGroup(0, front, 0);
+  geo.addGroup(front, front, 1);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+function loadTex(url) {
+  return texLoader.loadAsync(url).then(t => {
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+    t.userData.shared = true; // cached across pieces: never disposed with one
+    return t;
+  });
+}
+
+function loadFigure(url, coin) {
+  if (!figureCache.has(url)) figureCache.set(url, loadTex(url).then(tex => ({ tex, geo: reliefGeometry(tex.image, coin) })));
+  return figureCache.get(url);
+}
+
+const podiumGeo = (() => {
+  const pts = [[0, 0], [1, 0], [1, .72], [.985, .9], [.95, 1], [0, 1]].map(([x, y]) => new THREE.Vector2(x, y));
+  return new THREE.LatheGeometry(pts, 48);
+})();
+const PODIUM_H = .06;
+
+/** Swaps the orb for the fighter's figure once its pictures load (the orb stays if they don't). */
+async function buildFigure(p, f) {
+  await figuresReady;
+  const hero = f.mini && figureIndex[f.mini];
+  let spec, coin = false;
+  if (f.hero && hero && hero.length) spec = hero[Math.min(f.v || 0, hero.length - 1)];
+  else if (!f.hero && f.mini && f.fid) { spec = { file: `../heroes/${f.mini}/${f.fid}.webp` }; coin = true; }
+  if (!spec) return;
+  let fig;
+  try { fig = await loadFigure(spec.file, coin); } catch (e) { return; }
+  if (!pieces.has(p.id) || pieces.get(p.id) !== p) return;   // gone while loading
+
+  // the same size as the Map Viewer: a hero's podium is .72 of a space across, a sidekick's .54
+  const r = p.hero ? .36 : (p.rad < .15 ? .2 : .27), h = PODIUM_H;
+  const podium = new THREE.Mesh(podiumGeo, new THREE.MeshStandardMaterial({ color: new THREE.Color(p.color), roughness: .45, metalness: .05 }));
+  podium.scale.set(r, h, r);
+  podium.userData.casts = true;
+  const cap = new THREE.Mesh(new THREE.CircleGeometry(r * .95, 40).rotateX(-Math.PI / 2),
+    new THREE.MeshStandardMaterial({ color: new THREE.Color(p.color).multiplyScalar(.6), roughness: .8 }));
+  cap.position.y = h + .001;
+
+  // a render's printed base is as wide as the podium, which keeps each figure's real proportions;
+  // a token stands a little wider than its podium
+  let sw, sh, bx = .5;
+  if (coin) { sw = sh = 2 * r * 1.12; } else {
+    const k = 2 * r * .98 / spec.baseW;
+    sw = spec.w * k; sh = spec.h * k;
+    const tallest = 2.6 * 2 * r;
+    if (sh > tallest) { sw *= tallest / sh; sh = tallest; }
+    bx = spec.baseX / spec.w;
+  }
+  const depth = (coin ? .05 : .18) * 2 * r;
+  const geo = fig.geo.clone();
+  geo.scale(sw, sh, depth);
+  geo.translate(-bx * sw, coin ? .004 : -.004, 0);
+  const body = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: fig.tex, alphaTest: .5, roughness: .62 }));
+  body.position.y = h;
+  body.userData.casts = true;
+  // turned toward the camera every frame (faceCamera)
+  const pivot = new THREE.Group();
+  pivot.add(body);
+  const fig3 = new THREE.Group();
+  fig3.add(podium, cap, pivot);
+  fig3.traverse(o => { if (o.isMesh) { o.castShadow = G.shadows > 0 && !!o.userData.casts; o.receiveShadow = G.shadows > 0; } });
+  p.group.add(fig3);
+  p.figure = fig3;
+  p.pivot = pivot;
+  p.podium = podium;
+  p.cap = cap;
+
+  // the orb becomes the figure's centre: taps, effects and the reticle aim at it
+  p.orb.visible = false;
+  p.orb.position.y = h + sh * .5;
+  p.hitR = Math.max(r * 1.2, sh * .55);
+  p.reticle.position.y = p.orb.position.y;
+  p.glow.position.y = .05;
+  p.glow.scale.setScalar(r * 3.2);
+  p.label.position.y = h + sh + .06;
+  renderer.shadowMap.needsUpdate = true;
+  invalidate(3);
+}
+
+/** Figures turn about their own upright axis to face the camera (badges are sprites and already do). */
+function faceCamera() {
+  for (const p of pieces.values()) {
+    if (!p.pivot) continue;
+    const g = p.group.position;
+    p.pivot.rotation.y = Math.atan2(camera.position.x - g.x, camera.position.z - g.z);
+  }
 }
 
 /* ---------------------------------------------------------------- pieces */
@@ -504,7 +837,7 @@ const ringGeo = new THREE.TorusGeometry(1, .07, 8, 48).rotateX(Math.PI / 2);
 const basic = (color, opacity = 1) => new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthWrite: false, toneMapped: false });
 
 function makePiece(f) {
-  const rad = f.hero ? .23 : .165;
+  const rad = f.hero ? .23 : (f.small ? .11 : .165);
   const color = new THREE.Color(f.color);
   const group = new THREE.Group();
   const orb = new THREE.Mesh(orbGeo, new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: .5, roughness: .25, metalness: .05 }));
@@ -528,26 +861,34 @@ function makePiece(f) {
   reticle.scale.setScalar(rad * 4.2);
   reticle.renderOrder = 9;
   reticle.visible = false;
-  const lc = document.createElement('canvas'); lc.width = 384; lc.height = 96;
+  const lc = document.createElement('canvas'); lc.width = 320; lc.height = 400;
   const lt = new THREE.CanvasTexture(lc); lt.colorSpace = THREE.SRGBColorSpace;
   const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: lt, depthTest: false, transparent: true, toneMapped: false }));
-  label.userData.base = f.hero ? 1.25 : 1;
-  label.position.y = orb.position.y + rad + .3;
+  label.userData.base = f.hero ? 1 : (f.small ? .62 : .8);
+  label.center.set(.5, 0);
+  label.position.y = orb.position.y + rad + .08;
   label.renderOrder = 10;
   label.userData.fid = f.id;
   group.add(base, ring, orb, glow, reticle, label);
   scene.add(group);
-  const p = { id: f.id, group, orb, glow, base, ring, reticle, label, rad, color: f.color, name: f.name, hp: f.hp, space: f.space, anim: null };
+  const p = { id: f.id, group, orb, glow, base, ring, reticle, label, rad, hitR: rad * 1.5, color: f.color, name: f.name, hp: f.hp, hero: f.hero, space: f.space, anim: null, items: f.items || [], itemsKey: JSON.stringify(f.items || []) };
+  // portrait for the badge: the hero's avatar, or a sidekick's own token
+  if (f.mini) {
+    p.portrait = new Image();
+    p.portrait.onload = () => { drawLabel(p); invalidate(); };
+    p.portrait.src = f.hero ? `../heroes/${f.mini}/avatar.webp` : `../heroes/${f.mini}/${f.fid}.webp`;
+  }
   sizePiece(p);
   drawLabel(p);
   fontReady.then(() => { drawLabel(p); invalidate(); });
+  buildFigure(p, f);
   return p;
 }
 
-/** Name plate size and orb glow follow the graphics settings. */
+/** Badge size and orb glow follow the graphics settings. */
 function sizePiece(p) {
-  const ls = p.label.userData.base * G.labels;
-  p.label.scale.set(ls * 1.3, ls * .325, 1);
+  const ls = p.label.userData.base * G.labels * .8;
+  p.label.scale.set(ls, ls * 400 / 320, 1);
   p.orb.material.emissiveIntensity = G.bloom ? 1.25 : .5;
 }
 
@@ -555,14 +896,21 @@ function disposePiece(p) {
   scene.remove(p.group);
   if (p.tail) scene.remove(p.tail);
   p.group.traverse(o => {
-    if (o.material) { if (o.material.map && o.material.map !== GLOW && o.material.map !== RETICLE) o.material.map.dispose(); o.material.dispose(); }
+    if (p.figure && o.geometry && o.geometry !== podiumGeo && o.parent && o.parent !== p.group) o.geometry.dispose();
+    for (const m of [].concat(o.material || [])) {
+      if (m.map && m.map !== GLOW && m.map !== RETICLE && !m.map.userData.shared) m.map.dispose();
+      m.dispose();
+    }
   });
 }
 
 function placePiece(p) {
   const s = spaces.get(p.space);
-  if (s) p.group.position.set(s.x, s.top, s.z);
+  // Small fighters sharing a space fan out around its centre ([x, y] in space radii).
+  const [ox, oy] = p.off || [0, 0];
+  if (s) p.group.position.set(s.x + ox * SLOT, s.top, s.z + oy * SLOT);
 }
+const SLOT = .36;
 
 /** A large fighter in two spaces (T. Rex): a smaller orb on the back space, joined by a bar. */
 function placeTail(p) {
@@ -657,11 +1005,17 @@ function buildTokens(tokens) {
   const shadowCount = {}, insightCount = {};
   for (const t of tokens || []) {
     if (t.kind === 'fog' && spaces.has(t.space)) {
-      const c = at(t.space, .22);
-      for (const [dx, dz, s] of [[-.16, .05, .55], [.15, .08, .5], [0, -.12, .6], [.03, .14, .45]]) {
-        const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: PUFF, transparent: true, depthWrite: false, opacity: .8 }));
-        sp.position.set(c.x + dx, c.y + s * .1, c.z + dz);
+      // Invisible Man's fog: a bank of cloud puffs over a soft grey shadow on the space.
+      const c = at(t.space, 0);
+      const shade = new THREE.Mesh(spaceFill, basic('#5a6478', .45));
+      shade.position.set(c.x, c.y + .004, c.z);
+      shade.scale.setScalar(1.25);
+      tokenGroup.add(shade);
+      for (const [dx, dy, dz, s] of [[-.2, .2, .06, .5], [.2, .22, .1, .48], [0, .3, -.14, .56], [.04, .18, .2, .44], [-.06, .42, 0, .46], [.16, .38, -.06, .4]]) {
+        const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: PUFF, transparent: true, depthWrite: false, opacity: .96 }));
+        sp.position.set(c.x + dx, c.y + dy, c.z + dz);
         sp.scale.setScalar(s);
+        sp.renderOrder = 4;
         tokenGroup.add(sp);
       }
     } else if (t.kind === 'trap' && spaces.has(t.space)) {
@@ -705,16 +1059,21 @@ function applyState(s) {
     seen.add(f.id);
     let p = pieces.get(f.id);
     if (!p) { p = makePiece(f); pieces.set(f.id, p); }
-    if (p.hp !== f.hp || p.name !== f.name || p.color !== f.color) {
+    const items = JSON.stringify(f.items || []);
+    if (p.hp !== f.hp || p.name !== f.name || p.color !== f.color || p.itemsKey !== items) {
+      p.itemsKey = items;
+      p.items = f.items || [];
       const recolor = p.color !== f.color;
       p.hp = f.hp; p.name = f.name; p.color = f.color;
       if (recolor) {
         const c = new THREE.Color(f.color);
         p.orb.material.color.copy(c); p.orb.material.emissive.copy(c); p.glow.material.color.copy(c); p.base.material.color.copy(c);
+        if (p.podium) { p.podium.material.color.copy(c); p.cap.material.color.copy(c).multiplyScalar(.6); }
       }
       drawLabel(p);
     }
     p.space = f.space;
+    p.off = f.off;
     p.tailSpace = f.tail;
     if (!p.anim) placePiece(p);
     placeTail(p);
@@ -784,18 +1143,18 @@ function tap(cx, cy) {
   if (!loaded) return;
   const ndc = new THREE.Vector2(cx / innerWidth * 2 - 1, -(cy / innerHeight) * 2 + 1);
   raycaster.setFromCamera(ndc, camera);
-  // Fighters first: the orb, with a hit area a little bigger than the orb for fingers. Name
-  // plates don't count: they float over the neighbouring spaces.
+  // Fighters first: a sphere round the figure (or orb), a little bigger for fingers. Badges don't
+  // count: they float over the neighbouring spaces.
   let best = null, bestD = Infinity;
   const sphere = new THREE.Sphere();
   for (const p of pieces.values()) {
-    sphere.set(p.group.position.clone().add(new V3(0, p.orb.position.y, 0)), p.rad * 1.5);
+    sphere.set(p.group.position.clone().add(new V3(0, p.orb.position.y, 0)), p.hitR);
     const at = raycaster.ray.intersectSphere(sphere, new V3());
     const d = at && at.distanceTo(raycaster.ray.origin);
     if (d != null && d < bestD) { bestD = d; best = p; }
   }
-  const s = best && spaces.get(best.space);
-  if (s) { post({ t: 'tap', x: s.x, y: s.z }); return; }
+  // The piece's own position (not its space's centre), so a tap picks between fighters sharing a space.
+  if (best && spaces.has(best.space)) { post({ t: 'tap', x: best.group.position.x, y: best.group.position.z }); return; }
   // Otherwise the nearest point on the board's surface (bridges are a little higher).
   const plane = new THREE.Plane(new V3(0, 1, 0), -.02);
   const pt = raycaster.ray.intersectPlane(plane, new V3());
@@ -877,6 +1236,7 @@ function loop(now) {
   }
 
   if (busy || dirty > 0) {
+    faceCamera();
     govern(now);
     if (composer) composer.render(); else renderer.render(scene, camera);
     fpsFrames++;
@@ -903,8 +1263,8 @@ function govern(now) {
   const avg = govSum / govN;
   govSum = govN = 0;
   let next = prNow;
-  if (avg > 21) next = Math.max(prMin, prNow * .85);
-  else if (avg < 14 && prNow < prMax) next = Math.min(prMax, prNow * 1.1);
+  if (avg > 26) next = Math.max(prMin, prNow * .9);
+  else if (avg < 15 && prNow < prMax) next = Math.min(prMax, prNow * 1.05);
   if (Math.abs(next - prNow) > .01) {
     prNow = next;
     renderer.setPixelRatio(prNow);

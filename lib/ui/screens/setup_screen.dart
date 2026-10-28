@@ -7,14 +7,13 @@ import 'package:flutter/material.dart';
 
 import '../../engine/ai.dart';
 import '../../engine/defs.dart';
-import '../board/board_painter.dart';
-import '../board3d/board3d.dart';
 import '../match/match_config.dart';
 import '../services.dart';
 import '../shapes.dart';
 import '../theme.dart';
 import '../widgets.dart';
 import 'hero_select_screen.dart';
+import 'map_select_screen.dart';
 
 class SetupScreen extends StatefulWidget {
   const SetupScreen({super.key});
@@ -245,7 +244,7 @@ class _SetupScreenState extends State<SetupScreen> {
             padding: const EdgeInsets.fromLTRB(24, 4, 24, 8),
             itemCount: maps.length,
             separatorBuilder: (_, _) => const SizedBox(width: 12),
-            itemBuilder: (_, i) => _MapCard(map: maps[i], selected: maps[i] == _map, onTap: () => setState(() => _map = maps[i])),
+            itemBuilder: (_, i) => MapCard(map: maps[i], selected: maps[i] == _map, onTap: () => setState(() => _map = maps[i])),
           ),
         ),
       ],
@@ -349,104 +348,4 @@ class _SeatsGlyph extends CustomPainter {
 
   @override
   bool shouldRepaint(_SeatsGlyph old) => old.mode != mode || old.players != players || old.selected != selected;
-}
-
-class _MapCard extends StatelessWidget {
-  const _MapCard({required this.map, required this.selected, required this.onTap});
-  final MapDef map;
-  final bool selected;
-  final VoidCallback onTap;
-
-  /// The 3D map's screenshot when playing in 3D, else the 2D board.
-  Widget _preview(BuildContext context) {
-    final thumb = modelThumb(map);
-    if (thumb == null || !context.services.settings.board3d || !board3dSupported) return MapPreview(map);
-    return ClipPath(
-      clipper: const ShapeBorderClipper(shape: ChamferBorder(cut: 6)),
-      child: Image.asset(thumb, fit: BoxFit.cover, width: double.infinity, height: double.infinity),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final shape = ChamferBorder(
-      cut: 10,
-      side: BorderSide(color: selected ? Palette.bone : Palette.bone.withValues(alpha: 0.2), width: selected ? 2 : 1),
-    );
-    final starts = map.spaces.where((s) => s.start != null).length;
-    return Semantics(
-      button: true,
-      selected: selected,
-      label: '${map.name}. ${map.blurb}',
-      child: SizedBox(
-        width: 288,
-        child: Material(
-          color: selected ? Palette.panelHi : Palette.panel,
-          shape: shape,
-          elevation: selected ? 6 : 1,
-          shadowColor: Colors.black,
-          child: InkWell(
-            customBorder: shape,
-            onTap: onTap,
-            child: Padding(
-              padding: const EdgeInsets.all(10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(child: Center(child: _preview(context))),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          map.name.toUpperCase(),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: titleStyle(18, spacing: 0.8),
-                        ),
-                      ),
-                      if (selected) const Icon(Icons.check_circle_rounded, color: Palette.confirmHi, size: 20),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    map.blurb,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: bodyStyle(12.5, color: Palette.muted),
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      Text(
-                        '${map.spaces.length} SPACES · $starts STARTS',
-                        style: titleStyle(11.5, color: Palette.boneDim, weight: FontWeight.w600, spacing: 1),
-                      ),
-                      const Spacer(),
-                      for (final z in map.zones.values.take(6))
-                        Padding(
-                          padding: const EdgeInsets.only(left: 3),
-                          child: Tooltip(
-                            message: z.name,
-                            child: Container(
-                              width: 11,
-                              height: 11,
-                              decoration: BoxDecoration(
-                                color: hexColor(z.color),
-                                shape: BoxShape.circle,
-                                border: Border.all(color: Colors.black54),
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }

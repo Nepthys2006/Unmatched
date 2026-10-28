@@ -24,10 +24,11 @@ Widget buildHost(Board3DController c) {
   return const SizedBox.expand();
 }
 
-/// Serves assets/web3d, assets/maps3d and assets/fonts from the bundle on 127.0.0.1.
+/// Serves assets/web3d, assets/maps (the boards' art), assets/maps3d, assets/fonts and assets/heroes
+/// (the fighters' figures and tokens) from the bundle on 127.0.0.1.
 abstract final class _AssetServer {
   static Future<Uri>? _base;
-  static const _allowed = ['assets/web3d/', 'assets/maps3d/', 'assets/fonts/'];
+  static const _allowed = ['assets/web3d/', 'assets/maps/', 'assets/maps3d/', 'assets/fonts/', 'assets/heroes/'];
 
   static Future<Uri> start() => _base ??= _start();
 
@@ -64,6 +65,7 @@ abstract final class _AssetServer {
     'js' => 'text/javascript; charset=utf-8',
     'glb' => 'model/gltf-binary',
     'webp' => 'image/webp',
+    'json' => 'application/json',
     'ttf' => 'font/ttf',
     _ => 'application/octet-stream',
   };

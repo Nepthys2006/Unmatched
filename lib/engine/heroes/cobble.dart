@@ -314,19 +314,26 @@ class InvisibleMan extends HeroScript {
   @override
   List<String> status() => [if (vanished) 'VANISHED', if (!vanished && im.onBoard && onFog()) 'ON FOG'];
 
-  /// [who] moves one fog token up to [n] spaces (along the lines; never onto another fog).
-  Future<void> moveFog(Player who, int n, {Token? only, Token? except, bool anywhere = false}) async {
+  /// [who] moves one fog token up to [n] spaces (along the lines; never onto another fog). The
+  /// prompts name the card and say whose move it is: "your opponent moves a fog token" cards ask
+  /// the opposing player.
+  Future<void> moveFog(Player who, int n, {Token? only, Token? except, bool anywhere = false, String why = ''}) async {
     final tokens = only != null ? [only] : fog.where((t) => t != except).toList();
     if (tokens.isEmpty) return;
+    final how = anywhere ? 'to any space' : 'up to $n space${n == 1 ? '' : 's'}';
+    final lead = why.isEmpty ? '' : '$why: ';
+    final whose = who == me ? '' : "Invisible Man's ";
     final t = tokens.length == 1
         ? tokens.first
-        : await game.choose<Token>(who, Ask.space, 'Choose a fog token to move', [for (final t in tokens) Choice('Fog at ${t.space}', t)],
+        : await game.choose<Token>(who, Ask.space, '${lead}choose ${whose.isEmpty ? 'a' : whose}fog token to move $how',
+            [for (final t in tokens) Choice('Fog at ${t.space}', t)],
             intent: Intent.none);
     if (t == null) return;
     final dest = anywhere
         ? game.board.spaceIds.where((s) => s != t.space && !onFog(s)).toList()
         : _within(t.space!, n).where((s) => s == t.space || !onFog(s)).toList();
-    final s = await game.chooseSpace(who, dest, 'Move the fog token', intent: who == me ? Intent.moveOwn : Intent.moveEnemy, subject: t);
+    final s = await game.chooseSpace(who, dest, '${lead}move the fog token $how',
+        intent: who == me ? Intent.moveOwn : Intent.moveEnemy, subject: t);
     if (s != null && s != t.space) {
       t.space = s;
       await game.emit(StatusChanged(me, ''));
@@ -347,7 +354,7 @@ class InvisibleMan extends HeroScript {
   Map<String, CardScript> get cards => {
         'INTO THIN AIR': CardScript(after: (x) async {
           await x.move(im, 1);
-          await moveFog(x.opp, 3);
+          await moveFog(x.opp, 3, why: 'Into Thin Air');
         }),
         'CONFOUND': CardScript(after: (x) async {
           final pay = x.opp.hand.isNotEmpty &&
@@ -358,7 +365,7 @@ class InvisibleMan extends HeroScript {
           }
           for (final t in fog.toList()) {
             if (await x.yesNo('Move the fog at space ${t.space} to another space?', intent: Intent.none)) {
-              await moveFog(x.me, 0, only: t, anywhere: true);
+              await moveFog(x.me, 0, only: t, anywhere: true, why: 'Confound');
             }
           }
         }),
@@ -372,19 +379,19 @@ class InvisibleMan extends HeroScript {
           if (x.oppCard != null) x.oppSide.lockZero = true;
         }),
         'ROLLING FOG': CardScript(effect: (x) async {
-          await moveFog(x.me, 0, anywhere: true);
+          await moveFog(x.me, 0, anywhere: true, why: 'Rolling Fog');
           x.gainActions(1);
         }),
         'STEP LIGHTLY': CardScript(effect: (x) async {
           final f = await x.chooseFighter(x.adjacentTo(im), 'Deal ${onFog() ? 3 : 1} damage to an adjacent fighter', intent: Intent.harm);
           if (f != null) await x.damage(f, onFog() ? 3 : 1);
-          await moveFog(x.opp, 2);
+          await moveFog(x.opp, 2, why: 'Step Lightly');
         }),
         'SURPRISE ATTACK': CardScript(
           immediately: (x) async => x.cancelOpponent(),
           after: (x) async {
             final t = fogAt(im.space);
-            if (t != null) await moveFog(x.me, 0, only: t, anywhere: true);
+            if (t != null) await moveFog(x.me, 0, only: t, anywhere: true, why: 'Surprise Attack');
           },
         ),
         'CODED NOTES': CardScript(after: (x) async {
@@ -397,10 +404,11 @@ class InvisibleMan extends HeroScript {
         }),
         'COVERT PREPARATION': CardScript(after: (x) async {
           await x.draw(1);
+          if (fog.isEmpty) return;
           final before = {for (final t in fog) t: t.space};
-          await moveFog(x.me, 2);
+          await moveFog(x.me, 2, why: 'Covert Preparation');
           final moved = fog.where((t) => t.space != before[t]).firstOrNull;
-          await moveFog(x.opp, 2, except: moved ?? fog.first);
+          await moveFog(x.opp, 2, except: moved ?? fog.first, why: 'Covert Preparation');
         }),
         'EMERGE FROM MIST': valueIf((x) => startedOnFog, 5),
         'LURKING': CardScript(after: (x) async {
@@ -409,7 +417,7 @@ class InvisibleMan extends HeroScript {
           if (i == 0) {
             if (im.onBoard) await x.place(im, fog.map((t) => t.space!), text: 'Move Invisible Man to a fog space');
           } else {
-            await moveFog(x.me, 3);
+            await moveFog(x.me, 3, why: 'Lurking');
           }
         }),
         'VANISH': CardScript(effect: (x) async {

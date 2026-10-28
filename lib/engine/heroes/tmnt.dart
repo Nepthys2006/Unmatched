@@ -1,4 +1,4 @@
-/// Teenage Mutant Ninja Turtles: Leonardo, Donatello, Michelangelo (Adventures) and Shredder,
+/// Teenage Mutant Ninja Turtles: Leonardo, Donatello, Michelangelo, Raphael (Adventures) and Shredder,
 /// Krang (Shredder vs Krang hero decks).
 library;
 
@@ -562,3 +562,72 @@ class Krang extends HeroScript {
       };
 }
 
+
+// ================================================================================== Raphael
+
+/// Anger Issues: on each of your turns, the first time you lose combat, gain 1 action.
+class Raphael extends HeroScript {
+  Fighter get raph => me.heroFighter;
+  Fighter? get casey => me.fighters.where((f) => f.id == 'casey-jones').firstOrNull;
+
+  /// Turn flag: [me] lost a combat this turn (Payback Time!).
+  String get _lost => 'raphLost${me.seat}';
+
+  @override
+  Future<void> afterCombat(Game g, Combat c) async {
+    if (c.attacker.player != me && c.defender.player != me) return;
+    if (c.won(me)) return;
+    final first = g.turn.flags[_lost] != true;
+    g.turn.flags[_lost] = true;
+    if (first && g.active == me) {
+      await g.say('Anger Issues: Raphael lost the combat, gain 1 action.');
+      g.gainActions(me, 1);
+    }
+  }
+
+  @override
+  Map<String, CardScript> get cards => {
+        'BATTER UP!': CardScript(after: (x) async {
+          if (x.won) await pushOpponent(x, 3);
+        }),
+        'BREAK SOMETHING': CardScript(
+          immediately: (x) async => x.mySide.vars['broke'] = x.game.cancelDuringAndAfter(x.oppSide),
+          after: (x) async {
+            if (x.mySide.vars['broke'] == true || !x.fighter.onBoard) return;
+            final f = await x.chooseFighter(x.enemiesAdjacentTo(x.fighter).toList(),
+                'Break Something: deal 2 damage to an adjacent opposing fighter', intent: Intent.harm);
+            if (f != null) await x.damage(f, 2);
+          },
+        ),
+        'CROWD CONTROL': CardScript(after: (x) async {
+          final foes = x.enemiesAdjacentTo(x.fighter).toList();
+          if (foes.isEmpty) return;
+          await x.draw(foes.length);
+          for (final f in foes) {
+            await x.damage(f, 1);
+          }
+        }),
+        "LET'S DO THIS!": CardScript(after: (x) => x.draw(x.won ? 2 : 1)),
+        'PAYBACK TIME!': valueIf((x) => x.game.turn.flags[_lost] == true, 5),
+        'RAPHAEL IS COOL BUT RUDE': CardScript(effect: (x) async {
+          for (final f in x.enemies.where((e) => x.adjacentTo(e).any((o) => o.isFriendOf(x.me))).toList()) {
+            await x.damage(f, 1);
+          }
+          await x.draw(1);
+        }),
+        'RELENTLESS': CardScript(after: (x) async {
+          if (x.card != null && x.game.isInPlay(x.card!)) await x.game.toDeck(x.card!, shuffle: true);
+          await x.draw(1);
+        }),
+        'SAI': vanilla,
+        'SLAPSHOT': valueIf((x) => casey != null && x.fighter == casey && x.adjacent(casey!, x.oppFighter), 6),
+        'UNBRIDLED RAGE': CardScript(during: (x) async {
+          final cards = await x.game.chooseCards(x.me, x.me.hand.where((c) => c.def.canDefend), 0, x.me.hand.length,
+              'Unbridled Rage: discard any number of defense or versatile cards (+2 each)', intent: Intent.boost, source: x.card);
+          for (final c in cards) {
+            await x.game.discardCard(c, reason: ' (Unbridled Rage)');
+          }
+          if (cards.isNotEmpty) x.addValue(2 * cards.length, '${cards.length} card${cards.length == 1 ? '' : 's'} discarded');
+        }),
+      };
+}

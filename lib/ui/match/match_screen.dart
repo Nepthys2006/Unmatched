@@ -8,10 +8,12 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter/material.dart' hide Card, Intent;
 
 import '../../engine/ai.dart';
 import '../../engine/combat.dart';
+import '../../engine/defs.dart' show MapArt;
 import '../../engine/events.dart';
 import '../../engine/game.dart';
 import '../../engine/hero_script.dart' show FighterPlacedAtStart;
@@ -19,6 +21,7 @@ import '../../engine/portable_random.dart';
 import '../../engine/prompt.dart';
 import '../../engine/state.dart';
 import '../audio.dart';
+import '../platform/fullscreen.dart';
 import '../board/board_painter.dart';
 import '../board3d/board3d.dart';
 import '../../net/session.dart';
@@ -31,6 +34,8 @@ import '../widgets.dart';
 import 'agents.dart';
 import 'board_layer.dart';
 import 'dials.dart';
+import 'figure_art.dart';
+import 'hero_items.dart';
 import 'hud.dart';
 import 'match_config.dart';
 
@@ -95,6 +100,9 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
   bool _started = false;
   bool _disposed = false;
 
+  /// The camera controls dropdown is open.
+  bool _camOpen = false;
+
   // Animation.
   final SteppedPulse _pulse = SteppedPulse();
   late final AnimationController _banner = AnimationController(vsync: this, duration: const Duration(milliseconds: 1500));
@@ -156,9 +164,7 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
       seed: widget.seed,
       random: widget.net == null ? null : PortableRandom(widget.net!.seed),
       presenter: _present,
-      agents: [
-        for (var i = 0; i < cfg.heroIds.length; i++) _agentFor(i, level),
-      ],
+      agents: [for (var i = 0; i < cfg.heroIds.length; i++) _agentFor(i, level)],
     );
     final net = widget.net;
     if (net == null) {
@@ -303,7 +309,25 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
       't': 'state',
       'fighters': [
         for (final f in game.fighters)
-          if (f.onBoard) {'id': f.uid, 'space': f.space, 'tail': f.tail, 'color': _hex(colorOf(f.owner)), 'hero': f.isHero, 'hp': f.hp, 'name': f.name},
+          if (f.onBoard)
+            {
+              'id': f.uid,
+              'space': f.space,
+              'tail': f.tail,
+              'color': _hex(colorOf(f.owner)),
+              'hero': f.isHero,
+              'hp': f.hp,
+              'name': f.name,
+              // which figure to draw: the hero's id, the fighter's id (a sidekick's token) and, for
+              // heroes with several hero fighters (the three Raptors), which of them this is
+              'mini': f.owner.hero.id,
+              'fid': f.def.id,
+              if (f.isHero) 'v': f.owner.fighters.where((x) => x.isHero).toList().indexOf(f),
+              // the hero's pieces (Alice's card, Hellfire...) on the main hero's badge
+              if (f == f.owner.heroFighter) 'items': [for (final i in heroItems(f.owner)) i.toJson()],
+              if (f.isSmall) 'small': true,
+              if (game.offsetInSpace(f) case (final x, final y) when x != 0 || y != 0) 'off': [x, y],
+            },
       ],
       'marks': {
         'select': [for (final f in _marks.select) f.uid],
@@ -331,11 +355,20 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
   }
 
   Future<void> _bakeBoard() async {
-    final mobile = defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS;
-    final res = ((mobile ? 2048 : 3072) / math.max(geo.size.width, geo.size.height)).clamp(0.5, 2.0);
+    final art = widget.config.map.art;
+    if (art != null) return _loadArt(art);
+    final quality = _s.settings.quality;
+    final maxDimension = math.max(geo.size.width, geo.size.height);
+    final targetPixels = switch (quality) {
+      Quality.low => 2048.0,
+      Quality.medium => 2800.0,
+      Quality.high => 3840.0,
+      Quality.ultra => 4600.0,
+    };
+    final res = (targetPixels / maxDimension).clamp(1.0, quality.bakeScale);
     final size = geo.size * res;
     final recorder = ui.PictureRecorder();
-    BoardPainter(geo, showStarts: false).paint(Canvas(recorder), size);
+    BoardPainter(geo, showStarts: false, detailed: true).paint(Canvas(recorder), size);
     final picture = recorder.endRecording();
     try {
       final image = await picture.toImage(size.width.ceil(), size.height.ceil());
@@ -348,6 +381,28 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
       // Keep painting the board live if the image can't be made.
     } finally {
       picture.dispose();
+    }
+  }
+
+  /// The printed-style map art is the board: decoded with optimal fidelity based on quality preset,
+  /// preserving 100% sharp native resolution on High and Ultra for crisp panning and zooming.
+  Future<void> _loadArt(MapArt art) async {
+    final quality = _s.settings.quality;
+    try {
+      final data = await rootBundle.load(art.asset);
+      final maxWidth = quality.maxTextureWidth;
+      final codec = await (maxWidth != null && maxWidth < art.w
+          ? ui.instantiateImageCodec(data.buffer.asUint8List(), targetWidth: maxWidth)
+          : ui.instantiateImageCodec(data.buffer.asUint8List()));
+      final frame = await codec.getNextFrame();
+      codec.dispose();
+      if (_disposed) {
+        frame.image.dispose();
+      } else {
+        setState(() => _boardImage = frame.image);
+      }
+    } catch (e) {
+      debugPrint('Map art failed to load: $e');
     }
   }
 
@@ -371,6 +426,9 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
   }
 
   // ======================================================================== presenting events
+
+  /// Combat steps wait longer, by the combat pace setting, so the duel can be followed.
+  Future<void> _waitCombat(int ms) => _wait((ms * _s.settings.combatPace.factor).round());
 
   Future<void> _wait(int ms) async {
     final d = (ms * _speed).round();
@@ -481,31 +539,31 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
         _s.audio.sfx(Sfx.whoosh);
         _refresh();
         if (quality.cameraEffects) _pushIn(combat);
-        await _wait(700);
+        await _waitCombat(700);
       case PhaseChanged(:final phase):
         _refresh();
-        if (phase.index >= Phase.immediately.index && phase.index <= Phase.after.index) await _wait(300);
+        if (phase.index >= Phase.immediately.index && phase.index <= Phase.after.index) await _waitCombat(300);
       case CardsRevealed():
         _revealed = true;
         _s.audio.sfx(Sfx.reveal);
         _refresh();
-        await _wait(1300);
+        await _waitCombat(1300);
       case EffectResolving(:final side, :final timing, :final text):
         _resolving = side;
         _effectText = '${side.card?.title.toUpperCase() ?? ''} · ${timing.toUpperCase()}${timing == 'after' ? ' COMBAT' : ''}: $text';
         _refresh();
-        await _wait(1500);
+        await _waitCombat(1500);
         _resolving = null;
         _effectText = null;
       case ValuesChanged() || Canceled() || CardSwapped():
         _refresh();
-        await _wait(450);
+        await _waitCombat(450);
       case CombatResolved():
         _resolved = true;
         _refresh();
-        await _wait(1500);
+        await _waitCombat(1500);
       case CombatEnded():
-        await _wait(400);
+        await _waitCombat(400);
         _combat = null;
         _resolved = false;
         _refresh();
@@ -564,7 +622,9 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
             for (final p in game.players)
               if (p.team == game.winningTeam) p.label,
           ];
-          unawaited(net.reportResult(winner: winners.isEmpty ? null : winners.join(' & '), players: [for (final p in game.players) p.label]));
+          unawaited(
+            net.reportResult(winner: winners.isEmpty ? null : winners.join(' & '), players: [for (final p in game.players) p.label]),
+          );
         }
         _s.audio.stopMusic();
         _s.audio.sfx(won ? Sfx.victory : Sfx.hit);
@@ -616,8 +676,8 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
   Matrix4 _fitMatrix(Size view) {
     // Leave room for the prompt bar on top and the hand along the bottom.
     const top = 46.0;
-    // Phones: let the board run under the hand's peek; it can be zoomed and panned anyway.
-    final bottom = view.height * (view.height < 520 ? 0.1 : 0.2);
+    // Phones: let the board run a little under the hand; it can be zoomed and panned anyway.
+    final bottom = view.height * (view.height < 520 ? 0.16 : 0.26);
     final avail = Size(view.width - 24, view.height - top - bottom);
     final s = math.min(avail.width / geo.size.width, avail.height / geo.size.height);
     final dx = (view.width - geo.size.width * s) / 2;
@@ -709,7 +769,7 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
     _thinking = null;
     _computeMarks();
     if (_marks.any && _s.settings.quality.pulse) {
-      _pulse.start();
+      _pulse.start(_s.settings.quality.pulseStep);
     }
     if (_pickingInCombat && !_pulledForPick && _s.settings.quality.cameraEffects) {
       // Show the board around the fighters, not the close-up of the duel.
@@ -757,6 +817,26 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
     final i = _values.indexWhere((x) => identical(x, v) || x == v);
     return i < 0 ? null : i;
   }
+
+  /// The fighter tapped in [space]. Small fighters can share a space: prefer one the current
+  /// prompt can use, then the one drawn nearest the tap.
+  Fighter? _fighterAtTap(int space, Offset local) {
+    final here = game.fightersAt(space);
+    if (here.length <= 1) return here.firstOrNull;
+    final useful = here
+        .where(
+          (f) => _isFighterPrompt
+              ? _indexOf(f) != null
+              : _actions.any((a) => a.kind == ActionKind.attack && (a.target == f || a.fighter == f)),
+        )
+        .toList();
+    final pool = useful.isNotEmpty ? useful : here;
+    double d(Fighter f) => (geo.of(space) + slotOffset(game, f, geo.radius) - local).distanceSquared;
+    pool.sort((a, b) => d(a).compareTo(d(b)));
+    return pool.first;
+  }
+
+  void _heroSheet(Player p) => showHeroSheet(context, players: [me, ...game.players.where((o) => o != me)], initial: p, me: me);
 
   /// A space choice may be a plain space id or a token sitting on a space (fog).
   int? _spaceOf(Object? v) => v is int ? v : (v is Token ? v.space : null);
@@ -824,7 +904,7 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
     final p = _prompt;
     if (p == null) return;
     final space = geo.spaceAt(local);
-    final fighter = space == null ? null : game.fighterAt(space);
+    final fighter = space == null ? null : _fighterAtTap(space, local);
 
     if (p.ask == Ask.action) {
       final attacks = _actions.where((a) => a.kind == ActionKind.attack).toList();
@@ -1109,11 +1189,17 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
     final size = MediaQuery.sizeOf(context);
     final p = _prompt;
     final settings = _s.settings;
+    final isCompact = size.height < 550 || size.width < 900;
     // The HUD was laid out for a landscape phone (~412 px tall); bigger screens scale it up.
     final ui = (size.shortestSide / 470).clamp(1.0, 1.4);
-    final cardW = (size.height * 0.26 * cardAspect * 1.25).clamp(64.0, 220.0);
-    final handLeft = math.min(250 * ui + 10, size.width * 0.3);
-    final handRight = math.min(200 * ui + 10, size.width * 0.24);
+    final cardW = (size.height * 0.27 * cardAspect).clamp(60.0, 200.0);
+    // Clear of your name plate on the left and the action buttons on the right.
+    final handLeft = isCompact
+        ? math.min(230.0 * ui, size.width * 0.28)
+        : math.min(320.0 * ui + 10, size.width * 0.32);
+    final handRight = isCompact
+        ? math.min(170.0 * ui, size.width * 0.22)
+        : math.min(260.0 * ui + 10, size.width * 0.26);
     final combatCardH = (size.height * 0.46).clamp(150.0, 380.0);
     final others = game.players.where((o) => o != me).toList();
     final playable = _playable;
@@ -1123,7 +1209,8 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
     _sync3d();
     // During combat the hand drops out of the way of the fighters, unless a card is to be picked.
     final handDown = _combat != null && !_isHandCardPrompt;
-    final handH = cardW / cardAspect * 0.95;
+    // Whole cards show above the bottom edge (and the phone's gesture bar).
+    final handH = cardW / cardAspect + 10 + cardW * 0.06 + MediaQuery.paddingOf(context).bottom;
 
     return PopScope(
       canPop: false,
@@ -1185,6 +1272,7 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
                             constrained: false,
                             minScale: _minScale,
                             maxScale: _maxScale,
+                            clipBehavior: Clip.hardEdge,
                             boundaryMargin: EdgeInsets.all(math.max(view.width, view.height)),
                             scaleEnabled: true,
                             trackpadScrollCausesScale: false,
@@ -1199,13 +1287,13 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
                                   children: [
                                     RepaintBoundary(
                                       child: _boardImage == null
-                                          ? CustomPaint(size: geo.size, painter: BoardPainter(geo, showStarts: false))
+                                          ? CustomPaint(size: geo.size, painter: BoardPainter(geo, showStarts: false, detailed: true))
                                           : RawImage(
                                               image: _boardImage,
                                               width: geo.size.width,
                                               height: geo.size.height,
                                               fit: BoxFit.fill,
-                                              filterQuality: FilterQuality.medium,
+                                              filterQuality: settings.quality.filterQuality,
                                             ),
                                     ),
                                     RepaintBoundary(
@@ -1222,7 +1310,7 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
                                           fxT: _fxA,
                                           fx: _fx,
                                           focus: focus,
-                                          repaint: Listenable.merge([_boardTick, _moveA, _pulse, _fxA]),
+                                          repaint: Listenable.merge([_boardTick, _moveA, _pulse, _fxA, FigureArt.instance.loaded]),
                                         ),
                                       ),
                                     ),
@@ -1275,8 +1363,8 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
               // Prompt bar.
               Positioned(
                 top: 0,
-                left: 120 * ui,
-                right: 120 * ui,
+                left: (isCompact ? 130.0 : 160.0) * ui,
+                right: (others.isNotEmpty ? (isCompact ? 160.0 : 220.0) : 110.0) * ui,
                 child: SafeArea(
                   bottom: false,
                   child: LayoutBuilder(
@@ -1317,6 +1405,20 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
                           size: 44,
                           onPressed: () => setState(() => _showLog = !_showLog),
                         ),
+                        const SizedBox(width: 6),
+                        HexButton(icon: Icons.badge_rounded, tooltip: 'Identity cards', size: 44, onPressed: () => _heroSheet(me)),
+                        if (canToggleFullscreen && !isFullscreen) ...[
+                          const SizedBox(width: 6),
+                          HexButton(
+                            icon: Icons.fullscreen_rounded,
+                            tooltip: 'Full screen',
+                            size: 44,
+                            onPressed: () async {
+                              await toggleFullscreen();
+                              if (mounted) setState(() {});
+                            },
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -1340,40 +1442,50 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
                   ),
                 ),
 
-              // Left edge: camera controls.
+              // Camera controls: one button under the menu that opens the rest, so they stay
+              // out of the way of the board.
               Positioned(
                 left: 10,
-                top: 0,
-                bottom: 0,
+                top: 62 * ui,
                 child: SafeArea(
                   child: _hideInCombat(
-                    Center(
+                    Align(
+                      alignment: Alignment.topLeft,
                       child: _scaled(
                         ui,
-                        Alignment.centerLeft,
+                        Alignment.topLeft,
                         Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            HexButton(icon: Icons.add_rounded, tooltip: 'Zoom in', size: 38, onPressed: () => _zoom(1.25)),
-                            const SizedBox(height: 6),
-                            HexButton(icon: Icons.remove_rounded, tooltip: 'Zoom out', size: 38, onPressed: () => _zoom(0.8)),
-                            const SizedBox(height: 6),
-                            HexButton(icon: Icons.fit_screen_rounded, tooltip: 'Fit board', size: 38, onPressed: _fit),
-                            if (_in3d) ...[
+                            HexButton(
+                              icon: _camOpen ? Icons.expand_less_rounded : Icons.videocam_rounded,
+                              tooltip: _camOpen ? 'Hide camera controls' : 'Camera controls',
+                              size: 38,
+                              onPressed: () => setState(() => _camOpen = !_camOpen),
+                            ),
+                            if (_camOpen) ...[
                               const SizedBox(height: 6),
-                              HexButton(
-                                icon: Icons.rotate_left_rounded,
-                                tooltip: 'Turn the board',
-                                size: 38,
-                                onPressed: () => _b3?.send({'t': 'cam', 'op': 'turn', 'a': math.pi / 4}),
-                              ),
+                              HexButton(icon: Icons.add_rounded, tooltip: 'Zoom in', size: 38, onPressed: () => _zoom(1.25)),
                               const SizedBox(height: 6),
-                              HexButton(
-                                icon: Icons.threed_rotation_rounded,
-                                tooltip: 'Top view / table view',
-                                size: 38,
-                                onPressed: () => _b3?.send({'t': 'cam', 'op': 'tilt'}),
-                              ),
+                              HexButton(icon: Icons.remove_rounded, tooltip: 'Zoom out', size: 38, onPressed: () => _zoom(0.8)),
+                              const SizedBox(height: 6),
+                              HexButton(icon: Icons.fit_screen_rounded, tooltip: 'Fit board', size: 38, onPressed: _fit),
+                              if (_in3d) ...[
+                                const SizedBox(height: 6),
+                                HexButton(
+                                  icon: Icons.rotate_left_rounded,
+                                  tooltip: 'Turn the board',
+                                  size: 38,
+                                  onPressed: () => _b3?.send({'t': 'cam', 'op': 'turn', 'a': math.pi / 4}),
+                                ),
+                                const SizedBox(height: 6),
+                                HexButton(
+                                  icon: Icons.threed_rotation_rounded,
+                                  tooltip: 'Top view / table view',
+                                  size: 38,
+                                  onPressed: () => _b3?.send({'t': 'cam', 'op': 'tilt'}),
+                                ),
+                              ],
                             ],
                           ],
                         ),
@@ -1398,8 +1510,8 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
                         colorOf: colorOf,
                         me: me,
                         actions: game.actions,
-                        compact: others.length > 2 || size.height < 500 && others.length > 1,
-                        onTap: (o) => showPiles(context, o, mine: false),
+                        compact: others.length > 1 || (size.height < 560 && others.isNotEmpty),
+                        onTap: _heroSheet,
                       ),
                     ),
                   ),
@@ -1437,12 +1549,12 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
                       player: me,
                       color: colorOf(me),
                       subtitle: settings.username,
-                      big: size.width > 700,
+                      big: size.width >= 900 && size.height >= 550,
                       active: game.turnNumber > 0 && game.active == me,
                       actionsLeft: game.turnNumber > 0 && game.active == me
                           ? (p?.ask == Ask.action ? game.actions + 1 : game.actions)
                           : null,
-                      onTap: () => showPiles(context, me, mine: true),
+                      onTap: () => _heroSheet(me),
                     ),
                   ),
                 ),
@@ -1452,7 +1564,10 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
               Positioned(
                 right: 12,
                 bottom: 12,
-                child: SafeArea(top: false, child: _scaled(ui, Alignment.bottomRight, _actionCluster(p, boardPick))),
+                child: SafeArea(
+                  top: false,
+                  child: _scaled(ui, Alignment.bottomRight, _actionCluster(p, boardPick, compact: isCompact)),
+                ),
               ),
 
               // A scheme or boost card in the spotlight.
@@ -1565,9 +1680,8 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
     );
   }
 
-  /// Scales a HUD cluster from its anchored corner (hit-testing follows the transform).
-  static Widget _scaled(double ui, Alignment anchor, Widget child) =>
-      ui == 1 ? child : Transform.scale(scale: ui, alignment: anchor, child: child);
+  /// Scales a HUD cluster up on big screens; it takes up its scaled size, so taps land everywhere it is drawn.
+  static Widget _scaled(double ui, Alignment anchor, Widget child) => ui == 1 ? child : ScaledBox(scale: ui, child: child);
 
   /// Side chrome steps aside while the combat cards are up.
   Widget _hideInCombat(Widget child) => IgnorePointer(
@@ -1575,8 +1689,13 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
     child: AnimatedOpacity(opacity: _combatCovers ? 0 : 1, duration: const Duration(milliseconds: 220), child: child),
   );
 
-  Widget _actionCluster(Prompt? p, bool boardPick) {
+  Widget _actionCluster(Prompt? p, bool boardPick, {bool compact = false}) {
     final children = <Widget>[];
+    final btnW = compact ? 142.0 : 178.0;
+    final btnH = compact ? 38.0 : 46.0;
+    final fontSz = compact ? 14.5 : 17.0;
+    final gap = compact ? 5.0 : 8.0;
+
     if (p != null && p.ask == Ask.action) {
       final hasScheme = _actions.any((a) => a.kind == ActionKind.scheme);
       final hasAttack = _actions.any((a) => a.kind == ActionKind.attack);
@@ -1585,29 +1704,29 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
           label: 'Maneuver',
           icon: Icons.directions_run_rounded,
           style: PlateStyle.secondary,
-          width: 178,
-          height: 46,
-          fontSize: 17,
+          width: btnW,
+          height: btnH,
+          fontSize: fontSz,
           onPressed: _startManeuver,
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: gap),
         PlateButton(
           label: 'Scheme',
           icon: Icons.auto_awesome_rounded,
           style: _schemeHint ? PlateStyle.primary : PlateStyle.secondary,
-          width: 178,
-          height: 46,
-          fontSize: 17,
+          width: btnW,
+          height: btnH,
+          fontSize: fontSz,
           onPressed: hasScheme ? _schemes : null,
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: gap),
         PlateButton(
           label: _attackMode ? 'Cancel attack' : 'Attack',
           icon: _attackMode ? Icons.close_rounded : Icons.flash_on_rounded,
           style: _attackMode ? PlateStyle.primary : PlateStyle.danger,
-          width: 178,
-          height: 46,
-          fontSize: 17,
+          width: btnW,
+          height: btnH,
+          fontSize: fontSz,
           onPressed: hasAttack ? _toggleAttack : null,
         ),
       ]);
@@ -1623,13 +1742,18 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
             label: p.skipLabel ?? 'Skip',
             icon: Icons.skip_next_rounded,
             style: PlateStyle.secondary,
-            height: 44,
-            fontSize: 16,
+            height: compact ? 38 : 44,
+            fontSize: compact ? 14 : 16,
             onPressed: _skip,
           ),
-          const SizedBox(height: 10),
+          SizedBox(height: compact ? 6 : 10),
         ],
-        ConfirmHex(size: 70, onPressed: boardPick ? _confirmPending : null, tooltip: 'Confirm', pulse: boardPick ? _pulse : null),
+        ConfirmHex(
+          size: compact ? 56 : 70,
+          onPressed: boardPick ? _confirmPending : null,
+          tooltip: 'Confirm',
+          pulse: boardPick ? _pulse : null,
+        ),
       ],
     );
   }

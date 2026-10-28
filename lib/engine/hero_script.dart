@@ -113,6 +113,9 @@ abstract class Mod {
 
   /// [f] arrived in [space] by moving, being placed or swapping (traps go off).
   Future<void> entered(Game g, Fighter f, int space) async {}
+
+  /// [f] changed spaces along [path] (moving), or from path.first to path.last (placed, swapped).
+  Future<void> relocated(Game g, Fighter f, List<int> path) async {}
 }
 
 /// A mod that lasts until the end of the current turn.
@@ -159,6 +162,7 @@ class CardScript {
     this.alsoDefense,
     this.onReveal,
     this.target,
+    this.onlyTarget,
     this.noEffects = false,
   });
 
@@ -189,6 +193,9 @@ class CardScript {
 
   /// Widens who this attack may target (Foul Purpose played face up).
   final bool Function(Game g, Fighter attacker, Fighter target)? target;
+
+  /// Narrows who this attack may target ("This attack can only target a fighter adjacent to...").
+  final bool Function(Game g, Fighter attacker, Fighter target)? onlyTarget;
 
   /// The card has no effects at all, so it can't be "canceled" (Excalibur).
   final bool noEffects;
@@ -268,7 +275,7 @@ class Ongoing extends OngoingMod {
 
 /// The effect context a card or ability resolves in.
 class Fx {
-  Fx(this.game, this.me, {this.card, this.side, Fighter? fighter, this.target}) : _fighter = fighter;
+  Fx(this.game, this.me, {this.card, this.side, Fighter? fighter, this.target}) : _sourceFighter = fighter;
 
   final Game game;
   final Player me;
@@ -276,13 +283,13 @@ class Fx {
 
   /// The side of combat this card was played on (null for schemes and abilities).
   final Side? side;
-  final Fighter? _fighter;
+  final Fighter? _sourceFighter;
 
   /// The opponent a scheme was aimed at ("choose an opponent") in multi-opponent games.
   final Player? target;
 
   /// The fighter who played the card ("your fighter").
-  Fighter get fighter => side?.fighter ?? _fighter!;
+  Fighter get fighter => side?.fighter ?? _sourceFighter!;
 
   /// "Your opponent": in combat, the other player in the combat; otherwise the chosen opponent.
   Player get opp => side?.other.player ?? target ?? game.enemiesOf(me).first;
@@ -323,7 +330,7 @@ class Fx {
   void addValue(int v, [String? label]) => game.addOp(mySide, ValueOp.add(v, label ?? card!.title));
   Future<bool> boostThis({bool blind = false, String? text}) => game.boostCard(mySide, blind: blind, text: text);
 
-  Fighter? get _src => side?.fighter ?? _fighter;
+  Fighter? get _src => side?.fighter ?? _sourceFighter;
 
   Future<Fighter?> chooseFighter(Iterable<Fighter> options, String text,
           {Intent intent = Intent.none, bool optional = false, Player? who}) =>
@@ -394,6 +401,10 @@ abstract class HeroScript extends Mod {
   /// Large fighters (T. Rex) occupy their space and the one they last moved from.
   bool isLarge(Fighter f) => false;
 
+  /// Small fighters (Squirrel Girl's squirrels): up to 4 share a space with one other fighter,
+  /// opposing fighters move through them, and damage to one hits every one of its kind there.
+  bool isSmall(Fighter f) => false;
+
   /// Places sidekicks (and any other heroes, like Dagger) at the start of the game: in the
   /// hero's zone, one by one.
   Future<void> placeSidekicks() async {
@@ -418,6 +429,10 @@ abstract class HeroScript extends Mod {
 
   /// Status chips for the HUD (Alice is BIG, 2 Rage, coils charged...).
   List<String> status() => const [];
+
+  /// Rules a player needs beside the identity card (set rules, spells, the line so far), shown
+  /// with the identity card during a match.
+  List<String> reference() => const [];
 
   /// Draw step of a maneuver (Donatello may draw 2 and put one back).
   Future<void> maneuverDraw(int n) => game.draw(me, n);
@@ -454,6 +469,13 @@ abstract class HeroScript extends Mod {
   /// Opponent cards this player has seen (looked at a hand, revealed), for the AI.
   final Set<Card> known = {};
   void seen(Iterable<Card> cards) => known.addAll(cards);
+
+  /// The pile [c] goes to when it would be discarded (the Wayward Sisters' cauldron).
+  List<Card> discardPileFor(Card c) => c.owner.discard;
+
+  /// Cards set aside by a hero ability, outside hand, deck, discard pile and play (the
+  /// Wayward Sisters' cauldron).
+  final List<Card> aside = [];
 
   /// Where a played card goes when it leaves play. Return true if handled (Loki's tricks).
   Future<bool> disposePlayed(Card c) async => false;

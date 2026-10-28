@@ -18,12 +18,15 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="Unmatched fan game">
+  <meta name="description" content="Unmatched, the fan-made digital edition">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Unmatched">
+  <meta name="apple-touch-fullscreen" content="yes">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
   <!-- Favicon -->
@@ -31,8 +34,42 @@
 
   <title>Unmatched</title>
   <link rel="manifest" href="manifest.json">
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100vw;
+      width: 100dvw;
+      height: 100vh;
+      height: 100dvh;
+      height: -webkit-fill-available;
+      overflow: hidden;
+      position: fixed;
+      touch-action: none;
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
+      background: #131417;
+      color: #ece6d8;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #flutter_container, flt-glass-pane {
+      width: 100% !important;
+      height: 100% !important;
+    }
+    html.ios-enlarged, body.ios-enlarged {
+      position: fixed !important;
+      inset: 0 !important;
+      width: 100vw !important;
+      width: 100dvw !important;
+      height: 100vh !important;
+      height: 100dvh !important;
+      height: -webkit-fill-available !important;
+      z-index: 999999 !important;
+    }
+  </style>
 </head>
-<body style="background:#1b1c20">
+<body>
   <!--
     You can customize the "flutter_bootstrap.js" script.
     This is useful to provide a custom configuration to the Flutter loader
@@ -42,5 +79,118 @@
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
   <script src="flutter_bootstrap.js" async></script>
+  <script>
+    (function () {
+      var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+                  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      var isStandalone = window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+
+      function toggleAppFullscreen() {
+        var docEl = document.documentElement;
+        var hasNativeFs = !!(docEl.requestFullscreen || docEl.webkitRequestFullscreen || docEl.msRequestFullscreen);
+
+        if (document.fullscreenElement || document.webkitFullscreenElement) {
+          var exit = document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen;
+          if (exit) exit.call(document).catch(function() {});
+          docEl.classList.remove('ios-enlarged');
+          return;
+        }
+
+        if (docEl.classList.contains('ios-enlarged')) {
+          docEl.classList.remove('ios-enlarged');
+          return;
+        }
+
+        if (hasNativeFs && !isIOS) {
+          var rfs = docEl.requestFullscreen || docEl.webkitRequestFullscreen || docEl.msRequestFullscreen;
+          rfs.call(docEl).then(function() {
+            if (screen.orientation && screen.orientation.lock) {
+              screen.orientation.lock('landscape').catch(function() {});
+            }
+          }).catch(function() {
+            activateEnlargedMode();
+          });
+        } else {
+          activateEnlargedMode();
+        }
+      }
+
+      function activateEnlargedMode() {
+        var docEl = document.documentElement;
+        docEl.classList.add('ios-enlarged');
+        window.scrollTo(0, 1);
+        setTimeout(function() { window.scrollTo(0, 0); }, 100);
+
+        if (isIOS && !isStandalone && !sessionStorage.getItem('ios-pwa-tip-shown')) {
+          sessionStorage.setItem('ios-pwa-tip-shown', 'true');
+          showIosPwaTip();
+        }
+      }
+
+      function showIosPwaTip() {
+        if (document.getElementById('ios-pwa-modal')) return;
+        var modal = document.createElement('div');
+        modal.id = 'ios-pwa-modal';
+        modal.setAttribute('style', 'position:fixed;inset:0;z-index:10001;background:rgba(14,15,18,0.85);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;padding:20px;');
+        modal.innerHTML = '<div style="background:#1b1c20;border:1px solid #e0b24a;border-radius:12px;padding:22px;max-width:320px;color:#ece6d8;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,0.8);">' +
+          '<div style="font:800 20px system-ui,sans-serif;color:#e0b24a;letter-spacing:0.04em;margin-bottom:8px;">FULL SCREEN ON iOS</div>' +
+          '<div style="font:13.5px system-ui,sans-serif;line-height:1.5;color:#ccc;margin-bottom:14px;">' +
+            'Safari hides full-screen behind the Home Screen feature:' +
+            '<div style="text-align:left;margin-top:10px;background:rgba(255,255,255,0.06);padding:10px 12px;border-radius:8px;font-size:13px;color:#eee;">' +
+              '1. Tap the Safari <b>Share</b> button (⎋)<br>' +
+              '2. Tap <b>Add to Home Screen</b> (⊞)<br>' +
+              '3. Launch Unmatched from your Home Screen for 100% borderless gameplay!' +
+            '</div>' +
+          '</div>' +
+          '<button id="btn-close-pwa-tip" style="padding:8px 24px;background:#e0b24a;color:#111;border:none;border-radius:6px;font:700 14px system-ui,sans-serif;cursor:pointer;letter-spacing:0.04em;">GOT IT</button>' +
+        '</div>';
+        document.body.appendChild(modal);
+        document.getElementById('btn-close-pwa-tip').onclick = function() { modal.remove(); };
+      }
+
+      window.toggleAppFullscreen = toggleAppFullscreen;
+      window.addEventListener('toggle-app-fullscreen', toggleAppFullscreen);
+
+      // Rotate / orientation helper
+      var touch = matchMedia('(pointer: coarse)').matches;
+      if (touch) {
+        var note = document.createElement('div');
+        note.id = 'rotate';
+        note.setAttribute('style', 'position:fixed;inset:0;z-index:9999;display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;background:#131417;color:#ece6d8');
+        note.innerHTML = '<div style="font:800 22px system-ui,sans-serif;letter-spacing:.06em;color:#e0b24a">ROTATE TO LANDSCAPE</div>' +
+          '<div style="margin-top:10px;font:14.5px system-ui,sans-serif;opacity:.9;max-width:300px;line-height:1.45">' +
+            'Unmatched is designed for landscape.' +
+            '<div style="margin-top:12px;padding:8px 12px;background:rgba(255,255,255,0.06);border-radius:6px;font-size:12.5px;color:#ddd;text-align:left;">' +
+              '🔒 <b>Screen won\'t rotate?</b><br>Swipe down from the top-right corner to open <b>Control Center</b> and turn OFF <b>Portrait Orientation Lock</b>.' +
+            '</div>' +
+          '</div>' +
+          '<div style="display:flex;gap:10px;margin-top:18px;">' +
+            '<button id="btn-rotate-enlarge" style="padding:9px 18px;background:#e0b24a;color:#111;border:none;border-radius:6px;font:700 14px system-ui,sans-serif;cursor:pointer;">ENLARGE SCREEN</button>' +
+            '<button id="btn-rotate-dismiss" style="padding:9px 18px;background:rgba(255,255,255,0.12);color:#ece6d8;border:1px solid rgba(255,255,255,0.25);border-radius:6px;font:700 14px system-ui,sans-serif;cursor:pointer;">PLAY ANYWAY</button>' +
+          '</div>';
+        document.body.appendChild(note);
+
+        var dismissed = false;
+        document.getElementById('btn-rotate-enlarge').onclick = function(e) {
+          e.stopPropagation();
+          toggleAppFullscreen();
+        };
+        document.getElementById('btn-rotate-dismiss').onclick = function(e) {
+          e.stopPropagation();
+          dismissed = true;
+          note.style.display = 'none';
+        };
+
+        function check() {
+          var isPortrait = window.innerHeight > window.innerWidth;
+          if (!isPortrait) dismissed = false;
+          note.style.display = (isPortrait && !dismissed) ? 'flex' : 'none';
+        }
+        addEventListener('resize', check);
+        addEventListener('orientationchange', check);
+        check();
+      }
+    })();
+  </script>
 </body>
 </html>

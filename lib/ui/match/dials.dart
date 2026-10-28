@@ -121,40 +121,60 @@ class FighterDials extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hero = player.heroFighter;
-    final sidekicks = player.fighters.where((f) => f.isSidekick && !f.reserve || f.isSidekick && f.defeated).toList();
+    // Every hero gets a dial (the Raptors, Cloak & Dagger and the Wayward Sisters have several);
+    // the first is the big one. Then the sidekicks that are or were on the board.
+    final heroes = player.heroes.toList();
+    final hero = heroes.length == 1 ? player.heroFighter : heroes.first;
+    final others = [
+      ...heroes.skip(1),
+      ...player.fighters.where((f) => f.isSidekick && !f.reserve || f.isSidekick && f.defeated),
+    ];
+    final otherHeroSize = (heroSize + sidekickSize) / 2;
     return Row(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
         Tooltip(
-          message: '${hero.name}: ${hero.hp} health',
+          message: '${hero.name}: ${hero.defeated ? 'defeated' : '${hero.hp} health'}',
           child: HealthDial(hp: hero.hp, max: hero.maxHp, color: color, size: heroSize, defeated: hero.defeated),
         ),
-        for (final f in sidekicks) ...[
+        for (final f in others) ...[
           const SizedBox(width: 4),
-          Tooltip(
-            message: '${f.name}: ${f.defeated ? 'defeated' : '${f.hp} health'}',
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                HealthDial(hp: f.hp, max: f.maxHp, color: color, size: sidekickSize, defeated: f.defeated),
-                const SizedBox(height: 1),
-                SizedBox(
-                  width: sidekickSize + 6,
-                  child: Text(
-                    f.name.toUpperCase(),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                    style: titleStyle(8.5, color: Palette.boneDim, spacing: 0.2),
-                  ),
-                ),
-              ],
+          _LabelledDial(fighter: f, color: color, size: f.isHero ? otherHeroSize : sidekickSize),
+        ],
+      ],
+    );
+  }
+}
+
+class _LabelledDial extends StatelessWidget {
+  const _LabelledDial({required this.fighter, required this.color, required this.size});
+  final Fighter fighter;
+  final Color color;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final f = fighter;
+    return Tooltip(
+      message: '${f.name}: ${f.defeated ? 'defeated' : '${f.hp} health'}',
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          HealthDial(hp: f.hp, max: f.maxHp, color: color, size: size, defeated: f.defeated),
+          const SizedBox(height: 1),
+          SizedBox(
+            width: size + 6,
+            child: Text(
+              f.name.toUpperCase(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: titleStyle(8.5, color: Palette.boneDim, spacing: 0.2),
             ),
           ),
         ],
-      ],
+      ),
     );
   }
 }

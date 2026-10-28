@@ -1,6 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- The 3D board's page is served to the app's own web view over 127.0.0.1. -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- LAN play: find this device's Wi-Fi / hotspot address and hear hosts' broadcast beacons. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE"/>
     <application
         android:label="Unmatched"
         android:networkSecurityConfig="@xml/network_security_config"

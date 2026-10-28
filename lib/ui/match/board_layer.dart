@@ -1,5 +1,5 @@
-/// The live layer over the static board: highlights, tokens, fighters as glowing orbs, health
-/// hearts and hit effects. Repaints on its own listenables only, never with the HUD.
+/// The live layer over the static board: highlights, tokens, fighters as their miniatures on
+/// podiums (orbs until the pictures load), health hearts, the heroes' pieces and hit effects. Repaints on its own listenables only, never with the HUD.
 library;
 
 import 'dart:async';
@@ -13,6 +13,14 @@ import '../board/board_painter.dart';
 import '../settings.dart';
 import '../shapes.dart';
 import '../theme.dart';
+import 'figure_art.dart';
+import 'hero_items.dart';
+
+/// Where [f] is drawn relative to its space's centre (small fighters sharing a space fan out).
+Offset slotOffset(Game game, Fighter f, double radius) {
+  final (x, y) = game.offsetInSpace(f);
+  return Offset(x, y) * radius;
+}
 
 /// What the board should point out right now.
 class BoardMarks {
@@ -95,6 +103,12 @@ class BoardLayerPainter extends CustomPainter {
   final Set<Fighter> focus;
 
   static final Map<String, TextPainter> _text = {};
+  static final Map<String, Shader> _shaders = {};
+
+  static Shader _cachedShader(String key, Shader Function() create) {
+    if (_shaders.length > 300 && !_shaders.containsKey(key)) _shaders.clear();
+    return _shaders[key] ??= create();
+  }
 
   TextPainter _label(String s, double size, Color color, {bool title = true}) {
     final key = '$s|$size|${color.toARGB32()}|$title';
@@ -117,7 +131,7 @@ class BoardLayerPainter extends CustomPainter {
       final local = Curves.easeInOut.transform(x - i);
       return Offset.lerp(geo.of(m.path[i]), geo.of(m.path[i + 1]), local)!;
     }
-    return geo.of(f.space!);
+    return geo.of(f.space!) + slotOffset(game, f, geo.radius);
   }
 
   @override
@@ -190,11 +204,31 @@ class BoardLayerPainter extends CustomPainter {
     // Tokens.
     for (final t in game.board.tokens) {
       if (t.kind == 'fog' && t.space != null) {
+        // Invisible Man's fog: a cloud with a shadow and a dark outline, so it reads on light and
+        // dark boards alike.
         final c = geo.of(t.space!);
-        final cloud = Paint()..color = const Color(0xB3D6DCE4);
-        for (final o in const [Offset(-0.45, 0.1), Offset(0.4, 0.15), Offset(0, -0.2), Offset(0.05, 0.3)]) {
-          canvas.drawCircle(c + o * r, r * 0.5, cloud);
+        const puffs = [(Offset(-0.48, 0.12), 0.46), (Offset(0.44, 0.16), 0.44), (Offset(0, -0.22), 0.56), (Offset(0.02, 0.3), 0.5), (Offset(-0.26, -0.1), 0.42), (Offset(0.28, -0.08), 0.42)];
+        final cloud = Path();
+        for (final (o, s) in puffs) {
+          cloud.addOval(Rect.fromCircle(center: c + o * r, radius: r * s));
         }
+        canvas.drawShadow(cloud, const Color(0xFF000000), r * 0.18, false);
+        canvas.drawPath(
+          cloud,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = r * 0.12
+            ..color = const Color(0xFF39404E),
+        );
+        canvas.drawPath(
+          cloud,
+          Paint()
+            ..shader = RadialGradient(
+              center: const Alignment(-0.3, -0.4),
+              colors: const [Color(0xFFFBFCFF), Color(0xFFCDD4E2), Color(0xFF8E98AE)],
+              stops: const [0, 0.55, 1],
+            ).createShader(Rect.fromCircle(center: c, radius: r)),
+        );
       } else if (t.kind == 'trap' && t.space != null) {
         // Muldoon's traps: a steel jaw (orange ring with teeth).
         final c = geo.of(t.space!) + Offset(r * 0.55, r * 0.55);
@@ -292,47 +326,61 @@ class BoardLayerPainter extends CustomPainter {
             canvas.drawCircle(e.at + Offset(math.cos(a), math.sin(a)) * dist, r * 0.06 * (1 - t) + 1, sp);
           }
         }
-        final tp = _label(e.text, r * 0.95, e.color);
+        final alpha = t < 0.7 ? 1.0 : ((1.0 - t) / 0.3).clamp(0.0, 1.0);
+        final tp = _label(e.text, r * 0.95, e.color.withValues(alpha: alpha));
         final rise = Curves.easeOutCubic.transform(t) * r * 1.4;
         final o = e.at - Offset(tp.width / 2, tp.height / 2 + r * 0.6 + rise);
-        canvas.saveLayer(null, Paint()..color = Colors.white.withValues(alpha: t < 0.7 ? 1 : (1 - t) / 0.3));
-        _label(e.text, r * 0.95, Colors.black).paint(canvas, o + const Offset(2, 3));
+        _label(e.text, r * 0.95, Colors.black.withValues(alpha: 0.75 * alpha)).paint(canvas, o + const Offset(2, 3));
         tp.paint(canvas, o);
-        canvas.restore();
       }
     }
   }
 
+  /// A fighter as its miniature (or token) on a podium in its player's colour, or as an orb while
+  /// the picture loads. Selection rings, the heart and the name tag are the same for both.
   void _orb(Canvas canvas, Fighter f, Offset c, double r, bool glow, double p) {
+    final art = FigureArt.instance.of(f);
+    if (art != null) {
+      _figure(canvas, f, c, r, glow, p, art);
+      return;
+    }
     final color = colorOf(f.owner);
-    final rad = r * (f.isHero ? 0.8 : 0.58);
+    final rad = r * (f.isHero ? 0.8 : (f.isSmall ? 0.4 : 0.58));
     final focused = focus.contains(f);
     if (glow) {
       // A radial gradient reads as the same soft glow as a blur at a fraction of the raster cost.
       final gr = rad * (focused ? 2.2 : 1.9);
+      final keyGlow = 'orb_glow|${c.dx.toInt()}|${c.dy.toInt()}|${gr.toInt()}|${color.toARGB32()}|$focused';
       canvas.drawCircle(
         c,
         gr,
         Paint()
-          ..shader = RadialGradient(
-            colors: [color.withValues(alpha: focused ? 0.85 : 0.65), color.withValues(alpha: focused ? 0.35 : 0.22), color.withValues(alpha: 0)],
-            stops: const [0.35, 0.6, 1],
-          ).createShader(Rect.fromCircle(center: c, radius: gr)),
+          ..shader = _cachedShader(
+            keyGlow,
+            () => RadialGradient(
+              colors: [color.withValues(alpha: focused ? 0.85 : 0.65), color.withValues(alpha: focused ? 0.35 : 0.22), color.withValues(alpha: 0)],
+              stops: const [0.35, 0.6, 1],
+            ).createShader(Rect.fromCircle(center: c, radius: gr)),
+          ),
       );
     } else {
       canvas.drawCircle(c, rad * 1.18, Paint()..color = color.withValues(alpha: 0.35));
     }
     canvas.drawCircle(c + Offset(0, rad * 0.18), rad, Paint()..color = const Color(0x99000000));
     final rect = Rect.fromCircle(center: c, radius: rad);
+    final keyTop = 'orb_top|${c.dx.toInt()}|${c.dy.toInt()}|${rad.toInt()}|${color.toARGB32()}';
     canvas.drawCircle(
       c,
       rad,
       Paint()
-        ..shader = RadialGradient(
-          center: const Alignment(-0.35, -0.45),
-          colors: [Color.lerp(color, Colors.white, 0.65)!, color, Color.lerp(color, Colors.black, 0.55)!],
-          stops: const [0, 0.45, 1],
-        ).createShader(rect),
+        ..shader = _cachedShader(
+          keyTop,
+          () => RadialGradient(
+            center: const Alignment(-0.35, -0.45),
+            colors: [Color.lerp(color, Colors.white, 0.65)!, color, Color.lerp(color, Colors.black, 0.55)!],
+            stops: const [0, 0.45, 1],
+          ).createShader(rect),
+        ),
     );
     canvas.drawCircle(
       c,
@@ -360,7 +408,93 @@ class BoardLayerPainter extends CustomPainter {
     final it = _label(initial, rad * 0.95, Colors.white);
     it.paint(canvas, c - Offset(it.width / 2, it.height / 2 + rad * 0.04));
 
-    // Name tag under the orb.
+    _nameHeartMarks(canvas, f, c, r, rad, p, c + Offset(rad * 0.85, -rad * 0.8));
+  }
+
+  void _figure(Canvas canvas, Fighter f, Offset c, double r, bool glow, double p, FigureImage art) {
+    final color = colorOf(f.owner);
+    final rad = r * (f.isHero ? 0.62 : (f.isSmall ? 0.34 : 0.48));
+    final focused = focus.contains(f);
+    if (glow) {
+      final gr = rad * (focused ? 2.1 : 1.7);
+      final keyGlow = 'fig_glow|${c.dx.toInt()}|${c.dy.toInt()}|${gr.toInt()}|${color.toARGB32()}|$focused';
+      canvas.drawCircle(
+        c,
+        gr,
+        Paint()
+          ..shader = _cachedShader(
+            keyGlow,
+            () => RadialGradient(
+              colors: [color.withValues(alpha: focused ? 0.8 : 0.55), color.withValues(alpha: 0)],
+            ).createShader(Rect.fromCircle(center: c, radius: gr)),
+          ),
+      );
+    }
+    // Podium: a short disc seen from above at a slant.
+    final top = Rect.fromCenter(center: c, width: rad * 2, height: rad * 1.1);
+    final side = top.shift(Offset(0, rad * 0.22));
+    canvas.drawOval(side.shift(Offset(0, rad * 0.1)), Paint()..color = const Color(0x88000000));
+    canvas.drawOval(side, Paint()..color = Color.lerp(color, Colors.black, 0.45)!);
+    canvas.drawRect(Rect.fromLTRB(top.left, top.center.dy, top.right, side.center.dy), Paint()..color = Color.lerp(color, Colors.black, 0.45)!);
+    final keyPod = 'fig_pod|${c.dx.toInt()}|${c.dy.toInt()}|${rad.toInt()}|${color.toARGB32()}';
+    canvas.drawOval(
+      top,
+      Paint()
+        ..shader = _cachedShader(
+          keyPod,
+          () => RadialGradient(
+            center: const Alignment(-0.3, -0.5),
+            colors: [Color.lerp(color, Colors.white, 0.35)!, color],
+          ).createShader(top),
+        ),
+    );
+    canvas.drawOval(top, Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = rad * 0.07
+      ..color = Palette.bone.withValues(alpha: 0.8));
+
+    // The figure stands on the podium: its printed base as wide as the podium (real proportions),
+    // capped in height so it doesn't hide the spaces behind; a token stands a little wider.
+    final img = art.image;
+    var scale = art.token ? rad * 2.1 / img.width : rad * 2 * 0.98 / art.baseW;
+    final maxH = r * (f.isHero ? 2.3 : 1.5);
+    if (img.height * scale > maxH) scale = maxH / img.height;
+    final w = img.width * scale, h = img.height * scale;
+    final left = art.token ? c.dx - w / 2 : c.dx - art.baseX * scale;
+    final dst = Rect.fromLTWH(left, c.dy + rad * 0.12 - h, w, h);
+    canvas.drawImageRect(img, Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()), dst,
+        Paint()..filterQuality = quality.filterQuality);
+
+    // The hero's pieces (Alice's card, Hellfire...) float beside the main hero.
+    if (f == f.owner.heroFighter) _items(canvas, f.owner, Offset(dst.left - r * 0.08, dst.top + r * 0.1), r);
+    _nameHeartMarks(canvas, f, c, r, rad, p, Offset(math.min(dst.right, c.dx + rad * 1.1), dst.top + r * 0.22));
+  }
+
+  /// Small pieces stacked down the left of the figure: an icon and a count or name each.
+  void _items(Canvas canvas, Player owner, Offset at, double r) {
+    var y = at.dy;
+    for (final i in heroItems(owner).take(2)) {
+      final icon = TextPainter(
+        text: TextSpan(text: String.fromCharCode(i.icon.codePoint), style: TextStyle(fontFamily: i.icon.fontFamily, package: i.icon.fontPackage, fontSize: r * 0.36, color: i.color)),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      final text = _label(i.kind == HeroItemKind.card ? i.label : i.short, r * 0.27, Colors.white);
+      final w = icon.width + text.width + r * 0.22, h = math.max(icon.height, text.height) + r * 0.06;
+      final box = Rect.fromLTWH(at.dx - w, y, w, h);
+      final rr = RRect.fromRectAndRadius(box, Radius.circular(r * 0.08));
+      canvas.drawRRect(rr, Paint()..color = const Color(0xE60E0F12));
+      canvas.drawRRect(rr, Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = r * 0.035
+        ..color = i.color);
+      icon.paint(canvas, Offset(box.left + r * 0.07, box.center.dy - icon.height / 2));
+      text.paint(canvas, Offset(box.left + r * 0.1 + icon.width, box.center.dy - text.height / 2));
+      y += h + r * 0.06;
+    }
+  }
+
+  void _nameHeartMarks(Canvas canvas, Fighter f, Offset c, double r, double rad, double p, Offset heartAt) {
+    // Name tag under the fighter.
     final name = _label(f.name.toUpperCase(), r * 0.34, Palette.bone);
     final tag = Rect.fromCenter(center: c + Offset(0, rad + r * 0.34), width: name.width + r * 0.24, height: name.height + r * 0.06);
     canvas.drawRRect(RRect.fromRectAndRadius(tag, Radius.circular(r * 0.06)), Paint()..color = const Color(0xCC0E0F12));
@@ -368,7 +502,7 @@ class BoardLayerPainter extends CustomPainter {
 
     // Health heart.
     final hs = r * (f.isHero ? 0.66 : 0.54);
-    final hRect = Rect.fromCenter(center: c + Offset(rad * 0.85, -rad * 0.8), width: hs, height: hs);
+    final hRect = Rect.fromCenter(center: heartAt, width: hs, height: hs);
     canvas
       ..save()
       ..translate(hRect.left, hRect.top);
@@ -423,9 +557,9 @@ class BoardLayerPainter extends CustomPainter {
 /// as a prompt is open would cost a full redraw per vsync for a subtle effect.
 class SteppedPulse extends Animation<double>
     with AnimationEagerListenerMixin, AnimationLocalListenersMixin, AnimationLocalStatusListenersMixin {
-  SteppedPulse({this.period = const Duration(milliseconds: 900), this.step = const Duration(milliseconds: 50)});
+  SteppedPulse({this.period = const Duration(milliseconds: 900), this.step = const Duration(milliseconds: 33)});
   final Duration period;
-  final Duration step;
+  Duration step;
   Timer? _timer;
   final Stopwatch _clock = Stopwatch();
   double _value = 0;
@@ -436,8 +570,9 @@ class SteppedPulse extends Animation<double>
   AnimationStatus get status => _timer == null ? AnimationStatus.dismissed : AnimationStatus.forward;
   bool get running => _timer != null;
 
-  void start() {
+  void start([Duration? customStep]) {
     if (_timer != null) return;
+    if (customStep != null) step = customStep;
     _clock
       ..reset()
       ..start();

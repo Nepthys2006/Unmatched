@@ -12,6 +12,17 @@ import '../theme.dart';
 /// Maps engine coordinates (roughly -7..7 by -3.5..3.5) to board pixels.
 class BoardGeometry {
   BoardGeometry(this.map, {this.unit = 100}) {
+    final art = map.art;
+    if (art != null) {
+      // Printed-style maps: the board is the artwork; map units are art pixels / unitPx from
+      // the image centre, so spaces land exactly on the painted circles.
+      _minX = -art.w / 2 / art.unitPx;
+      _minY = -art.h / 2 / art.unitPx;
+      _pad = 0;
+      size = Size(art.w / art.unitPx * unit, art.h / art.unitPx * unit);
+      positions = {for (final s in map.spaces) s.id: _pos(s.x, s.y)};
+      return;
+    }
     var minX = double.infinity, minY = double.infinity, maxX = -double.infinity, maxY = -double.infinity;
     for (final s in map.spaces) {
       minX = math.min(minX, s.x);
@@ -28,12 +39,14 @@ class BoardGeometry {
   final MapDef map;
   final double unit;
   static const pad = 0.9;
+  double _pad = pad;
   late final double _minX, _minY;
   late final Size size;
   late final Map<int, Offset> positions;
 
-  double get radius => unit * 0.3;
-  Offset _pos(double x, double y) => Offset((x - _minX + pad) * unit, (y - _minY + pad) * unit);
+  /// A space's radius on the board (the printed circles are about one unit across).
+  double get radius => unit * (map.art != null ? 0.46 : 0.3);
+  Offset _pos(double x, double y) => Offset((x - _minX + _pad) * unit, (y - _minY + _pad) * unit);
   Offset of(int space) => positions[space]!;
 
   /// Board pixels for a point in map coordinates (taps on the 3D board).
@@ -112,6 +125,8 @@ class BoardPainter extends CustomPainter {
 
   void _paint(Canvas canvas) {
     final map = geo.map;
+    // Maps with artwork are drawn from the image (see BoardArt); nothing to paint here.
+    if (map.art != null) return;
     final rect = Offset.zero & geo.size;
     final (c1, c2) = themeColors(map.theme);
     final outer = RRect.fromRectAndRadius(rect, Radius.circular(geo.unit * 0.25));
@@ -248,18 +263,28 @@ class BoardPainter extends CustomPainter {
   bool shouldRepaint(BoardPainter old) => old.geo.map != geo.map || old.detailed != detailed;
 }
 
-/// A small map preview for the setup screen.
 class MapPreview extends StatelessWidget {
-  const MapPreview(this.map, {super.key, this.height = 120});
+  const MapPreview(this.map, {super.key, this.height = 120, this.fit = BoxFit.cover});
   final MapDef map;
   final double height;
+  final BoxFit fit;
 
   @override
   Widget build(BuildContext context) {
+    final art = map.art;
+    if (art != null) {
+      return AspectRatio(
+        aspectRatio: art.w / art.h,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(6),
+          child: Image.asset(art.asset, fit: fit, cacheWidth: 960, filterQuality: FilterQuality.high),
+        ),
+      );
+    }
     final geo = BoardGeometry(map);
     return AspectRatio(
       aspectRatio: geo.size.width / geo.size.height,
-      child: RepaintBoundary(child: CustomPaint(painter: BoardPainter(geo, detailed: false))),
+      child: RepaintBoundary(child: CustomPaint(painter: BoardPainter(geo, detailed: true, showStarts: true))),
     );
   }
 }

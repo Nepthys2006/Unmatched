@@ -5,7 +5,8 @@ library;
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
+
+import 'package:flutter/services.dart';
 
 import 'link.dart';
 import 'ws_client.dart';
@@ -15,6 +16,8 @@ const beaconPort = 47401;
 
 bool get canHostLan => true;
 bool get canDiscoverLan => true;
+String? get servedByLanHost => null;
+bool get canJoinLan => true;
 
 /// A game found on the network.
 typedef LanGame = ({String ip, String name, int players, int open});
@@ -49,9 +52,7 @@ class LanHost implements HostLink {
 
   Future<void> _onRequest(HttpRequest req) async {
     if (!WebSocketTransformer.isUpgradeRequest(req)) {
-      req.response
-        ..statusCode = HttpStatus.notFound
-        ..close();
+      await _serveWebApp(req);
       return;
     }
     final ws = await WebSocketTransformer.upgrade(req);
@@ -72,6 +73,61 @@ class LanHost implements HostLink {
       cancelOnError: true,
     );
   }
+
+  /// Browsers on the network open `http://<host>:47400` and get the game: its runtime from
+  /// assets/webapp (tool/bundle_webapp.py) and its art and data from this app's own bundle. The
+  /// page is plain http, so it may open the ws:// connection to this host (an https page may not).
+  Future<void> _serveWebApp(HttpRequest req) async {
+    final res = req.response;
+    try {
+      var path = Uri.decodeComponent(req.uri.path);
+      if (path == '/' || path.isEmpty) path = '/index.html';
+      if (req.method != 'GET' || path.contains('..')) {
+        res.statusCode = HttpStatus.notFound;
+        return;
+      }
+      // Game art and data: the web build asks for `/assets/<bundle key>`.
+      final key = path.startsWith('/assets/assets/')
+          ? path.substring('/assets/'.length)
+          : (path.startsWith('/assets/maps/') ||
+                  path.startsWith('/assets/heroes/') ||
+                  path.startsWith('/assets/cards/') ||
+                  path.startsWith('/assets/data/') ||
+                  path.startsWith('/assets/audio/')
+              ? path.substring(1)
+              : 'assets/webapp$path');
+      final data = await rootBundle.load(key);
+      final bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+      res.headers
+        ..set(HttpHeaders.contentTypeHeader, _mime(path))
+        ..set(HttpHeaders.cacheControlHeader, 'no-cache')
+        ..contentLength = bytes.length;
+      res.add(bytes);
+    } catch (_) {
+      res.statusCode = HttpStatus.notFound;
+    } finally {
+      await res.close();
+    }
+  }
+
+  static String _mime(String path) => switch (path.split('.').last) {
+    'html' => 'text/html; charset=utf-8',
+    'js' => 'text/javascript; charset=utf-8',
+    'mjs' => 'text/javascript; charset=utf-8',
+    'wasm' => 'application/wasm',
+    'json' => 'application/json',
+    'webp' => 'image/webp',
+    'png' => 'image/png',
+    'jpg' => 'image/jpeg',
+    'wav' => 'audio/wav',
+    'ttf' => 'font/ttf',
+    'otf' => 'font/otf',
+    'glb' => 'model/gltf-binary',
+    _ => 'application/octet-stream',
+  };
+
+  /// The address browsers open to play (the game is served from this host).
+  String get webAddress => _addresses.isEmpty ? '' : 'http://${_addresses.first.address}:$lanPort';
 
   void _gone(String id) {
     if (_peers.remove(id) != null) _events.add(PeerLeft(id));
@@ -166,7 +222,15 @@ class LanDiscovery {
 
   Stream<List<LanGame>> get games => _games.stream;
 
+  static const _lan = MethodChannel('unmatched/lan');
+
   Future<void> start() async {
+    // Android only hands broadcast packets to apps holding a multicast lock.
+    if (Platform.isAndroid) {
+      try {
+        await _lan.invokeMethod<bool>('acquire');
+      } catch (_) {}
+    }
     try {
       final udp = _udp = await RawDatagramSocket.bind(InternetAddress.anyIPv4, beaconPort, reuseAddress: true);
       udp.listen((e) {
@@ -202,6 +266,7 @@ class LanDiscovery {
     _sweep?.cancel();
     _udp?.close();
     _games.close();
+    if (Platform.isAndroid) unawaited(_lan.invokeMethod<bool>('release').catchError((_) => false));
   }
 }
 

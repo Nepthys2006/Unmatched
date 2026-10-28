@@ -41,6 +41,7 @@ dependencies:
   web: ^1.1.2
   web_socket_channel: ^3.0.3
   supabase: ^2.16.5
+  qr_flutter: ^4.1.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -61,7 +62,16 @@ flutter:
   assets:
     - assets/data/
     - assets/audio/
-    - assets/maps3d/
+    - assets/maps/
+    - assets/webapp/
+    - assets/webapp/icons/
+    - assets/webapp/canvaskit/
+    - assets/webapp/canvaskit/chromium/
+    - assets/webapp/assets/
+    - assets/webapp/assets/fonts/
+    - assets/webapp/assets/fonts/fallback/
+    - assets/webapp/assets/packages/cupertino_icons/assets/
+    - assets/webapp/assets/shaders/
     - assets/web3d/
     - assets/web3d/three/
     - assets/web3d/three/addons/environments/

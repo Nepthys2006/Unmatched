@@ -1,11 +1,11 @@
 {
-    "name": "Unmatched (fan edition)",
+    "name": "Unmatched — Fan Made",
     "short_name": "Unmatched",
     "start_url": ".",
-    "display": "standalone",
+    "display": "fullscreen",
     "background_color": "#1b1c20",
     "theme_color": "#1b1c20",
-    "description": "Unmatched fan game",
+    "description": "Unmatched, the fan-made digital edition",
     "orientation": "landscape",
     "prefer_related_applications": false,
     "icons": [

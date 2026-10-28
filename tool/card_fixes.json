@@ -42,7 +42,8 @@
     "value": null
    },
    "3": {
-    "boost": 2
+    "boost": 2,
+    "title": "Shapeshifter"
    }
   }
  },
@@ -116,6 +117,212 @@
    "11": {
     "title": "I've Been Hacked!"
    }
+  }
+ },
+ "squirrel-girl": {
+  "cards": {
+   "7": {
+    "fighters": [
+     "squirrel"
+    ]
+   },
+   "4": {
+    "text": {
+     "after": "Move Squirrel Girl up to 3 spaces."
+    }
+   }
+  }
+ },
+ "raphael": {
+  "cards": {
+   "2": {
+    "text": {
+     "immediately": "Cancel all DURING COMBAT and AFTER COMBAT effects on your opponent's card.",
+     "after": "If no effects were canceled this way, deal 2 damage to an adjacent opposing fighter."
+    }
+   },
+   "8": {
+    "text": {
+     "after": "Shuffle this card into your deck. Then, draw 1 card."
+    }
+   }
+  }
+ },
+ "tomoe-gozen": {
+  "cards": {
+   "12": {
+    "text": {
+     "after": "If you won the combat, move a fighter in the combat up to 2 spaces."
+    }
+   }
+  }
+ },
+ "shakespeare": {
+  "cards": {
+   "1": {
+    "syllables": 2,
+    "text": {
+     "during": "Increase the value of this card by +1 for each HORROR card in your line.",
+     "completion": "Deal 1 damage to the opposing fighter for each other card in your line."
+    }
+   },
+   "2": {
+    "syllables": 6,
+    "text": {
+     "after": "Return a defeated Actor to any space in Shakespeare's zone.",
+     "completion": "Return all defeated Actors to spaces in Shakespeare's zone."
+    }
+   },
+   "3": {
+    "syllables": 2,
+    "text": {
+     "immediately": "Cancel all effects on your opponent's card.",
+     "completion": "Return this card to your hand."
+    }
+   },
+   "4": {
+    "syllables": 2,
+    "text": {
+     "during": "Increase the value of this card by +1 for each HORROR card in your line.",
+     "completion": "Deal 1 damage to the opposing fighter for each other card in your line."
+    }
+   },
+   "5": {
+    "syllables": 2,
+    "text": {
+     "after": "Draw 1 card. If you won the combat, draw 2 cards instead.",
+     "completion": "Move each fighter up to 2 spaces. (This includes opposing fighters.)"
+    }
+   },
+   "6": {
+    "syllables": 2,
+    "text": {
+     "during": "Increase the value of this card by +1 for each HORROR card in your line.",
+     "completion": "Deal 1 damage to the opposing fighter for each other card in your line."
+    }
+   },
+   "7": {
+    "syllables": 2,
+    "text": {
+     "during": "Increase the value of this card by +1 for each HORROR card in your line.",
+     "completion": "Deal 1 damage to the opposing fighter for each other card in your line."
+    }
+   },
+   "8": {
+    "syllables": 6,
+    "text": {
+     "completion": "Gain 2 actions."
+    }
+   },
+   "9": {
+    "syllables": 2,
+    "text": {
+     "after": "You may return the first card in your line to your hand (before you add this to your line).",
+     "completion": "Draw 1 card."
+    }
+   },
+   "10": {
+    "syllables": 2,
+    "text": {
+     "after": "If you lost the combat, Shakespeare recovers 1 health.",
+     "completion": "Draw 2 cards. Shakespeare recovers 2 health."
+    }
+   },
+   "11": {
+    "syllables": 4,
+    "text": {
+     "after": "Move each Actor up to 3 spaces.",
+     "completion": "Place Shakespeare in a zone with no Actors."
+    }
+   },
+   "12": {
+    "syllables": 4,
+    "text": {
+     "completion": "Deal 2 damage to any opposing fighter."
+    }
+   },
+   "13": {
+    "syllables": 4,
+    "text": {
+     "after": "Deal 1 damage to each other fighter in your zone.",
+     "completion": "Draw 1 card."
+    }
+   },
+   "14": {
+    "syllables": 4,
+    "text": {
+     "during": "Increase the value of this card by +1 for each of your fighters adjacent to the opposing fighter.",
+     "completion": "Place each of your fighters in any space."
+    }
+   },
+   "15": {
+    "syllables": 2,
+    "text": {
+     "during": "Increase the value of this card by +1 for each HORROR card in your line.",
+     "completion": "Deal 1 damage to the opposing fighter for each other card in your line."
+    }
+   },
+   "16": {
+    "syllables": 4,
+    "text": {
+     "after": "Move your fighter up to 2 spaces.",
+     "completion": "Draw 1 card."
+    }
+   }
+  }
+ },
+ "the-wayward-sisters": {
+  "fighters": {
+   "the-wayward-sisters": {
+    "count": 3
+   }
+  },
+  "cards": {
+   "1": {
+    "ingredient": "bat"
+   },
+   "2": {
+    "ingredient": "bat",
+    "text": {
+     "effect": "Cast any spell. Then, cast a different spell. (Do not discard any cards from your cauldron to cast these spells.)"
+    }
+   },
+   "3": {
+    "ingredient": "bat"
+   },
+   "4": {
+    "ingredient": "bat"
+   },
+   "5": {
+    "ingredient": "snake"
+   },
+   "6": {
+    "ingredient": "snake"
+   },
+   "7": {
+    "ingredient": "lizard"
+   },
+   "8": {
+    "ingredient": "lizard",
+    "text": {
+     "effect": "Look at the top 4 cards of your deck. Put 2 of them in your hand and the other 2 back on top of your deck in any order."
+    }
+   },
+   "9": {
+    "ingredient": "snake"
+   },
+   "10": {
+    "ingredient": "snake"
+   },
+   "11": {
+    "ingredient": "lizard"
+   },
+   "12": {
+    "ingredient": "lizard"
+   }
+  },
+  "hero": {
+   "ability": "Bubbling Brew\nYour cards go into your cauldron instead of your discard pile.\nAfter you attack, you may cast one spell that you have the ingredients for. If you do, discard all the cards in your cauldron."
   }
  }
 }

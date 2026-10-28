@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <!--
+    If you are serving your web app in a path other than the root, change the
+    href value below to reflect the base path you are serving from.
+
+    The path provided below has to start and end with a slash "/" in order for
+    it to work correctly.
+
+    For more details:
+    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
+
+    This is a placeholder for base href that will be replaced by the value of
+    the `--base-href` argument provided to `flutter build`.
+  -->
+  <base href="/">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="Unmatched, the fan-made digital edition">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Unmatched">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>Unmatched</title>
+  <link rel="manifest" href="manifest.json">
+</head>
+<body style="background:#1b1c20">
+  <!--
+    You can customize the "flutter_bootstrap.js" script.
+    This is useful to provide a custom configuration to the Flutter loader
+    or to give the user feedback during the initialization process.
+
+    For more details:
+    * https://docs.flutter.dev/platform-integration/web/initialization
+  -->
+  <script src="flutter_bootstrap.js" async></script>
+  <script>
+    // Phones and tablets: the first tap (and any tap after leaving full screen) puts the game in
+    // full screen, locked to landscape where the browser allows it. While a phone is held
+    // upright, a note asks to turn it.
+    (function () {
+      var touch = matchMedia('(pointer: coarse)').matches;
+      if (!touch) return;
+      function go() {
+        if (document.fullscreenElement || !document.documentElement.requestFullscreen) return;
+        document.documentElement.requestFullscreen().then(function () {
+          if (screen.orientation && screen.orientation.lock) return screen.orientation.lock('landscape');
+        }).catch(function () {});
+      }
+      addEventListener('pointerup', go, true);
+      var note = document.createElement('div');
+      note.id = 'rotate';
+      note.innerHTML = '<div style="font:700 22px system-ui,sans-serif;letter-spacing:.06em">TURN YOUR PHONE</div>' +
+        '<div style="margin-top:8px;font:15px system-ui,sans-serif;opacity:.75">Unmatched is played in landscape. Tap to go full screen.</div>';
+      note.setAttribute('style', 'position:fixed;inset:0;z-index:9999;display:none;flex-direction:column;align-items:center;' +
+        'justify-content:center;text-align:center;padding:24px;background:#1b1c20;color:#ece6d8');
+      document.body.appendChild(note);
+      function check() { note.style.display = innerHeight > innerWidth ? 'flex' : 'none'; }
+      addEventListener('resize', check);
+      check();
+    })();
+  </script>
+</body>
+</html>

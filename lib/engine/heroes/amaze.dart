@@ -1,5 +1,5 @@
 /// Houdini vs. The Genie, and Unmatched Adventures: Tales to Amaze (Annie Christmas,
-/// Nikola Tesla, Golden Bat).
+/// Nikola Tesla, Golden Bat, Dr. Jill Trent).
 library;
 
 import '../combat.dart';
@@ -459,5 +459,134 @@ class GoldenBat extends HeroScript {
             ..insertAll(0, order);
         }),
         'SUPER STRENGTH': vanilla,
+      };
+}
+
+// =========================================================================== Dr. Jill Trent
+
+enum Gadget { hypnoray, tonic }
+
+/// Gadgetology: at the start of your turn, activate one of your gadgets. Whenever Jill Trent
+/// attacks, resolve the active gadget's effect.
+/// * Hypnoray Blaster, DURING COMBAT: if your card's printed value is lower than your
+///   opponent's, reveal the top card of their deck and add its BOOST to your attack.
+/// * Ultrabiotic Tonic, AFTER COMBAT: if your card's printed value is higher than your
+///   opponent's, Jill Trent recovers 1 health.
+/// Sisters in Arms lets Daisy use the gadget when she attacks next to Jill.
+class JillTrent extends HeroScript {
+  Gadget? gadget;
+  Fighter get jill => me.heroFighter;
+  Fighter? get daisy => me.fighters.where((f) => f.id == 'daisy').firstOrNull;
+
+  @override
+  List<String> status() => [if (gadget != null) gadget == Gadget.hypnoray ? 'Hypnoray Blaster' : 'Ultrabiotic Tonic'];
+
+  @override
+  Future<void> startOfTurn(Game g, Player active) async {
+    if (active != me) return;
+    final i = await g.chooseOption(me, ['Hypnoray Blaster', 'Ultrabiotic Tonic'], 'Gadgetology: activate a gadget');
+    gadget = Gadget.values[i];
+    await g.emit(StatusChanged(me, 'Jill Trent activates the ${status().first}.'));
+  }
+
+  /// Whether this attack resolves the active gadget: Jill attacking, or Daisy attacking with
+  /// Sisters in Arms next to Jill.
+  bool _gadgetApplies(Game g, Combat c) {
+    final a = c.attacker;
+    if (a.player != me || gadget == null || a.card == null) return false;
+    if (a.fighter == jill) return true;
+    final d = daisy;
+    return d != null && a.fighter == d && a.card!.def.upperTitle == 'SISTERS IN ARMS' && g.adjacent(d, jill);
+  }
+
+  @override
+  Future<void> duringCombat(Game g, Combat c) async {
+    if (gadget != Gadget.hypnoray || !_gadgetApplies(g, c)) return;
+    if (c.attacker.printed >= (c.defender.card == null ? 0 : c.defender.printed)) return;
+    final opp = c.defender.player;
+    if (opp.deck.isEmpty) return;
+    final top = opp.deck.first;
+    await g.emit(Revealed(opp, [top], ' from the top of their deck (Hypnoray Blaster)'));
+    g.addOp(c.attacker, ValueOp.add(top.def.boost ?? 0, 'Hypnoray Blaster: ${top.title} (BOOST)'));
+  }
+
+  @override
+  Future<void> afterCombat(Game g, Combat c) async {
+    if (gadget != Gadget.tonic || !_gadgetApplies(g, c)) return;
+    if (c.attacker.printed <= (c.defender.card == null ? 0 : c.defender.printed)) return;
+    if (jill.alive) await g.heal(jill, 1);
+  }
+
+  @override
+  Map<String, CardScript> get cards => {
+        'BATTLE OF WITS': CardScript(after: (x) async {
+          final mine = x.me.deck.firstOrNull, theirs = x.opp.deck.firstOrNull;
+          if (mine != null) await x.game.emit(Revealed(x.me, [mine], ' from the top of their deck (Battle of Wits)'));
+          if (theirs != null) await x.game.emit(Revealed(x.opp, [theirs], ' from the top of their deck (Battle of Wits)'));
+          if (mine != null && (mine.def.boost ?? 0) > (theirs?.def.boost ?? 0) && x.oppFighter.alive) {
+            await x.damage(x.oppFighter, 3);
+          }
+        }),
+        'ENERGIZING SPRAY': CardScript(after: (x) async => x.gainActions(1)),
+        'HYPNOTIST': CardScript(immediately: (x) async {
+          if (gadget == Gadget.hypnoray) x.cancelOpponent();
+        }),
+        'UTILITY BELT': CardScript(after: (x) async {
+          final i = await x.option(['Jill Trent recovers 1 health', 'Move Jill Trent 1 space', 'Draw 1 card'], 'Utility Belt: choose one');
+          switch (i) {
+            case 0:
+              await x.heal(jill, 1);
+            case 1:
+              if (jill.onBoard) await x.move(jill, 1);
+            default:
+              await x.draw(1);
+          }
+        }),
+        'HELPFUL ASSISTANT': CardScript(effect: (x) async {
+          final cards = await x.game.chooseCards(x.me, x.me.discard.where((c) => c.owner == x.me), 0, 3,
+              'Helpful Assistant: shuffle up to 3 cards from your discard pile into your deck', intent: Intent.gainOwn, source: x.card);
+          for (final c in cards) {
+            await x.game.toDeck(c);
+          }
+          if (cards.isNotEmpty) await x.game.shuffleDeck(x.me);
+          await x.draw(1);
+        }),
+        'INSIGHTFUL DEDUCTION': CardScript(after: (x) async {
+          final t = x.opp;
+          final top = t.deck.take(3).toList();
+          if (top.isEmpty) return;
+          await x.game.emit(Revealed(t, top, ' from the top of their deck (Insightful Deduction)'));
+          final bottom = await x.game.chooseCard(x.me, top, 'Insightful Deduction: put one on the bottom of their deck',
+              intent: Intent.loseEnemy, source: x.card);
+          t.deck.removeWhere(top.contains);
+          final rest = top.where((c) => c != bottom).toList();
+          final order = <Card>[];
+          while (rest.isNotEmpty) {
+            final c = rest.length == 1
+                ? rest.first
+                : await x.game.chooseCard(x.me, rest, 'Insightful Deduction: which card goes on top?', intent: Intent.loseOwn, source: x.card);
+            rest.remove(c);
+            order.add(c!);
+          }
+          t.deck
+            ..insertAll(0, order)
+            ..add(bottom!);
+          await x.game.say('${x.me.name} puts one card on the bottom of ${t.name}\'s deck and the rest back on top.');
+        }),
+        'SISTERS IN ARMS': const CardScript(uncancelable: true),
+        'ACE FIGHTER': drawAfter(1),
+        'CAUGHT RED-HANDED': CardScript(after: (x) => x.discard(x.opp, x.won ? 2 : 1)),
+        'GYROSCOPIC JETPACK': moveAfter(2, through: true),
+        'INDESTRUCTIBLE CLOTH': CardScript(immediately: (x) async {
+          final f = x.fighter, combat = x.combat;
+          x.game.addTurnMod(TurnMod(
+            name: 'Indestructible Cloth',
+            modifyDamageFn: (g, target, n, info) => target == f && !info.combat && g.combat == combat ? 0 : n,
+          ));
+        }),
+        'LASER PEN': CardScript(after: (x) async {
+          if (x.oppFighter.alive) await x.damage(x.oppFighter, 1);
+        }),
+        'STASIS DIFFUSER': lockOpponent,
       };
 }

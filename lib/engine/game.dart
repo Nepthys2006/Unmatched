@@ -279,7 +279,8 @@ class Game {
       if (cards.isEmpty) continue;
       for (final t in enemyFighters(p)) {
         if (!mayAttackPlayer(p, t.owner)) continue;
-        if (inReach(f, t) || cards.any((c) => scriptOf(c)?.target?.call(this, f, t) ?? false)) {
+        final reach = inReach(f, t);
+        if (cards.any((c) => canTargetWith(c, f, t, reach: reach))) {
           out.add(ActionChoice(ActionKind.attack, fighter: f, target: t));
         }
       }
@@ -300,6 +301,14 @@ class Game {
     return c.def.canAttack || (s?.alsoAttack?.call(this, f) ?? false);
   }
 
+  /// Whether [c] may be used for [a]'s attack on [t]: in reach (or the card widens the reach)
+  /// and not ruled out by the card ("can only target a fighter adjacent to...").
+  bool canTargetWith(Card c, Fighter a, Fighter t, {bool? reach}) {
+    final s = scriptOf(c);
+    if (!(reach ?? inReach(a, t)) && !(s?.target?.call(this, a, t) ?? false)) return false;
+    return s?.onlyTarget?.call(this, a, t) ?? true;
+  }
+
   bool canDefendWith(Card c, Fighter f) {
     if (!f.owner.script.fighterMayUse(c, f)) return false;
     final s = scriptOf(c);
@@ -309,7 +318,7 @@ class Game {
   /// Normal attack reach: melee = adjacent, ranged = adjacent or a shared zone.
   bool inReach(Fighter a, Fighter t) {
     if (!a.onBoard || !t.onBoard || !t.isEnemyOf(a.owner)) return false;
-    if (board.adjacent(a.space!, t.space!)) return true;
+    if (board.adjacent(a.space!, t.space!) || _shareSmall(a, t)) return true;
     if (a.isRanged && board.sharesZone(a.space!, t.space!)) return true;
     return allMods.any((m) => m.canAlsoTarget(this, a, t));
   }
@@ -475,14 +484,17 @@ class Game {
   Future<void> discardOngoing(OngoingMod m) async {
     mods.remove(m);
     if (m.owner.inPlay.remove(m.card)) {
-      m.owner.discard.add(m.card);
+      toDiscardPile(m.card);
       await emit(CardMoved(m.card, Zone.inPlay, Zone.discard));
     }
   }
 
+  /// Puts [c] into its owner's discard pile (the Wayward Sisters' cards go into their cauldron).
+  void toDiscardPile(Card c) => c.owner.script.discardPileFor(c).add(c);
+
   Future<void> disposePlayed(Card c) async {
     if (c.virtual || await c.owner.script.disposePlayed(c)) return;
-    c.owner.discard.add(c);
+    toDiscardPile(c);
     await emit(CardMoved(c, Zone.combat, Zone.discard));
   }
 
@@ -519,7 +531,7 @@ class Game {
     var card = attackCard;
     if (card == null) {
       final options = p.hand
-          .where((x) => canAttackWith(x, a) && (reach || (scriptOf(x)?.target?.call(this, a, t) ?? false)))
+          .where((x) => canAttackWith(x, a) && canTargetWith(x, a, t, reach: reach))
           .toList();
       card = await chooseCard(p, options, 'Choose an attack card', intent: Intent.attackCard, subject: c, autoSingle: false);
     }
@@ -545,7 +557,7 @@ class Game {
       final sc = s.card == null ? null : scriptOf(s.card!);
       if (sc?.onReveal != null) await sc!.onReveal!(Fx(this, s.player, card: s.card, side: s));
     }
-    turn.played.addAll([card, if (d != null) d]);
+    turn.played.addAll([card, ?d]);
     c.phase = Phase.reveal;
     await emit(CardsRevealed(c));
 
@@ -608,7 +620,7 @@ class Game {
     Card? done;
     while (s.card != null && s.card != done && !turnEnded) {
       final card = done = s.card!;
-      if (s.canceled || (timing == 'after' && s.afterCanceled)) return;
+      if (s.canceled || (timing == 'after' && s.afterCanceled) || (timing == 'during' && s.duringCanceled)) return;
       final sc = scriptOf(card);
       final fn = switch (timing) { 'immediately' => sc?.immediately, 'during' => sc?.during, _ => sc?.after };
       if (fn == null) {
@@ -645,6 +657,19 @@ class Game {
       s.ops.removeWhere((o) => o.label.startsWith('BOOST: King Arthur'));
     }
     emit(Canceled(s, afterOnly: afterOnly));
+  }
+
+  /// Cancels only the DURING and AFTER COMBAT effects on [s]'s card (Break Something). Returns
+  /// whether anything was canceled.
+  bool cancelDuringAndAfter(Side s) {
+    if (s.card == null || isUncancelable(s)) return false;
+    final sc = scriptOf(s.card!);
+    if (sc?.during == null && sc?.after == null) return false;
+    s
+      ..duringCanceled = true
+      ..afterCanceled = true;
+    emit(Canceled(s, afterOnly: true));
+    return true;
   }
 
   void ignoreValue(Side s) {
@@ -697,7 +722,7 @@ class Game {
       if (p.deck.isEmpty) return false;
       if (optional && !await yesNo(p, text ?? 'BLIND BOOST ${s.card?.title}?', intent: Intent.help)) return false;
       b = p.deck.removeAt(0);
-      p.discard.add(b);
+      toDiscardPile(b);
       await emit(CardMoved(b, Zone.deck, Zone.discard, reason: ' (blind boost)'));
     } else {
       final options = boostOptions(p);
@@ -724,7 +749,7 @@ class Game {
   /// Discards a boost card from the hand, or from storage into its owner's discard pile.
   Future<void> discardForBoost(Player p, Card c) async {
     if (p.script.stored.remove(c)) {
-      c.owner.discard.add(c);
+      toDiscardPile(c);
       await emit(CardMoved(c, Zone.inPlay, Zone.discard, reason: ' to boost (Vibranium Suit)'));
     } else {
       await discardCard(c, reason: ' to boost');
@@ -748,7 +773,7 @@ class Game {
       if (oldTo == Zone.hand) {
         (old.playedBy ?? old.owner).hand.add(old);
       } else {
-        old.owner.discard.add(old);
+        toDiscardPile(old);
       }
     }
     s.clearCard();
@@ -806,10 +831,13 @@ class Game {
 
   /// Puts a sidekick that is off the board (reserve or defeated) into one of [spaces]. If all of
   /// that kind are already on the board and [moveIfNone], one of them moves there instead.
-  Future<bool> summon(Player p, String fighterId, Iterable<int> spaces, {bool moveIfNone = false, String? text}) async {
-    final options = spaces.where(isEmpty).toList();
-    if (options.isEmpty) return false;
+  /// [shared]: a small fighter may also go into a space it can share ("in Squirrel Girl's space").
+  Future<bool> summon(Player p, String fighterId, Iterable<int> spaces,
+      {bool moveIfNone = false, String? text, bool shared = false}) async {
     final kind = p.fighters.where((f) => f.id == fighterId);
+    if (kind.isEmpty) return false;
+    final options = spaces.where((s) => shared ? canOccupy(kind.first, s, ignoreSelf: false) : isEmpty(s)).toSet().toList();
+    if (options.isEmpty) return false;
     var f = kind.where((f) => !f.onBoard && !f.offBoard).firstOrNull;
     if (f == null && moveIfNone) {
       f = await chooseFighter(p, kind.where((f) => f.onBoard), 'All are on the board: choose one to move', intent: Intent.none);
@@ -836,6 +864,20 @@ class Game {
 
   Future<int> damage(Fighter f, int amount, {DamageInfo info = const DamageInfo()}) async {
     if (!f.alive || f.offBoard || amount <= 0) return 0;
+    // Small fighters: damage to one is taken by every small fighter of its kind in its space.
+    if (f.isSmall && f.onBoard && !_splashing) {
+      final others = onBoard.where((o) => o != f && o.isSmall && o.def == f.def && o.space == f.space).toList();
+      _splashing = true;
+      try {
+        final dealt = await damage(f, amount, info: info);
+        for (final o in others) {
+          await damage(o, amount, info: info);
+        }
+        return dealt;
+      } finally {
+        _splashing = false;
+      }
+    }
     var n = amount;
     for (final m in allMods) {
       n = m.modifyDamage(this, f, n, info);
@@ -862,6 +904,8 @@ class Game {
     }
     return dealt;
   }
+
+  bool _splashing = false;
 
   Future<bool> _defeatPrevented(Fighter f) async {
     for (final m in allMods.toList()) {
@@ -900,7 +944,7 @@ class Game {
 
   /// Puts a defeated or reserve fighter onto the board ("return", "summon", "resurrect").
   Future<bool> revive(Fighter f, int space, {int? hp}) async {
-    if (!isEmpty(space)) return false;
+    if (!canOccupy(f, space, ignoreSelf: false)) return false;
     f.defeated = false;
     f.reserve = false;
     f.offBoard = false;
@@ -942,7 +986,7 @@ class Game {
   Future<void> discardCard(Card c, {String reason = '', bool byOpponent = false}) async {
     final holder = holderOf(c);
     if (!holder.hand.remove(c)) return;
-    c.owner.discard.add(c);
+    toDiscardPile(c);
     await emit(CardMoved(c, Zone.hand, Zone.discard, reason: reason));
     for (final m in allMods.toList()) {
       await m.onDiscardedFromHand(this, c, byOpponent: byOpponent, holder: holder);
@@ -977,7 +1021,7 @@ class Game {
   Future<Card?> discardTopOfDeck(Player p, {String reason = ''}) async {
     if (p.deck.isEmpty) return null;
     final c = p.deck.removeAt(0);
-    p.discard.add(c);
+    toDiscardPile(c);
     await emit(CardMoved(c, Zone.deck, Zone.discard, reason: reason));
     return c;
   }
@@ -1056,19 +1100,54 @@ class Game {
 
   // =================================================================================== board
 
+  /// The fighter in [space]. When small fighters share it, the normal-sized one comes first.
   Fighter? fighterAt(int space) {
+    Fighter? small;
     for (final f in fighters) {
-      if (f.onBoard && (f.space == space || f.tail == space)) return f;
+      if (!f.onBoard || (f.space != space && f.tail != space)) continue;
+      if (!f.isSmall) return f;
+      small ??= f;
     }
-    return null;
+    return small;
   }
+
+  /// Every fighter in [space] (more than one only when small fighters share it).
+  List<Fighter> fightersAt(int space) => [
+        for (final f in fighters)
+          if (f.onBoard && (f.space == space || f.tail == space)) f
+      ];
+
+  /// Whether [f] may end a move or be put in [space]. A space holds one normal fighter plus up to
+  /// 4 small fighters (Squirrel Girl's squirrels). [f] itself doesn't count unless [ignoreSelf] is false.
+  bool canOccupy(Fighter f, int space, {bool ignoreSelf = true}) {
+    final others = fightersAt(space).where((o) => !ignoreSelf || o != f);
+    if (f.isSmall) return others.where((o) => o.isSmall).length < 4;
+    return others.every((o) => o.isSmall);
+  }
+
+  /// Where [f] sits inside its space, as an offset in space radii: small fighters sharing a space
+  /// fan out around it (the normal-sized fighter stays in the middle).
+  (double, double) offsetInSpace(Fighter f) {
+    if (!f.onBoard || !f.isSmall) return (0, 0);
+    final here = fightersAt(f.space!);
+    final small = here.where((o) => o.isSmall).toList();
+    final shared = here.length > small.length;
+    if (!shared && small.length == 1) return (0, 0);
+    final a = 2 * pi * small.indexOf(f) / small.length - pi / 4;
+    final r = shared ? 0.8 : 0.5;
+    return (r * cos(a), r * sin(a));
+  }
+
+  /// A small fighter is adjacent to the fighters it shares a space with.
+  bool _shareSmall(Fighter a, Fighter b) =>
+      a != b && (a.isSmall || b.isSmall) && a.onBoard && b.onBoard && a.spaces.any(b.spaces.contains);
 
   bool isEmpty(int space) => fighterAt(space) == null;
   Iterable<int> emptySpaces() => board.spaceIds.where(isEmpty);
   // A large fighter in two spaces is adjacent to every space next to either, and in all zones
   // of both (T. Rex); everyone else has a single space.
   bool adjacent(Fighter a, Fighter b) =>
-      a != b && a.onBoard && b.onBoard && a.spaces.any((x) => b.spaces.any((y) => board.adjacent(x, y)));
+      a != b && a.onBoard && b.onBoard && (a.spaces.any((x) => b.spaces.any((y) => board.adjacent(x, y))) || _shareSmall(a, b));
   bool sameZone(Fighter a, Fighter b) =>
       a.onBoard && b.onBoard && a.spaces.any((x) => b.spaces.any((y) => board.sharesZone(x, y)));
   Iterable<Fighter> adjacentFighters(Fighter f) => f.onBoard ? onBoard.where((o) => adjacent(f, o)) : const [];
@@ -1096,33 +1175,35 @@ class Game {
   }
 
   Map<int, List<int>> _reachableFrom(Fighter f, int start, int steps, bool throughOpp) {
-    bool isEmpty(int s) {
-      final o = fighterAt(s);
-      return o == null || o == f;
-    }
+    bool isEmpty(int s) => canOccupy(f, s);
 
     final out = <int, List<int>>{start: [start]};
     if (steps <= 0 || cannotLeave(f)) return out;
-    bool enemyAt(int s) {
-      final o = fighterAt(s);
-      return o != null && o.isEnemyOf(f.owner);
-    }
+    // Small fighters don't block opposing fighters, and move through them.
+    bool enemyAt(int s) => fightersAt(s).any((o) => o.isEnemyOf(f.owner) && !o.isSmall && !f.isSmall);
 
     Iterable<int> next(int s) sync* {
-      yield* board.neighbours(s);
+      yield* board.stepsFrom(s);
       for (final m in allMods) {
         yield* m.extraSteps(this, f, s);
       }
     }
 
+    // Movement spent to reach a space: 1 a step, 2 along a "+1" path.
+    int cost(int a, int b) => board.def.stairs.isEmpty ? 1 : board.stepCost(a, b);
+
     if (!throughOpp) {
-      var frontier = [start];
+      final spent = <int, int>{start: 0};
       final paths = <int, List<int>>{start: [start]};
-      for (var d = 0; d < steps && frontier.isNotEmpty; d++) {
+      var frontier = [start];
+      while (frontier.isNotEmpty) {
         final nxt = <int>[];
         for (final s in frontier) {
           for (final n in next(s)) {
-            if (paths.containsKey(n) || enemyAt(n)) continue;
+            if (enemyAt(n)) continue;
+            final c = spent[s]! + cost(s, n);
+            if (c > steps || (spent[n] != null && spent[n]! <= c)) continue;
+            spent[n] = c;
             paths[n] = [...paths[s]!, n];
             nxt.add(n);
           }
@@ -1136,10 +1217,11 @@ class Game {
     }
     // Through enemies: explore simple paths, keep the one passing the most enemies.
     final best = <int, (int, List<int>)>{};
-    void dfs(int s, List<int> path, int passed) {
-      if (path.length - 1 >= steps) return;
+    void dfs(int s, List<int> path, int passed, int spent) {
       for (final n in next(s)) {
         if (path.contains(n)) continue;
+        final c = spent + cost(s, n);
+        if (c > steps) continue;
         final p2 = [...path, n];
         final passedHere = passed + (enemyAt(n) ? 1 : 0);
         if (isEmpty(n) || n == start) {
@@ -1149,11 +1231,11 @@ class Game {
             best[n] = (enemiesThrough, p2);
           }
         }
-        dfs(n, p2, passedHere);
+        dfs(n, p2, passedHere, c);
       }
     }
 
-    dfs(start, [start], 0);
+    dfs(start, [start], 0, 0);
     for (final e in best.entries) {
       out[e.key] = e.value.$2;
     }
@@ -1161,16 +1243,17 @@ class Game {
   }
 
   /// Moves [f] up to [upTo] spaces; [chooser] picks the destination. Returns the path taken
-  /// (null if it couldn't move).
+  /// (null if it couldn't move). [routes] replaces the normal destinations (Squirgility's
+  /// free steps over sidekicks).
   Future<List<int>?> moveFighter(Fighter f, int upTo,
-      {Player? chooser, bool throughOpp = false, String? text, Card? source}) async {
+      {Player? chooser, bool throughOpp = false, String? text, Card? source, Map<int, List<int>>? routes}) async {
     if (!f.onBoard || upTo <= 0) return null;
     if (cannotLeave(f)) {
       await say("${f.name} can't leave their space.");
       return null;
     }
     final who = chooser ?? f.owner;
-    final reach = reachable(f, upTo, throughOpp: throughOpp || allMods.any((m) => m.movesThroughEnemies(this, f)));
+    final reach = routes ?? reachable(f, upTo, throughOpp: throughOpp || allMods.any((m) => m.movesThroughEnemies(this, f)));
     final dest = await chooseSpace(who, reach.keys, text ?? 'Move ${f.name} up to $upTo space${upTo == 1 ? '' : 's'}',
         intent: who == f.owner ? Intent.moveOwn : Intent.moveEnemy, subject: f, source: source);
     if (dest == null || dest == f.space) return [f.space!];
@@ -1178,14 +1261,14 @@ class Game {
     // Something along the way can stop the move early (a trap).
     for (final m in allMods) {
       final stop = m.stopMove(this, f, path);
-      final free = stop != null && (fighterAt(path[stop]) == null || fighterAt(path[stop]) == f);
+      final free = stop != null && canOccupy(f, path[stop]);
       if (free && stop > 0 && stop < path.length - 1) path = path.sublist(0, stop + 1);
     }
     f.space = path.last;
     if (f.owner.script.isLarge(f)) {
       // The back of her base points at the space she just moved from.
       final prev = path.length >= 2 ? path[path.length - 2] : null;
-      f.tail = prev != null && (fighterAt(prev) == null || fighterAt(prev) == f) && prev != f.space ? prev : f.tail;
+      f.tail = prev != null && canOccupy(f, prev) && prev != f.space ? prev : f.tail;
       if (f.tail == f.space) f.tail = null;
     }
     turn.leftSpace.add(f);
@@ -1193,6 +1276,7 @@ class Game {
     for (final m in allMods.toList()) {
       await m.afterMove(this, f, path);
     }
+    await _relocated(f, path);
     await _entered(f);
     return path;
   }
@@ -1205,7 +1289,7 @@ class Game {
       await say("${f.name} can't leave their space.");
       return false;
     }
-    final options = spaces.where((s) => isEmpty(s) || fighterAt(s) == f).toSet().toList();
+    final options = spaces.where((s) => canOccupy(f, s)).toSet().toList();
     if (options.isEmpty) return false;
     final who = chooser ?? f.owner;
     final s = await chooseSpace(who, options, text ?? 'Place ${f.name}',
@@ -1217,6 +1301,7 @@ class Game {
     turn.leftSpace.add(f);
     await emit(FighterMoved(f, [from, s], placed: true));
     if (f.owner.script.isLarge(f)) await placeTail(f, who);
+    await _relocated(f, [from, s]);
     await _entered(f);
     return true;
   }
@@ -1229,6 +1314,12 @@ class Game {
     f.tail = await chooseSpace(who, room, 'Which space does the back of ${f.name} cover?', intent: Intent.none, subject: f);
   }
 
+  Future<void> _relocated(Fighter f, List<int> path) async {
+    for (final m in allMods.toList()) {
+      await m.relocated(this, f, path);
+    }
+  }
+
   Future<void> _entered(Fighter f) async {
     if (!f.onBoard) return;
     for (final m in allMods.toList()) {
@@ -1238,6 +1329,12 @@ class Game {
 
   Future<bool> swap(Fighter a, Fighter b) async {
     if (!a.onBoard || !b.onBoard || cannotLeave(a) || cannotLeave(b)) return false;
+    // Small fighters share spaces: each must fit where the other was (not beside a normal fighter).
+    bool fits(Fighter f, int space) {
+      final others = fightersAt(space).where((o) => o != a && o != b);
+      return f.isSmall ? others.where((o) => o.isSmall).length < 4 : others.every((o) => o.isSmall);
+    }
+    if (a.space != b.space && (!fits(a, b.space!) || !fits(b, a.space!))) return false;
     // A large fighter swapping ends up in a single space.
     a.tail = null;
     b.tail = null;
@@ -1248,6 +1345,12 @@ class Game {
       ..add(a)
       ..add(b);
     await emit(Swapped(a, b));
+    final (aTo, bTo) = (a.space!, b.space!);
+    // Either can be defeated on the way (Attack of Opportunity), so the spaces are taken first.
+    if (aTo != bTo) {
+      await _relocated(a, [bTo, aTo]);
+      await _relocated(b, [aTo, bTo]);
+    }
     await _entered(a);
     await _entered(b);
     return true;

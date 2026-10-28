@@ -20,7 +20,7 @@ GameData loadData() => _data ??= GameData.fromJson(
 MapDef lineMap() => MapDef(
       id: 'line',
       name: 'Test Line',
-      mode: '1v1',
+      modes: const ['1v1'],
       theme: 'garden',
       blurb: '',
       zones: {'a': ZoneDef('a', 'A', '#f00'), 'b': ZoneDef('b', 'B', '#0f0'), 'c': ZoneDef('c', 'C', '#00f')},

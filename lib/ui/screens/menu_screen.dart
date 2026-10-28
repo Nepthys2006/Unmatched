@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 
 import '../../engine/defs.dart';
 import '../audio.dart';
+import '../platform/fullscreen.dart';
 import '../services.dart';
 import '../shapes.dart';
 import '../theme.dart';
@@ -97,7 +98,7 @@ class _MenuScreenState extends State<MenuScreen> with SingleTickerProviderStateM
                           children: [
                             const Expanded(child: DecoRule(width: 400, opacity: 0.45)),
                             const SizedBox(width: 10),
-                            Text('FAN EDITION', style: titleStyle(12, color: Palette.brass, spacing: 2.4)),
+                            Text('FAN MADE', style: titleStyle(12, color: Palette.brass, spacing: 2.4)),
                           ],
                         ),
                         SizedBox(height: h * 0.05),
@@ -143,6 +144,23 @@ class _MenuScreenState extends State<MenuScreen> with SingleTickerProviderStateM
                   ),
                 ),
               ),
+              // Web: full screen (and landscape on phones).
+              if (canToggleFullscreen)
+                Positioned(
+                  right: 16,
+                  bottom: 12,
+                  child: StatefulBuilder(
+                    builder: (context, set) => HexButton(
+                      icon: isFullscreen ? Icons.fullscreen_exit_rounded : Icons.fullscreen_rounded,
+                      tooltip: isFullscreen ? 'Leave full screen' : 'Full screen',
+                      size: 48,
+                      onPressed: () async {
+                        await toggleFullscreen();
+                        set(() {});
+                      },
+                    ),
+                  ),
+                ),
               // Bottom left: who is playing.
               Positioned(
                 left: 16,

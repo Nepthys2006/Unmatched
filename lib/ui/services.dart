@@ -36,9 +36,12 @@ class Services {
     Future<Object?> json(String path) async {
       final bytes = await b.load(path);
       final list = bytes.buffer.asUint8List(bytes.offsetInBytes, bytes.lengthInBytes);
-      // FNV-1a over the raw file bytes.
+      // FNV-1a over the raw file bytes. The multiply by 0x01000193 (2^24 + 0x193) is split so no
+      // intermediate passes 2^53: on the web ints are doubles, and a plain multiply loses bits
+      // there, giving the browser a different "game version" from the apps.
       for (final x in list) {
-        hash = ((hash ^ x) * 0x01000193) & 0xFFFFFFFF;
+        final h = hash ^ x;
+        hash = (h * 0x193 + (h & 0xFF) * 0x1000000) & 0xFFFFFFFF;
       }
       return jsonDecode(utf8.decode(list));
     }

@@ -11,15 +11,17 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import '../../engine/defs.dart';
-import 'host_stub.dart' if (dart.library.io) 'host_io.dart' if (dart.library.js_interop) 'host_web.dart' as host;
+import 'host_stub.dart'
+    if (dart.library.io) 'host_io.dart'
+    if (dart.library.js_interop) 'host_web.dart'
+    as host;
 
-/// Maps that have a 3D model. Pentacle Ruins (5-player free-for-all) is 2D only.
-const _models = {'blossom', 'glade', 'frost', 'harbor', 'moss', 'canyon', 'cross', 'isle', 'moot', 'keeps', 'valley', 'fjord'};
+/// Every battlefield is a printed-style map (assets/maps); the 3D board lays its art on a slab on
+/// the table, with the fighters as figures.
+bool hasModel(MapDef map) => map.art != null;
 
-bool hasModel(MapDef map) => _models.contains(map.id);
-
-/// Screenshot of the 3D map, for map pickers.
-String? modelThumb(MapDef map) => hasModel(map) ? 'assets/maps3d/${map.id}.webp' : null;
+/// Screenshot of the 3D map, for map pickers: the map's own art (MapPreview) serves for both views.
+String? modelThumb(MapDef map) => null;
 
 /// Whether this platform can show the 3D board (Android, iOS, Windows and the web).
 bool get board3dSupported => host.supported;
@@ -28,9 +30,12 @@ enum Board3DStatus { loading, ready, failed }
 
 /// Talks to one 3D board page.
 class Board3DController {
-  Board3DController({required this.map, required Map<String, Object> graphics, required this.homeSide})
-    : _graphics = graphics,
-      antialias = graphics['aa'] == true;
+  Board3DController({
+    required this.map,
+    required Map<String, Object> graphics,
+    required this.homeSide,
+  }) : _graphics = graphics,
+       antialias = graphics['aa'] == true;
 
   final MapDef map;
 
@@ -41,7 +46,9 @@ class Board3DController {
   /// +1 if the player's start is on the near (+y) half of the board, -1 if on the far half.
   final int homeSide;
 
-  final ValueNotifier<Board3DStatus> status = ValueNotifier(Board3DStatus.loading);
+  final ValueNotifier<Board3DStatus> status = ValueNotifier(
+    Board3DStatus.loading,
+  );
   final ValueNotifier<double> progress = ValueNotifier(0);
 
   /// Frames drawn per second, when Settings > Show FPS is on.
@@ -67,6 +74,8 @@ class Board3DController {
       _lastState = json;
     }
     if (_open) _raw?.call(json);
+
+    //set function for reset when graphics is hard to load
   }
 
   /// Applies changed graphics settings to the running page.
@@ -103,11 +112,14 @@ class Board3DController {
         status.value = Board3DStatus.ready;
       case 'error':
         debugPrint('3D board: ${m['msg']}');
-        if (m['fatal'] == true && status.value != Board3DStatus.ready) fail('${m['msg']}');
+        if (m['fatal'] == true && status.value != Board3DStatus.ready) {
+          fail('${m['msg']}');
+        }
       case 'fps':
         fps.value = (m['v'] as num?)?.round();
       case 'tap':
-        final x = (m['x'] as num?)?.toDouble(), y = (m['y'] as num?)?.toDouble();
+        final x = (m['x'] as num?)?.toDouble(),
+            y = (m['y'] as num?)?.toDouble();
         if (x != null && y != null) _taps.add(Offset(x, y));
     }
   }
@@ -121,7 +133,10 @@ class Board3DController {
 
   Map<String, Object?> _init() => {
     't': 'init',
-    'glb': '../maps3d/${map.id}.glb',
+    if (map.art case final art?)
+      'art': {'file': '../maps/${art.file}', 'w': art.w, 'h': art.h, 'unitPx': art.unitPx}
+    else
+      'glb': '../maps3d/${map.id}.glb',
     'gfx': _graphics,
     'home': homeSide,
     'spaces': [

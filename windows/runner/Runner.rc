@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "club.unmatched.fan" "\0"
-            VALUE "FileDescription", "unmatched_game" "\0"
+            VALUE "FileDescription", "Unmatched (fan made)" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "unmatched_game" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 club.unmatched.fan. All rights reserved." "\0"
-            VALUE "OriginalFilename", "unmatched_game.exe" "\0"
-            VALUE "ProductName", "unmatched_game" "\0"
+            VALUE "InternalName", "Unmatched" "\0"
+            VALUE "LegalCopyright", "Fan-made by Nepthys, 2026. Unmatched is a game by Restoration Games." "\0"
+            VALUE "OriginalFilename", "Unmatched.exe" "\0"
+            VALUE "ProductName", "Unmatched" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

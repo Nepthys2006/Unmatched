@@ -1,8 +1,9 @@
-/// Settings: name, graphics quality, animation speed, volumes, confirmations.
+/// Settings: name, graphics quality, animation speed, combat pace, volumes, confirmations.
 library;
 
 import 'package:flutter/material.dart';
 
+import '../../net/account.dart';
 import '../audio.dart';
 import '../board3d/board3d.dart';
 import '../services.dart';
@@ -22,20 +23,19 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  late final TextEditingController _name = TextEditingController(text: context.services.settings.username);
-  String? _nameError;
+  bool _signingOut = false;
 
-  @override
-  void dispose() {
-    _saveName();
-    _name.dispose();
-    super.dispose();
-  }
-
-  void _saveName() {
-    if (widget.inMatch) return;
+  /// Signs this device out of the account and goes back to the sign-in screen.
+  Future<void> _signOut() async {
     final s = context.services.settings;
-    if (nameError(_name.text) == null && _name.text.trim() != s.username) s.update((x) => x.username = _name.text.trim());
+    setState(() => _signingOut = true);
+    await AccountService().signOut(s.accountToken);
+    s.update((x) => x.accountToken = '');
+    if (!mounted) return;
+    await Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute<void>(builder: (_) => const UsernameScreen()),
+      (_) => false,
+    );
   }
 
   @override
@@ -87,16 +87,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _leftColumn(Settings s) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      const SectionLabel('Player'),
-      TextField(
-        controller: _name,
-        enabled: !widget.inMatch,
-        maxLength: maxNameLength,
-        textCapitalization: TextCapitalization.words,
-        onChanged: (v) => setState(() => _nameError = nameError(v)),
-        onSubmitted: (_) => _saveName(),
-        style: titleStyle(22, weight: FontWeight.w700, spacing: 0.6),
-        decoration: nameFieldDecoration(_nameError),
+      const SectionLabel('Account'),
+      Container(
+        constraints: const BoxConstraints(minHeight: 56),
+        padding: const EdgeInsets.fromLTRB(14, 6, 6, 6),
+        decoration: ShapeDecoration(
+          color: Palette.bgDeep,
+          shape: ChamferBorder(cut: 9, side: BorderSide(color: Palette.bone.withValues(alpha: 0.3))),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.person_rounded, color: Palette.boneDim),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(s.username, style: titleStyle(22, spacing: 0.6), overflow: TextOverflow.ellipsis),
+                  Text(
+                    s.signedIn ? 'Signed in on this device' : 'Not signed in',
+                    style: bodyStyle(12.5, color: Palette.muted),
+                  ),
+                ],
+              ),
+            ),
+            if (!widget.inMatch)
+              TextButton.icon(
+                onPressed: _signingOut ? null : _signOut,
+                icon: const Icon(Icons.logout_rounded, size: 18, color: Palette.boneDim),
+                label: Text(s.signedIn ? 'SIGN OUT' : 'SIGN IN', style: titleStyle(14, color: Palette.boneDim, spacing: 1)),
+                style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+              ),
+          ],
+        ),
       ),
       const SizedBox(height: 14),
       const SectionLabel('Graphics'),
@@ -157,6 +181,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
             if (a != AnimSpeed.values.last) const SizedBox(width: 8),
           ],
         ],
+      ),
+      const SizedBox(height: 18),
+      const SectionLabel('Combat pace'),
+      Row(
+        children: [
+          for (final c in CombatPace.values) ...[
+            Expanded(
+              child: ChoiceTile(label: c.label, selected: s.combatPace == c, onTap: () => s.update((x) => x.combatPace = c)),
+            ),
+            if (c != CombatPace.values.last) const SizedBox(width: 8),
+          ],
+        ],
+      ),
+      Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: Text(
+          'How long each step of a combat stays on screen: the cards, each effect, the values and the result.',
+          style: bodyStyle(13, color: Palette.muted),
+        ),
       ),
     ],
   );
@@ -244,7 +287,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ),
     _SwitchRow(
       label: 'Glow',
-      sub: 'Bloom on the orbs and bright spots',
+      sub: 'Bloom on bright spots and highlights',
       value: s.bloom,
       onChanged: (v) => s.update((x) => x.bloom = v),
     ),
@@ -253,12 +296,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       sub: 'Soft shading in corners and under objects (costly)',
       value: s.ambientOcclusion,
       onChanged: (v) => s.update((x) => x.ambientOcclusion = v),
-    ),
-    _SwitchRow(
-      label: 'Scenery',
-      sub: 'Trees, rocks and buildings around the spaces',
-      value: s.scenery,
-      onChanged: (v) => s.update((x) => x.scenery = v),
     ),
     _SliderRow(
       label: 'Brightness',

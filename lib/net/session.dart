@@ -151,6 +151,8 @@ abstract class LobbySession extends ChangeNotifier {
   void pickHero(String id);
   void setReady(bool on);
   void moveSeat(int i);
+  void setMap(String id);
+  void randomMap();
   Future<void> leave();
 
   bool _disposed = false;
@@ -281,6 +283,9 @@ class HostSession extends LobbySession {
         _sync();
       case 'seat' when seat != null && match == null:
         _move(seat, m['i']);
+      case 'map' when seat != null && match == null:
+        final id = m['id'];
+        if (id is String && maps.any((x) => x.id == id)) setMap(id);
       case 'ans' when seat != null && match != null:
         final seq = m['seq'], picks = m['picks'];
         if (seq is int && picks is List && picks.every((x) => x is int)) match!.ls.offer(seq, seat, picks.cast<int>());
@@ -347,15 +352,20 @@ class HostSession extends LobbySession {
     return true;
   }
 
+  @override
   void setMap(String id) {
     if (!maps.any((m) => m.id == id)) return;
     _l.mapId = id;
     _sync();
   }
 
+  @override
   void randomMap() {
     final ms = maps;
-    setMap(ms[math.Random().nextInt(ms.length)].id);
+    if (ms.isEmpty) return;
+    final others = ms.where((m) => m.id != _l.mapId).toList();
+    final pick = (others.isEmpty ? ms : others)[math.Random().nextInt(others.isEmpty ? ms.length : others.length)];
+    setMap(pick.id);
   }
 
   void setAi(AiLevel level) {
@@ -535,6 +545,18 @@ class ClientSession extends LobbySession {
   void setReady(bool on) => link.send({'t': 'ready', 'on': on});
   @override
   void moveSeat(int i) => link.send({'t': 'seat', 'i': i});
+  @override
+  void setMap(String id) => link.send({'t': 'map', 'id': id});
+  @override
+  void randomMap() {
+    final l = lobby;
+    if (l == null) return;
+    final ms = mapsFor(data, l.mode, l.players);
+    if (ms.isEmpty) return;
+    final others = ms.where((m) => m.id != l.mapId).toList();
+    final pick = (others.isEmpty ? ms : others)[math.Random().nextInt(others.isEmpty ? ms.length : others.length)];
+    setMap(pick.id);
+  }
 
   bool _left = false;
 

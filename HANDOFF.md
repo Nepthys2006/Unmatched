@@ -8,13 +8,14 @@ A fan-made, personal-use digital version of the board game **Unmatched** (Restor
 | Area | State |
 |---|---|
 | Rules engine (`lib/engine/`) | **Done.** Pure Dart, no Flutter imports. |
-| All 39 heroes scripted | **Done.** Every card checked against the printed card image. |
+| All 70 heroes scripted | **Done.** Every card checked against the printed card image. See `CARDS.md`. |
 | Tests (`test/`) | **110 passing.** ~18k simulated games, 12M invariant checks. |
 | Game modes in engine | **Done.** 1v1, 2v2, 3v3, free-for-all 3–5 players. |
 | AI (`lib/engine/ai.dart`) | **Done.** Easy / Medium / Hard / Insane. Answers the same prompts a human does. |
 | Assets | **Done.** Card faces, backs, identity cards, avatars, minis, sidekick tokens, fonts, original synthesized music + SFX. |
 | Flutter UI (`lib/ui/`) | **Playable end to end**, every mode. See TODO.md for what's left. |
-| 3D maps (`lib/ui/board3d/`, `assets/web3d/`, `assets/maps3d/`) | **Done.** The 3D Map models in a web view (Three.js) under the Flutter HUD; Settings → Battlefield. |
+| Maps (`assets/maps/`, `assets/data/maps.json`) | **Done.** 47 printed-style 2D boards (the 32 official maps + 15 own, 5 of them 3v3). Built by `tool/build_maps.py`. The 3D view (`lib/ui/board3d/`) is no longer used. |
+| 3D fighters (`assets/web3d/board.js`, `assets/web3d/figures.json`) | **Done.** Each fighter is its miniature render sculpted into a rounded relief (sidekicks: their token as a domed coin) on a podium in the player's colour, turned to face the camera, with a shield badge (portrait, name, HP). Falls back to the orb if its picture is missing. |
 
 ## The user's requirements for the UI (all still to build)
 
@@ -94,7 +95,7 @@ lib/ui/            screens, match screen, HUD, 2D board, settings, audio
 lib/ui/board3d/    3D board controller + web view hosts (web iframe, Android/iOS WebView, Windows WebView2)
 assets/data/       heroes.json (39 heroes, 484 cards), maps.json (13 boards)
 assets/cards/      card faces per hero
-assets/heroes/     avatar, mini, back, identity, sidekick tokens per hero
+assets/heroes/     avatar, mini, back, identity, sidekick tokens per hero; figure[-n].webp (3D board, tool/make_figures.py)
 assets/audio/      battle.wav, menu.wav, sfx
 assets/maps3d/     the 12 3D map models (.glb, meshopt + WebP) and their thumbnails
 assets/web3d/      the Three.js page that draws the 3D board (three.js r170 bundled)

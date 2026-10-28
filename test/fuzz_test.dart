@@ -15,9 +15,15 @@ import 'support.dart';
 
 const _maxTurns = 400;
 
+/// `flutter test test/fuzz_test.dart --dart-define=FUZZ_HEROES=squirrel-girl,raphael` plays only
+/// the pairings that include one of these heroes (quick check of new heroes).
+const _focus = String.fromEnvironment('FUZZ_HEROES');
+
 void main() {
   final data = loadData();
   final heroes = data.heroes.keys.where(isImplemented).toList()..sort();
+  final focus = _focus.isEmpty ? null : _focus.split(',').toSet();
+  bool pairing(String a, String b) => focus == null || focus.contains(a) || focus.contains(b);
   final maps = data.mapsFor('1v1');
   final fired = <String>{};
   var checks = 0;
@@ -30,8 +36,15 @@ void main() {
       if (e is EffectResolving) fired.add(e.side.card!.def.key);
       if (e is SchemePlayed) fired.add(e.card.def.key);
       final seen = <int>{};
+      final small = <int, int>{};
       for (final f in g.fighters) {
         expect(f.hp, inInclusiveRange(0, f.maxHp), reason: '$f hp');
+        // Small fighters share spaces: up to 4 of them plus one normal fighter.
+        if (f.onBoard && f.isSmall) {
+          small.update(f.space!, (n) => n + 1, ifAbsent: () => 1);
+          expect(small[f.space!], lessThanOrEqualTo(4), reason: 'more than 4 small fighters on space ${f.space}');
+          continue;
+        }
         if (f.onBoard && !seen.add(f.space!)) {
           final tail = g.log.reversed.take(12).toList().reversed.map((e) => '${e.runtimeType}: ${e.log}').join('\n  ');
           fail('${g.players.map((p) => p.hero.id).join(' vs ')} (seed $seed): two fighters on space ${f.space} after $e\n  $tail');
@@ -42,7 +55,8 @@ void main() {
       int count(Player p) =>
           p.deck.length + g.players.fold<int>(0, (n, h) => n + h.hand.where((c) => c.owner == p).length) +
           p.discard.length + p.inPlay.length + p.removed.length + g.playedCards.where((c) => c.owner == p).length +
-          g.players.fold<int>(0, (n, h) => n + h.script.stored.where((c) => c.owner == p).length);
+          g.players.fold<int>(0, (n, h) => n + h.script.stored.where((c) => c.owner == p).length) +
+          p.script.aside.length;
       // Decks exist from the first draw on; nothing can have been lost before then.
       if (totals.isEmpty && e is CardsDrawn) {
         for (final p in g.players) {
@@ -82,7 +96,7 @@ void main() {
     final wins = <String, int>{};
     for (final a in heroes) {
       for (final b in heroes) {
-        if (a == b) continue;
+        if (a == b || !pairing(a, b)) continue;
         for (var seed = 0; seed < 6; seed++) {
           final g = await play(a, b, seed * 31 + a.length * 7 + b.length, random: false);
           games++;
@@ -99,7 +113,7 @@ void main() {
     var games = 0;
     for (final a in heroes) {
       for (final b in heroes) {
-        if (a == b) continue;
+        if (a == b || !pairing(a, b)) continue;
         for (var seed = 0; seed < 12; seed++) {
           await play(a, b, 1000 + seed * 13 + a.length, random: true);
           games++;
@@ -124,6 +138,7 @@ void main() {
       for (final m in data.mapsFor(mode).where((m) => m.spaces.where((s) => s.start != null).length >= n)) {
         for (var k = 0; k < 6; k++) {
           final ids = (List.of(heroes)..shuffle(rng)).take(n).toList();
+          if (focus != null && !ids.any(focus.contains)) ids[rng.nextInt(n)] = (focus.toList()..shuffle(rng)).first;
           final g = await play(ids[0], ids[1], 500 + games, random: k.isOdd, more: ids.sublist(2), teams: teams, map: m);
           expect(g.winningTeam, isNotNull);
           if (teams != null) {
@@ -141,7 +156,7 @@ void main() {
 
   test('every printed card effect has a script', () {
     final missing = <String>[];
-    for (final id in heroes) {
+    for (final id in heroes.where((h) => focus == null || focus.contains(h))) {
       final script = createHeroScript(id);
       for (final c in data.hero(id).cards) {
         if (c.text.isEmpty) continue;
@@ -153,7 +168,7 @@ void main() {
 
   test('every scripted card effect fired at least once in the games above', () {
     final missing = <String>[];
-    for (final id in heroes) {
+    for (final id in heroes.where((h) => focus == null || focus.contains(h))) {
       final script = createHeroScript(id);
       for (final c in data.hero(id).cards) {
         final sc = script.cards[c.upperTitle] ?? commonCardScripts[c.upperTitle];

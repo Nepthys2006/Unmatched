@@ -2,11 +2,15 @@
 library;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 enum Quality { low, medium, high, ultra }
 
 enum AnimSpeed { slow, normal, fast }
+
+/// How long each combat step stays on screen (reveal, effects, values, result).
+enum CombatPace { normal, slow, slower }
 
 extension QualityX on Quality {
   String get label => switch (this) {
@@ -30,6 +34,36 @@ extension QualityX on Quality {
 
   /// Pulsing highlights (animated every frame).
   bool get pulse => this != Quality.low;
+
+  /// Texture filter quality: High and Ultra use bicubic filtering to eliminate blurriness when zooming.
+  FilterQuality get filterQuality => switch (this) {
+    Quality.low => FilterQuality.low,
+    Quality.medium => FilterQuality.medium,
+    Quality.high || Quality.ultra => FilterQuality.high,
+  };
+
+  /// Target width limit for decoding map textures (null = native 100% resolution for crystal sharpness).
+  int? get maxTextureWidth => switch (this) {
+    Quality.low => 1536,
+    Quality.medium => 2560,
+    Quality.high || Quality.ultra => null,
+  };
+
+  /// Procedural vector board rasterization scale multiplier.
+  double get bakeScale => switch (this) {
+    Quality.low => 1.5,
+    Quality.medium => 2.2,
+    Quality.high => 3.2,
+    Quality.ultra => 4.0,
+  };
+
+  /// Ticker step duration for highlights (higher FPS on High/Ultra, battery-saving on Low/Medium).
+  Duration get pulseStep => switch (this) {
+    Quality.low => const Duration(milliseconds: 65),
+    Quality.medium => const Duration(milliseconds: 40),
+    Quality.high => const Duration(milliseconds: 20),
+    Quality.ultra => const Duration(milliseconds: 16),
+  };
 }
 
 extension AnimSpeedX on AnimSpeed {
@@ -42,6 +76,21 @@ extension AnimSpeedX on AnimSpeed {
     AnimSpeed.slow => 1.6,
     AnimSpeed.normal => 1.0,
     AnimSpeed.fast => 0.5,
+  };
+}
+
+extension CombatPaceX on CombatPace {
+  String get label => switch (this) {
+    CombatPace.normal => 'Normal',
+    CombatPace.slow => 'Slow',
+    CombatPace.slower => 'Very slow',
+  };
+
+  /// Multiplies the combat steps' delays (on top of the animation speed).
+  double get factor => switch (this) {
+    CombatPace.normal => 1.0,
+    CombatPace.slow => 1.7,
+    CombatPace.slower => 2.6,
   };
 }
 
@@ -80,10 +129,18 @@ class Settings extends ChangeNotifier {
   final SharedPreferences? _prefs;
 
   String username = '';
-  Quality quality = defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS
+
+  /// The signed-in account's session token (empty: not signed in). The username above is then
+  /// the account's name.
+  String accountToken = '';
+  bool get signedIn => accountToken.isNotEmpty;
+  Quality quality =
+      defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS
       ? Quality.medium
       : Quality.high;
   AnimSpeed animSpeed = AnimSpeed.normal;
+  CombatPace combatPace = CombatPace.slow;
   double musicVolume = 0.6;
   double sfxVolume = 0.8;
 
@@ -127,9 +184,9 @@ class Settings extends ChangeNotifier {
   void applyPreset(Quality q) {
     quality = q;
     final (scale, shadow, aa, glow, ao) = switch (q) {
-      Quality.low => (0.6, Shadows.off, false, false, false),
-      Quality.medium => (0.8, Shadows.low, true, true, false),
-      Quality.high => (1.0, Shadows.medium, true, true, true),
+      Quality.low => (0.7, Shadows.off, false, false, false),
+      Quality.medium => (0.85, Shadows.low, true, true, false),
+      Quality.high => (1.0, Shadows.medium, true, true, false),
       Quality.ultra => (1.25, Shadows.high, true, true, true),
     };
     renderScale = scale;
@@ -159,8 +216,10 @@ class Settings extends ChangeNotifier {
     final p = _prefs;
     if (p == null) return;
     username = p.getString('username') ?? '';
+    accountToken = p.getString('accountToken') ?? '';
     applyPreset(_pick(Quality.values, p.getInt('quality')) ?? quality);
     animSpeed = _pick(AnimSpeed.values, p.getInt('animSpeed')) ?? animSpeed;
+    combatPace = _pick(CombatPace.values, p.getInt('combatPace')) ?? combatPace;
     musicVolume = p.getDouble('musicVolume') ?? musicVolume;
     sfxVolume = p.getDouble('sfxVolume') ?? sfxVolume;
     confirmActions = p.getBool('confirmActions') ?? confirmActions;
@@ -178,15 +237,18 @@ class Settings extends ChangeNotifier {
   }
 
   /// The stored enum index, if it is a valid one (elementAtOrNull throws on negatives).
-  static T? _pick<T>(List<T> values, int? i) => i != null && i >= 0 && i < values.length ? values[i] : null;
+  static T? _pick<T>(List<T> values, int? i) =>
+      i != null && i >= 0 && i < values.length ? values[i] : null;
 
   Future<void> _save() async {
     final p = _prefs;
     if (p == null) return;
     try {
       await p.setString('username', username);
+      await p.setString('accountToken', accountToken);
       await p.setInt('quality', quality.index);
       await p.setInt('animSpeed', animSpeed.index);
+      await p.setInt('combatPace', combatPace.index);
       await p.setDouble('musicVolume', musicVolume);
       await p.setDouble('sfxVolume', sfxVolume);
       await p.setBool('confirmActions', confirmActions);

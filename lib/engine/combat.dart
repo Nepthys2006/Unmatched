@@ -29,6 +29,9 @@ class Side {
 
   /// Only the AFTER COMBAT effects are canceled.
   bool afterCanceled = false;
+
+  /// The DURING COMBAT effects are canceled too (Break Something), but not IMMEDIATELY.
+  bool duringCanceled = false;
   final List<ValueOp> ops = [];
 
   /// "Ignore the value": the card counts as 0.
@@ -60,6 +63,7 @@ class Side {
     boosts.clear();
     canceled = false;
     afterCanceled = false;
+    duringCanceled = false;
     printedOverride = null;
     vars.clear();
   }

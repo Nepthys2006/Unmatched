@@ -77,7 +77,7 @@ class Loki extends HeroScript {
             if (x.me != me) await x.heal(loki, 3);
           },
         ),
-        'SHAPERSHIFTER': CardScript(during: (x) async {
+        'SHAPESHIFTER': CardScript(during: (x) async {
           final n = x.opp.hand.length;
           if (await x.option(['+$n (one per card in your opponent\'s hand)', 'Gain 1 action'], 'Shapeshifter: choose one') == 0) {
             if (n > 0) x.addValue(n, "Cards in opponent's hand");

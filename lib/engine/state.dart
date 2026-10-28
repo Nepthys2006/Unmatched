@@ -36,6 +36,8 @@ const _singular = {
   'wolves': 'Wolf',
   'clones': 'Clone',
   'red riders': 'Red Rider',
+  'the wayward sisters': 'Wayward Sister',
+  'squirrels': 'Squirrel',
 };
 
 class Fighter {
@@ -72,6 +74,9 @@ class Fighter {
   String get id => def.id;
   AttackType get attack => owner.script.attackTypeOf(this);
   bool get isRanged => attack == AttackType.ranged;
+
+  /// Small fighters (Squirrel Girl's squirrels) share spaces and don't block movement.
+  bool get isSmall => owner.script.isSmall(this);
 
   /// An opposing fighter from [p]'s point of view (different team).
   bool isEnemyOf(Player p) => owner.team != p.team;
@@ -170,6 +175,12 @@ class Board {
   Iterable<int> get spaceIds => _adj.keys;
   SpaceDef space(int id) => def.spaces[id];
   Set<int> neighbours(int id) => _adj[id]!;
+
+  /// Spaces a fighter may step to from [id]: one-way (arrow) paths only go forwards.
+  Iterable<int> stepsFrom(int id) => _adj[id]!.where((n) => !def.oneWay.contains((n, id)));
+
+  /// Movement a step from [a] to [b] costs ("+1" paths cost 2).
+  int stepCost(int a, int b) => def.stairs.contains((a, b)) ? 2 : 1;
   bool adjacent(int a, int b) => _adj[a]!.contains(b);
   Set<String> zonesOf(int id) => def.spaces[id].zones;
   bool sharesZone(int a, int b) => zonesOf(a).any(zonesOf(b).contains);

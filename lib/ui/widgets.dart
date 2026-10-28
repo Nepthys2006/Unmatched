@@ -2,6 +2,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 
 import 'audio.dart';
 import 'services.dart';
@@ -293,10 +294,20 @@ class SectionLabel extends StatelessWidget {
     padding: const EdgeInsets.only(bottom: 8),
     child: Row(
       children: [
-        Text(text.toUpperCase(), style: titleStyle(15, color: Palette.boneDim, spacing: 1.6)),
+        Flexible(
+          child: Text(
+            text.toUpperCase(),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: titleStyle(15, color: Palette.boneDim, spacing: 1.6),
+          ),
+        ),
         const SizedBox(width: 10),
         Expanded(child: Container(height: 1, color: Palette.bone.withValues(alpha: 0.14))),
-        if (trailing != null) ...[const SizedBox(width: 10), trailing!],
+        if (trailing != null) ...[
+          const SizedBox(width: 10),
+          Flexible(child: trailing!),
+        ],
       ],
     ),
   );
@@ -709,4 +720,68 @@ class ScreenHeader extends StatelessWidget {
       ],
     ),
   );
+}
+
+/// Draws [child] [scale] times larger and takes up that larger size, so the whole of what is
+/// drawn can be tapped. (Transform.scale keeps the unscaled size for layout and hit testing, which
+/// left the outer part of enlarged HUD buttons dead on big screens.)
+class ScaledBox extends SingleChildRenderObjectWidget {
+  const ScaledBox({super.key, required this.scale, super.child});
+  final double scale;
+
+  @override
+  RenderScaledBox createRenderObject(BuildContext context) => RenderScaledBox(scale);
+
+  @override
+  void updateRenderObject(BuildContext context, RenderScaledBox renderObject) => renderObject.scale = scale;
+}
+
+class RenderScaledBox extends RenderProxyBox {
+  RenderScaledBox(this._scale);
+  double _scale;
+  set scale(double v) {
+    if (v == _scale) return;
+    _scale = v;
+    markNeedsLayout();
+  }
+
+  Matrix4 get _transform => Matrix4.diagonal3Values(_scale, _scale, 1);
+
+  @override
+  void performLayout() {
+    final c = constraints;
+    final kid = child;
+    if (kid == null) {
+      size = c.smallest;
+      return;
+    }
+    kid.layout(
+      BoxConstraints(
+        minWidth: c.minWidth / _scale,
+        maxWidth: c.maxWidth / _scale,
+        minHeight: c.minHeight / _scale,
+        maxHeight: c.maxHeight / _scale,
+      ),
+      parentUsesSize: true,
+    );
+    size = c.constrain(kid.size * _scale);
+  }
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    final kid = child;
+    if (kid == null) return;
+    layer = context.pushTransform(needsCompositing, offset, _transform, (c, o) => c.paintChild(kid, o),
+        oldLayer: layer is TransformLayer ? layer as TransformLayer : null);
+  }
+
+  @override
+  bool hitTestChildren(BoxHitTestResult result, {required Offset position}) {
+    final kid = child;
+    if (kid == null) return false;
+    return result.addWithPaintTransform(transform: _transform, position: position, hitTest: (r, p) => kid.hitTest(r, position: p));
+  }
+
+  @override
+  void applyPaintTransform(RenderBox child, Matrix4 transform) => transform.multiply(_transform);
 }

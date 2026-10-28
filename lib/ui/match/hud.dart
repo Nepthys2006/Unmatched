@@ -14,6 +14,7 @@ import '../shapes.dart';
 import '../theme.dart';
 import '../widgets.dart';
 import 'dials.dart';
+import 'hero_items.dart';
 
 // ------------------------------------------------------------------------------- name plates
 
@@ -90,19 +91,27 @@ class PlayerPlate extends StatelessWidget {
         _Count(icon: Icons.layers_rounded, value: player.deck.length, tooltip: 'Cards left in deck', small: !big),
         if (actionsLeft != null) ...[
           const SizedBox(width: 10),
-          for (var i = 0; i < 2; i++)
-            Padding(
-              padding: const EdgeInsets.only(right: 3),
-              child: Container(
-                width: big ? 12 : 9,
-                height: big ? 12 : 9,
-                decoration: ShapeDecoration(
-                  color: i < actionsLeft! ? Palette.bone : Colors.transparent,
-                  shape: HexBorder(side: BorderSide(color: Palette.bone.withValues(alpha: 0.7))),
-                ),
-              ),
+          // The prompt bar also says how many are left; the pips stay compact so the hand fits.
+          Tooltip(
+            message: '$actionsLeft action${actionsLeft == 1 ? '' : 's'} left',
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (var i = 0; i < 2; i++)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 3),
+                    child: Container(
+                      width: big ? 12 : 9,
+                      height: big ? 12 : 9,
+                      decoration: ShapeDecoration(
+                        color: i < actionsLeft! ? Palette.bone : Colors.transparent,
+                        shape: HexBorder(side: BorderSide(color: Palette.bone.withValues(alpha: 0.7))),
+                      ),
+                    ),
+                  ),
+              ],
             ),
-          if (big) Text(' ACTIONS', style: titleStyle(11, color: Palette.boneDim, spacing: 1.2)),
+          ),
         ],
       ],
     );
@@ -130,9 +139,11 @@ class PlayerPlate extends StatelessWidget {
                     const SizedBox(height: 4),
                     HandBacks(count: player.hand.length, back: player.hero.back, height: 28),
                   ],
-                  if (big && status.isNotEmpty) ...[
+                  // The hero's pieces (Alice's size card, Hellfire, the cauldron...), for every
+                  // player: they are open information, like on the table.
+                  if (status.isNotEmpty && !out) ...[
                     const SizedBox(height: 3),
-                    Wrap(spacing: 4, children: [for (final s in status) _Chip(s)]),
+                    HeroItemsRow(player: player, small: !big),
                   ],
                 ],
               ),
@@ -375,7 +386,9 @@ class _HandFanState extends State<HandFan> {
     final rel = n == 1 ? 0.0 : (i - mid) / mid;
     final playable = widget.playable.contains(card);
     final raised = _hover == card;
-    final peek = h * 0.74;
+    // The whole card shows, resting just above the bottom edge (the outer cards tilt a little,
+    // so their low corner needs room too).
+    final peek = h + 6 + w * 0.06;
     final top = maxH - peek + rel * rel * h * 0.06 - (raised ? h * 0.2 : (playable ? h * 0.06 : 0));
     return AnimatedPositioned(
       key: ValueKey(card.uid),
@@ -966,94 +979,249 @@ class _CardPickerState extends State<CardPicker> {
 
 // ------------------------------------------------------------------------------- piles, log
 
-/// A player's public cards: discard pile, schemes in play and removed cards.
-Future<void> showPiles(BuildContext context, Player p, {required bool mine}) {
-  final groups = <(String, List<Card>)>[
-    ('In play', p.inPlay),
-    ('Discard pile', p.discard.reversed.toList()),
-    ('Removed from the game', p.removed),
-  ];
+/// Every player's identity card and public cards, one tab per player: the identity card (tap to
+/// read it full size), move, each fighter's health, the special ability, live status and set
+/// rules, then the cards in play (Shakespeare's line), set aside (the cauldron), discarded and
+/// removed. Hands and decks stay hidden.
+Future<void> showHeroSheet(BuildContext context, {required List<Player> players, required Player initial, required Player me}) {
   return showGeneralDialog<void>(
     context: context,
     barrierDismissible: true,
     barrierLabel: 'Close',
     barrierColor: const Color(0xB3000000),
-    pageBuilder: (ctx, _, _) {
-      final size = MediaQuery.sizeOf(ctx);
-      final w = (size.height * 0.3 * cardAspect).clamp(60.0, 120.0);
-      return SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: math.min(900, size.width - 32), maxHeight: size.height - 32),
-            child: Material(
-              color: Colors.transparent,
-              child: Panel(
-                padding: const EdgeInsets.all(16),
-                cut: 14,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Avatar(p.hero.avatar, size: 34),
-                        const SizedBox(width: 10),
-                        Expanded(child: Text(p.name.toUpperCase(), style: titleStyle(22))),
-                        Text('${p.hand.length} in hand · ${p.deck.length} in deck', style: bodyStyle(13, color: Palette.muted)),
-                        const SizedBox(width: 8),
-                        HexButton(icon: Icons.close_rounded, tooltip: 'Close', size: 38, onPressed: () => Navigator.of(ctx).pop()),
-                      ],
-                    ),
-                    if (!mine)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: Text(
-                          'Their hand and deck order stay hidden.',
-                          style: bodyStyle(12.5, color: Palette.muted, style: FontStyle.italic),
+    pageBuilder: (ctx, _, _) => _HeroSheet(players: players, initial: initial, me: me),
+  );
+}
+
+class _HeroSheet extends StatefulWidget {
+  const _HeroSheet({required this.players, required this.initial, required this.me});
+  final List<Player> players;
+  final Player initial;
+  final Player me;
+
+  @override
+  State<_HeroSheet> createState() => _HeroSheetState();
+}
+
+class _HeroSheetState extends State<_HeroSheet> {
+  late Player _p = widget.initial;
+
+  @override
+  Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    final p = _p;
+    final mine = p == widget.me;
+    final idW = (size.height * 0.62 * cardAspect).clamp(110.0, 300.0);
+    final cardW = (size.height * 0.26 * cardAspect).clamp(56.0, 110.0);
+    final groups = <(String, List<Card>)>[
+      (p.hero.id == 'shakespeare' ? 'His line (left to right)' : 'In play', p.inPlay),
+      (p.hero.id == 'the-wayward-sisters' ? 'Cauldron' : 'Set aside', p.script.aside),
+      ('Discard pile', p.discard.reversed.toList()),
+      ('Removed from the game', p.removed),
+    ];
+    final ability = p.hero.ability.trim().split('\n');
+    final abilityName = ability.length > 1 && ability.first.length <= 40 && !ability.first.endsWith('.') ? ability.first : null;
+    final abilityText = (abilityName == null ? ability : ability.skip(1)).join(' ');
+    final status = p.script.status();
+    final reference = p.script.reference();
+
+    return SafeArea(
+      child: Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: math.min(1000, size.width - 24), maxHeight: size.height - 24),
+          child: Material(
+            color: Colors.transparent,
+            child: Panel(
+              padding: const EdgeInsets.all(12),
+              cut: 14,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // One tab per player.
+                  Row(
+                    children: [
+                      Expanded(
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              for (final o in widget.players) ...[
+                                _HeroTab(player: o, selected: o == p, you: o == widget.me, onTap: () => setState(() => _p = o)),
+                                const SizedBox(width: 6),
+                              ],
+                            ],
+                          ),
                         ),
                       ),
-                    const SizedBox(height: 8),
-                    Flexible(
-                      child: SingleChildScrollView(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            for (final (title, cards) in groups)
-                              if (cards.isNotEmpty) ...[
-                                SectionLabel('$title · ${cards.length}'),
-                                SizedBox(
-                                  height: w / cardAspect + 6,
-                                  child: ListView.separated(
-                                    scrollDirection: Axis.horizontal,
-                                    itemCount: cards.length,
-                                    separatorBuilder: (_, _) => const SizedBox(width: 8),
-                                    itemBuilder: (_, i) => GestureDetector(
-                                      onTap: () => showCardZoom<void>(ctx, cards[i].def.image),
-                                      child: CardImage(cards[i].def.image, width: w),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 10),
-                              ],
-                            if (groups.every((g) => g.$2.isEmpty))
-                              Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 24),
-                                child: Center(
-                                  child: Text('No cards played yet.', style: bodyStyle(15, color: Palette.muted)),
+                      HexButton(icon: Icons.close_rounded, tooltip: 'Close', size: 36, onPressed: () => Navigator.of(context).pop()),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Flexible(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Semantics(
+                                button: true,
+                                label: "Read ${p.hero.name}'s identity card",
+                                child: GestureDetector(
+                                  onTap: () => showCardZoom<void>(context, p.hero.identity, caption: p.hero.description),
+                                  child: CardImage(p.hero.identity, width: idW),
                                 ),
                               ),
-                          ],
-                        ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(p.hero.name.toUpperCase(), style: titleStyle(24)),
+                                    Text(
+                                      '${p.hero.set} · move ${p.hero.move} · ${p.hand.length} in hand · ${p.deck.length} in deck'
+                                      '${p.eliminated ? ' · out of the game' : ''}',
+                                      style: bodyStyle(13, color: Palette.muted),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Wrap(
+                                      spacing: 6,
+                                      runSpacing: 6,
+                                      children: [
+                                        for (final f in p.fighters.where((f) => !f.reserve || f.defeated)) _FighterChip(fighter: f),
+                                        for (final d in p.hero.fighters)
+                                          if (p.fighters.where((f) => f.def == d).every((f) => f.reserve && !f.defeated))
+                                            _InfoChip('${d.name} ×${d.count} · ${d.attack.name} · ${d.hp} health · off the board'),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 10),
+                                    Text(
+                                      'SPECIAL ABILITY${abilityName == null ? '' : ' · ${abilityName.toUpperCase()}'}',
+                                      style: titleStyle(14, color: Palette.brass, spacing: 1.2),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(abilityText, style: bodyStyle(14.5, color: Palette.bone)),
+                                    if (status.isNotEmpty) ...[
+                                      const SizedBox(height: 8),
+                                      Wrap(spacing: 4, runSpacing: 4, children: [for (final t in status) _Chip(t)]),
+                                    ],
+                                    if (reference.isNotEmpty) ...[
+                                      const SizedBox(height: 10),
+                                      Text('RULES TO KNOW', style: titleStyle(14, color: Palette.brass, spacing: 1.2)),
+                                      const SizedBox(height: 2),
+                                      for (final r in reference)
+                                        Padding(
+                                          padding: const EdgeInsets.only(bottom: 3),
+                                          child: Text('• $r', style: bodyStyle(13.5, color: Palette.boneDim)),
+                                        ),
+                                    ],
+                                    if (!mine) ...[
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        'Their hand and deck order stay hidden.',
+                                        style: bodyStyle(12.5, color: Palette.muted, style: FontStyle.italic),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          for (final (title, cards) in groups)
+                            if (cards.isNotEmpty) ...[
+                              SectionLabel('$title · ${cards.length}'),
+                              SizedBox(
+                                height: cardW / cardAspect + 6,
+                                child: ListView.separated(
+                                  scrollDirection: Axis.horizontal,
+                                  itemCount: cards.length,
+                                  separatorBuilder: (_, _) => const SizedBox(width: 8),
+                                  itemBuilder: (_, i) => GestureDetector(
+                                    onTap: () => showCardZoom<void>(context, cards[i].def.image),
+                                    child: CardImage(cards[i].def.image, width: cardW),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                            ],
+                          if (groups.every((g) => g.$2.isEmpty)) Text('No cards played yet.', style: bodyStyle(14, color: Palette.muted)),
+                        ],
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),
         ),
-      );
-    },
+      ),
+    );
+  }
+}
+
+class _HeroTab extends StatelessWidget {
+  const _HeroTab({required this.player, required this.selected, required this.you, required this.onTap});
+  final Player player;
+  final bool selected;
+  final bool you;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    selected: selected,
+    label: '${player.name}${you ? ' (you)' : ''}',
+    child: GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(4, 3, 12, 3),
+        decoration: ShapeDecoration(
+          color: selected ? plateColor(hexColor(player.hero.color)) : const Color(0xCC0E0F12),
+          shape: ChamferBorder(cut: 6, side: BorderSide(color: selected ? Palette.bone : Palette.bone.withValues(alpha: 0.25))),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Avatar(player.hero.avatar, size: 28, ringWidth: 1.5, grey: player.eliminated),
+            const SizedBox(width: 6),
+            Text(
+              '${player.name.toUpperCase()}${you ? ' · YOU' : ''}',
+              style: titleStyle(14, color: selected ? Colors.white : Palette.boneDim, spacing: 0.8),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+/// One fighter's attack type and health, for the hero sheet.
+class _FighterChip extends StatelessWidget {
+  const _FighterChip({required this.fighter});
+  final Fighter fighter;
+  @override
+  Widget build(BuildContext context) {
+    final f = fighter;
+    final state = f.defeated ? 'defeated' : '${f.hp}/${f.maxHp} health';
+    return _InfoChip('${f.name} · ${f.isHero ? 'hero' : 'sidekick'} · ${f.attack.name} · $state', dim: f.defeated);
+  }
+}
+
+class _InfoChip extends StatelessWidget {
+  const _InfoChip(this.text, {this.dim = false});
+  final String text;
+  final bool dim;
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+    decoration: ShapeDecoration(
+      color: const Color(0xCC0E0F12),
+      shape: ChamferBorder(cut: 4, side: BorderSide(color: Palette.bone.withValues(alpha: 0.2))),
+    ),
+    child: Text(text, style: bodyStyle(13, color: dim ? Palette.muted : Palette.bone, weight: FontWeight.w600)),
   );
 }
 

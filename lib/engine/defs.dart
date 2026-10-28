@@ -36,6 +36,8 @@ class CardDef {
     required this.usedBy,
     required this.text,
     this.dieBoost = false,
+    this.syllables,
+    this.ingredient,
   });
 
   factory CardDef.fromJson(String heroId, Map<String, dynamic> j) => CardDef(
@@ -50,6 +52,8 @@ class CardDef {
         usedBy: j['usedBy'] as String,
         text: {for (final e in (j['text'] as Map).entries) e.key as String: e.value as String},
         dieBoost: j['dieBoost'] as bool? ?? false,
+        syllables: j['syllables'] as int?,
+        ingredient: j['ingredient'] as String?,
       );
 
   final String heroId;
@@ -69,6 +73,12 @@ class CardDef {
 
   /// The BOOST value is a roll of Krang's Die of Ultimate Destruction.
   final bool dieBoost;
+
+  /// Syllables in the card's name (Shakespeare's line).
+  final int? syllables;
+
+  /// Ingredient symbol: snake, bat or lizard (the Wayward Sisters' spells).
+  final String? ingredient;
   bool get canBoost => boost != null || dieBoost;
 
   String get key => '$heroId/$index';
@@ -179,25 +189,41 @@ class SpaceDef {
   final int? start;
 }
 
+/// A printed map's artwork: the image and how many pixels one space width takes. Map
+/// coordinates are art pixels relative to the image centre, divided by [unitPx].
+class MapArt {
+  const MapArt(this.file, this.w, this.h, this.unitPx);
+  final String file;
+  final int w;
+  final int h;
+  final double unitPx;
+  String get asset => 'assets/maps/$file';
+}
+
 class MapDef {
   MapDef({
     required this.id,
     required this.name,
-    required this.mode,
+    required List<String> modes,
     required this.theme,
     required this.blurb,
     required this.zones,
     required this.spaces,
     required this.links,
     this.river = false,
-  });
+    this.set = '',
+    this.art,
+    this.oneWay = const {},
+    this.stairs = const {},
+  }) : modes = List.unmodifiable(modes);
 
   factory MapDef.fromJson(Map<String, dynamic> j) => MapDef(
         id: j['id'] as String,
         name: j['name'] as String,
-        mode: j['mode'] as String,
-        theme: j['theme'] as String,
-        blurb: j['blurb'] as String,
+        modes: [for (final m in (j['modes'] as List? ?? [j['mode']])) m as String],
+        theme: j['theme'] as String? ?? '',
+        blurb: j['blurb'] as String? ?? '',
+        set: j['set'] as String? ?? '',
         river: j['river'] as bool? ?? false,
         zones: {
           for (final e in (j['zones'] as Map).entries)
@@ -214,17 +240,40 @@ class MapDef {
             )
         ],
         links: [for (final l in j['links'] as List) ((l as List)[0] as int, l[1] as int)],
+        art: switch (j['art']) {
+          final Map a => MapArt(a['file'] as String, a['w'] as int, a['h'] as int, (a['unitPx'] as num).toDouble()),
+          _ => null,
+        },
+        oneWay: {for (final l in (j['oneway'] as List? ?? const [])) ((l as List)[0] as int, l[1] as int)},
+        stairs: {
+          for (final l in (j['stairs'] as List? ?? const [])) ...[((l as List)[0] as int, l[1] as int), (l[1] as int, l[0] as int)]
+        },
       );
 
   final String id;
   final String name;
-  final String mode;
+
+  /// Game modes this map is played in ('1v1', '2v2', '3v3', 'ffa').
+  final List<String> modes;
+  String get mode => modes.first;
   final String theme;
   final String blurb;
+
+  /// The box the map comes from (printed maps).
+  final String set;
   final Map<String, ZoneDef> zones;
   final List<SpaceDef> spaces;
   final List<(int, int)> links;
   final bool river;
+  final MapArt? art;
+
+  /// Arrow paths: movement only from the first space to the second (they stay adjacent).
+  final Set<(int, int)> oneWay;
+
+  /// "+1" paths (both directions): moving along one costs 1 extra movement.
+  final Set<(int, int)> stairs;
+
+  int get startCount => spaces.where((s) => s.start != null).length;
 }
 
 /// All loaded data. The app fills it from assets; tests read the JSON files directly.
@@ -240,5 +289,5 @@ class GameData {
   final Map<String, MapDef> maps;
 
   HeroDef hero(String id) => heroes[id] ?? (throw ArgumentError('Unknown hero $id'));
-  List<MapDef> mapsFor(String mode) => maps.values.where((m) => m.mode == mode).toList();
+  List<MapDef> mapsFor(String mode) => maps.values.where((m) => m.modes.contains(mode)).toList();
 }
