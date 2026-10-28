@@ -7,7 +7,7 @@
    Flutter -> page (window.board.receive(json), WebView2 web messages, or iframe postMessage):
      init   {art|glb, home, gfx, spaces:[{id,x,y}], links:[[a,b]]}  gfx {graphics settings}
             art {file, w, h, unitPx}: a printed map drawn on a slab (glb: a 3D Map model)
-     state  {fighters:[{id,space,color,hero,hp,name,mini,fid,v}], marks:{...}, tokens:[...], focus:[id]}
+     state  {fighters:[{id,space,color,hero,hp,name,mini,fid,v,ranged}], marks:{...}, tokens:[...], focus:[id]}
             (mini: hero id, fid: fighter id, v: which of a hero's hero fighters; they pick the figure)
      move   {id, path:[space], ms}        fx {id, text, color, sparks, ms}        shake {}
      cam    {op:'fit'|'zoom'|'push'|'pull'|'turn'|'tilt', k, a, b, ms}
@@ -166,13 +166,22 @@ function buildComposer() {
     ao.updateGtaoMaterial({ radius: .32, distanceExponent: 1.4, thickness: 1, scale: 1.1, samples: G.tier >= 3 ? 12 : 8 });
     ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 4, rings: 2, samples: G.tier >= 3 ? 16 : 12 });
     capPassSize(ao, 1);
-    // Its depth/normal pass draws everything but points and lines, so the badges, glows and
-    // highlight rings (sprites and see-through overlays) printed dark boxes of "occlusion"
-    // round the fighters; they're left out of it too.
-    const hide = ao.overrideVisibility.bind(ao);
+    // Its depth/normal pass draws everything but points and lines with one override material,
+    // which printed dark boxes of "occlusion" on the table: round the fighters from their tags,
+    // glows and highlight rings (sprites and see-through overlays), and in the middle of the
+    // board from the backdrop (a texture background is drawn as a 2x2 plane, which the override
+    // material puts at the world's origin). All of those sit that pass out.
+    const hide = ao.overrideVisibility.bind(ao), show = ao.restoreVisibility.bind(ao);
+    let backdrop = null;
     ao.overrideVisibility = () => {
       hide();
+      backdrop = scene.background;
+      scene.background = null;
       scene.traverse(o => { if (o.isSprite || (o.isMesh && !Array.isArray(o.material) && o.material.transparent)) o.visible = false; });
+    };
+    ao.restoreVisibility = () => {
+      show();
+      scene.background = backdrop;
     };
     composer.addPass(ao);
   }
@@ -673,6 +682,15 @@ const PUFF = canvasTex(128, 128, (g, w) => {
   r.addColorStop(.8, 'rgba(120,132,156,.85)'); r.addColorStop(1, 'rgba(90,100,124,0)');
   g.fillStyle = r; g.fillRect(0, 0, w, w);
 });
+// The selection ring round a fighter's base: a bright band with a soft glow either side, tinted by
+// its material (selectable green, chosen bone). Flat on the table, like the digital edition's.
+const RING = canvasTex(256, 256, (g, w) => {
+  const r = g.createRadialGradient(w / 2, w / 2, 0, w / 2, w / 2, w / 2);
+  r.addColorStop(0, 'rgba(255,255,255,0)'); r.addColorStop(.6, 'rgba(255,255,255,0)');
+  r.addColorStop(.72, 'rgba(255,255,255,.55)'); r.addColorStop(.77, 'rgba(255,255,255,1)');
+  r.addColorStop(.82, 'rgba(255,255,255,.55)'); r.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = r; g.fillRect(0, 0, w, w);
+});
 const RETICLE = canvasTex(256, 256, (g, w) => {
   g.strokeStyle = '#ff5b4e'; g.lineWidth = 14; g.lineCap = 'round';
   g.beginPath(); g.arc(w / 2, w / 2, w * .36, 0, TAU); g.stroke();
@@ -702,77 +720,59 @@ function heartPath(g, x, y, s) {
   g.closePath();
 }
 
-/** Shield badge over the fighter: its portrait (hero avatar or sidekick token) in a shield rimmed
-    in the player's colour, and a name plate with the health heart. Redrawn when hp, name or colour
-    change, and once the portrait has loaded. */
+/** The fighter's tag beside its base, as on the digital edition's board: its health in a heart,
+    its attack type on a chip edged in the player's colour above it (melee: linked rings; ranged:
+    an arrow into a target), and the hero's pieces (Alice's size card, Hellfire, tokens...) stacked
+    above that. Everything is right-aligned: the sprite hangs off the base's left side, so it never
+    covers the figure. Redrawn when health, attack type, pieces or colour change. */
 function drawLabel(p) {
   const c = p.label.material.map.image, g = c.getContext('2d'), W = c.width, H = c.height;
-  const k = W / LABEL_W; // canvas density: the layout below is in 320 x 400 units
+  const k = W / LABEL_W; // canvas density: the layout below is in LABEL_W x LABEL_H units
   g.clearRect(0, 0, W, H);
-  g.imageSmoothingEnabled = true;
-  g.imageSmoothingQuality = 'high';
-  const sx = W * .22, sy = 6 * k, sw = W * .56, sh = H * .58;
-  g.save();
-  g.shadowColor = 'rgba(0,0,0,.55)'; g.shadowBlur = 10 * k; g.shadowOffsetY = 3 * k;
-  shieldPath(g, sx, sy, sw, sh); g.fillStyle = p.color; g.fill();
-  g.restore();
-  const ix = sx + sw * .07, iy = sy + sw * .07, iw = sw * .86, ih = sh - sw * .16;
-  g.save();
-  shieldPath(g, ix, iy, iw, ih); g.clip();
-  g.fillStyle = '#1a1b20'; g.fillRect(ix, iy, iw, ih);
-  const img = p.portrait;
-  if (img && img.complete && img.naturalWidth) {
-    const s = Math.max(iw / img.naturalWidth, ih / img.naturalHeight);
-    const dw = img.naturalWidth * s, dh = img.naturalHeight * s;
-    // avatars are framed from the top (faces); round tokens are centred
-    g.drawImage(img, ix + (iw - dw) / 2, p.hero ? iy : iy + (ih - dh) / 2, dw, dh);
-  }
-  g.restore();
-  shieldPath(g, ix, iy, iw, ih); g.lineWidth = 3 * k; g.strokeStyle = 'rgba(255,255,255,.75)'; g.stroke();
+  const R = W - 4 * k;
 
-  // name plate with the heart at its left end
-  const ph = H * .2, py = sh + 16 * k;
-  g.font = `700 ${ph * .62}px ${fontFamily}`;
-  const name = p.name.toUpperCase();
-  const tw = Math.min(g.measureText(name).width, W - ph * 2.2);
-  const plateW = tw + ph * .9, x0 = (W - plateW + ph * .7) / 2;
-  g.fillStyle = 'rgba(14,15,18,.88)';
-  roundRect(g, x0, py, plateW, ph, ph * .14); g.fill();
-  g.fillStyle = p.color;
-  g.fillRect(x0, py, ph * .1, ph);
-  g.fillStyle = '#ece6d8';
-  g.textBaseline = 'middle';
-  g.fillText(name, x0 + ph * .5, py + ph * .54, W - ph * 2.2);
-  const hs = ph * 1.35, hx = x0 - hs * .72, hy = py + (ph - hs) / 2;
-  heartPath(g, hx, hy, hs); g.fillStyle = '#d8323a'; g.fill();
-  g.lineWidth = ph * .08; g.strokeStyle = '#ece6d8'; g.stroke();
-  g.fillStyle = '#fff';
-  g.font = `800 ${hs * .46}px ${fontFamily}`;
-  g.textAlign = 'center';
-  g.fillText(String(p.hp), hx + hs / 2, hy + hs * .47);
-  g.textAlign = 'left';
+  // the heart, health in it (darker when nearly out)
+  const hs = 100 * k, hx = R - hs, hy = H - hs - 4 * k;
+  g.save();
+  g.shadowColor = 'rgba(0,0,0,.6)'; g.shadowBlur = 8 * k; g.shadowOffsetY = 3 * k;
+  heartPath(g, hx, hy, hs); g.fillStyle = '#ece6d8'; g.fill();
+  g.restore();
+  heartPath(g, hx + hs * .07, hy + hs * .075, hs * .86); g.fillStyle = p.hp <= 3 ? '#a3141d' : '#d8323a'; g.fill();
+  g.fillStyle = '#fff'; g.font = `800 ${hs * .44}px ${fontFamily}`;
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText(String(p.hp), hx + hs / 2, hy + hs * .5);
 
-  // the hero's pieces under the plate: a card with its name, tokens one by one, or a counter
-  const items = (p.items || []).slice(0, 2);
-  let ry = py + ph + 10 * k;
-  const rh = ph * .82;
-  for (const it of items) {
+  // the attack type chip
+  const cw = 86 * k, ch = 40 * k, cx = hx + hs / 2 - cw / 2, cy = hy - ch;
+  g.save();
+  g.shadowColor = 'rgba(0,0,0,.5)'; g.shadowBlur = 6 * k; g.shadowOffsetY = 2 * k;
+  g.fillStyle = 'rgba(12,15,21,.92)'; roundRect(g, cx, cy, cw, ch, ch / 2); g.fill();
+  g.restore();
+  g.lineWidth = 3.5 * k; g.strokeStyle = p.color; roundRect(g, cx, cy, cw, ch, ch / 2); g.stroke();
+  attackIcon(g, cx + cw / 2, cy + ch / 2, ch * .7, p.ranged);
+
+  // the hero's pieces above: a card with its name, tokens one by one, or a counter
+  const rh = 40 * k;
+  let ry = cy - 6 * k;
+  for (const it of (p.items || []).slice(0, 2)) {
+    ry -= rh;
     const color = it.c || '#ece6d8';
-    let text = it.k === 'card' ? it.t : (it.k === 'tokens' && (it.m ?? it.n ?? 0) <= 6 ? '' : `${it.t} ${it.m != null ? `${it.n}/${it.m}` : it.n}`);
+    const many = (it.m ?? it.n ?? 0);
+    const tokens = it.k === 'tokens' && many <= 6 ? many : 0;
+    const text = it.k === 'card' ? it.t : (tokens ? '' : `${it.t} ${it.m != null ? `${it.n}/${it.m}` : it.n}`);
     g.font = `700 ${rh * .56}px ${fontFamily}`;
-    const tokens = it.k === 'tokens' && (it.m ?? it.n ?? 0) <= 6 ? (it.m ?? it.n ?? 0) : 0;
-    const tw2 = Math.min(g.measureText(text).width, W - rh * 3);
-    const w = rh * 1.1 + (text ? tw2 + rh * .35 : 0) + tokens * rh * .78 + (tokens ? rh * .2 : 0);
-    const x = (W - w) / 2;
-    g.fillStyle = 'rgba(14,15,18,.9)';
+    const tw = Math.min(g.measureText(text).width, W - rh * 3);
+    const w = rh * 1.1 + (text ? tw + rh * .35 : 0) + tokens * rh * .78 + (tokens ? rh * .2 : 0);
+    const x = Math.max(2 * k, R - w);
+    g.fillStyle = 'rgba(12,15,21,.92)';
     roundRect(g, x, ry, w, rh, rh * .2); g.fill();
     g.lineWidth = 3 * k; g.strokeStyle = color; g.stroke();
     g.font = `${rh * .62}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif`;
     g.textBaseline = 'middle'; g.textAlign = 'left';
     if (tokens) {
-      for (let k = 0; k < tokens; k++) {
-        g.globalAlpha = k < (it.n || 0) ? 1 : .25;
-        g.fillText(it.e, x + rh * .2 + k * rh * .78, ry + rh * .54);
+      for (let i = 0; i < tokens; i++) {
+        g.globalAlpha = i < (it.n || 0) ? 1 : .25;
+        g.fillText(it.e, x + rh * .2 + i * rh * .78, ry + rh * .54);
       }
       g.globalAlpha = 1;
       g.font = `700 ${rh * .5}px ${fontFamily}`; g.fillStyle = color;
@@ -782,22 +782,35 @@ function drawLabel(p) {
       g.font = `700 ${rh * .56}px ${fontFamily}`; g.fillStyle = '#fff';
       g.fillText(text, x + rh * 1.1, ry + rh * .56, W - rh * 3);
     }
-    ry += rh + 6 * k;
+    ry -= 5 * k;
   }
+  g.textAlign = 'left';
   p.label.material.map.needsUpdate = true;
 }
-function shieldPath(g, x, y, w, h) {
-  const r = w * .12;
-  g.beginPath();
-  g.moveTo(x + r, y);
-  g.lineTo(x + w - r, y);
-  g.quadraticCurveTo(x + w, y, x + w, y + r);
-  g.lineTo(x + w, y + h * .5);
-  g.bezierCurveTo(x + w, y + h * .78, x + w * .72, y + h * .9, x + w / 2, y + h);
-  g.bezierCurveTo(x + w * .28, y + h * .9, x, y + h * .78, x, y + h * .5);
-  g.lineTo(x, y + r);
-  g.quadraticCurveTo(x, y, x + r, y);
-  g.closePath();
+
+/** Attack type icons, in bone on the chip: melee two linked rings with a bar through them,
+    ranged an arrow flying into a target. (cx, cy) centre, s size. */
+function attackIcon(g, cx, cy, s, ranged) {
+  g.save();
+  g.strokeStyle = '#ece6d8'; g.fillStyle = '#ece6d8';
+  g.lineWidth = s * .13; g.lineCap = 'round'; g.lineJoin = 'round';
+  if (!ranged) {
+    for (const dx of [-.3, .3]) { g.beginPath(); g.arc(cx + dx * s, cy, s * .3, 0, TAU); g.stroke(); }
+    g.beginPath(); g.moveTo(cx - s * .78, cy); g.lineTo(cx + s * .78, cy); g.stroke();
+  } else {
+    const tx = cx + s * .42;
+    g.beginPath(); g.arc(tx, cy, s * .32, 0, TAU); g.stroke();
+    g.beginPath(); g.arc(tx, cy, s * .08, 0, TAU); g.fill();
+    g.beginPath(); g.moveTo(cx - s * .85, cy); g.lineTo(tx - s * .1, cy); g.stroke();
+    g.beginPath(); g.moveTo(tx - s * .06, cy); g.lineTo(tx - s * .3, cy - s * .16); g.lineTo(tx - s * .3, cy + s * .16); g.closePath(); g.fill();
+    for (const d of [0, .18]) {
+      g.beginPath();
+      g.moveTo(cx - s * (.85 - d), cy); g.lineTo(cx - s * (.98 - d), cy - s * .16);
+      g.moveTo(cx - s * (.85 - d), cy); g.lineTo(cx - s * (.98 - d), cy + s * .16);
+      g.stroke();
+    }
+  }
+  g.restore();
 }
 function roundRect(g, x, y, w, h, r) {
   g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r);
@@ -1062,20 +1075,22 @@ async function buildFigure(p, f) {
   p.reticle.position.y = p.orb.position.y;
   p.glow.position.y = .05;
   p.glow.scale.setScalar(r * 3.2);
-  p.label.position.y = h + sh + .06;
+  p.tagGap = r * 1.02;
   renderer.shadowMap.needsUpdate = true;
   invalidate(3);
 }
 
-/** Figures turn about their own upright axis to face the camera (badges are sprites and already do).
-    Badges grow as the camera comes closer, up to a cap: in a duel's close-up they'd otherwise
-    cover the fighters. */
+/** Figures turn about their own upright axis to face the camera (tags are sprites and already do).
+    Tags grow as the camera comes closer, up to a cap, so a duel's close-up stays on the fighters;
+    each keeps clear of its base's left edge. */
 function faceCamera() {
-  const near = span * .9;
+  const near = span * .42, far = span;
   for (const p of pieces.values()) {
-    const g = p.group.position;
-    const k = Math.min(1, camera.position.distanceTo(g) / near), ls = p.label.userData.ls * k;
+    const g = p.group.position, d = camera.position.distanceTo(g);
+    // up close: no bigger on screen than at `near`; far off: no smaller than at `far`
+    const k = d < near ? d / near : d > far ? d / far : 1, ls = p.label.userData.ls * k;
     p.label.scale.set(ls, ls * LABEL_H / LABEL_W, 1);
+    p.label.center.x = 1 + p.tagGap / ls;
     if (!p.pivot) continue;
     p.pivot.rotation.y = Math.atan2(camera.position.x - g.x, camera.position.z - g.z);
   }
@@ -1085,7 +1100,8 @@ function faceCamera() {
 const pieces = new Map();   // fighter uid -> piece
 const orbGeo = new THREE.SphereGeometry(1, 32, 20);
 const baseGeo = new THREE.RingGeometry(.74, 1, 40).rotateX(-Math.PI / 2);
-const ringGeo = new THREE.TorusGeometry(1, .07, 8, 48).rotateX(Math.PI / 2);
+// the ring's bright band sits at radius 1 (the texture's band is at .77 of its half-width)
+const ringGeo = new THREE.PlaneGeometry(2.6, 2.6).rotateX(-Math.PI / 2);
 const basic = (color, opacity = 1) => new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthWrite: false, toneMapped: false });
 
 function makePiece(f) {
@@ -1104,9 +1120,10 @@ function makePiece(f) {
   const base = new THREE.Mesh(baseGeo, basic(color, .9));
   base.scale.setScalar(rad * 1.45);
   base.position.y = .006;
-  const ring = new THREE.Mesh(ringGeo, basic(SELECT));
+  const ring = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ map: RING, color: SELECT, transparent: true, depthWrite: false, toneMapped: false }));
   ring.scale.setScalar(rad * 1.9);
-  ring.position.y = .05;
+  ring.position.y = .068;
+  ring.renderOrder = 3;
   ring.visible = false;
   const reticle = new THREE.Sprite(new THREE.SpriteMaterial({ map: RETICLE, depthTest: false, transparent: true, toneMapped: false }));
   reticle.position.y = orb.position.y;
@@ -1120,19 +1137,15 @@ function makePiece(f) {
   lt.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
   const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: lt, depthTest: false, transparent: true, toneMapped: false }));
   label.userData.base = f.hero ? 1 : (f.small ? .62 : .8);
-  label.center.set(.5, 0);
-  label.position.y = orb.position.y + rad + .08;
+  label.center.set(1, 0);
+  label.position.y = .02;
   label.renderOrder = 10;
   label.userData.fid = f.id;
   group.add(base, ring, orb, glow, reticle, label);
   scene.add(group);
-  const p = { id: f.id, group, orb, glow, base, ring, reticle, label, rad, hitR: rad * 1.5, color: f.color, name: f.name, hp: f.hp, hero: f.hero, space: f.space, anim: null, items: f.items || [], itemsKey: JSON.stringify(f.items || []) };
-  // portrait for the badge: the hero's avatar, or a sidekick's own token
-  if (f.mini) {
-    p.portrait = new Image();
-    p.portrait.onload = () => { drawLabel(p); invalidate(); };
-    p.portrait.src = f.hero ? `../heroes/${f.mini}/avatar.webp` : `../heroes/${f.mini}/${f.fid}.webp`;
-  }
+  const p = { id: f.id, group, orb, glow, base, ring, reticle, label, rad, hitR: rad * 1.5, color: f.color, name: f.name, hp: f.hp, hero: f.hero, ranged: !!f.ranged, space: f.space, anim: null, items: f.items || [], itemsKey: JSON.stringify(f.items || []) };
+  // the tag hangs off the left of the base (the orb's ring until the figure's podium arrives)
+  p.tagGap = rad * 1.5;
   sizePiece(p);
   drawLabel(p);
   fontReady.then(() => { drawLabel(p); invalidate(); });
@@ -1140,11 +1153,11 @@ function makePiece(f) {
   return p;
 }
 
-const LABEL_W = 320, LABEL_H = 400;
+const LABEL_W = 230, LABEL_H = 340;
 
-/** Badge size and orb glow follow the graphics settings. */
+/** Tag size and orb glow follow the graphics settings. */
 function sizePiece(p) {
-  const ls = p.label.userData.ls = p.label.userData.base * G.labels * .8;
+  const ls = p.label.userData.ls = p.label.userData.base * G.labels * .6;
   p.label.scale.set(ls, ls * LABEL_H / LABEL_W, 1);
   p.orb.material.emissiveIntensity = fxOn().bloom ? 1.25 : .5;
 }
@@ -1155,7 +1168,7 @@ function disposePiece(p) {
   p.group.traverse(o => {
     if (p.figure && o.geometry && o.geometry !== podiumGeo && o.parent && o.parent !== p.group) o.geometry.dispose();
     for (const m of [].concat(o.material || [])) {
-      if (m.map && m.map !== GLOW && m.map !== RETICLE && !m.map.userData.shared) m.map.dispose();
+      if (m.map && m.map !== GLOW && m.map !== RETICLE && m.map !== RING && !m.map.userData.shared) m.map.dispose();
       m.dispose();
     }
   });
@@ -1317,9 +1330,10 @@ function applyState(s) {
     let p = pieces.get(f.id);
     if (!p) { p = makePiece(f); pieces.set(f.id, p); }
     const items = JSON.stringify(f.items || []);
-    if (p.hp !== f.hp || p.name !== f.name || p.color !== f.color || p.itemsKey !== items) {
+    if (p.hp !== f.hp || p.name !== f.name || p.color !== f.color || p.itemsKey !== items || p.ranged !== !!f.ranged) {
       p.itemsKey = items;
       p.items = f.items || [];
+      p.ranged = !!f.ranged;
       const recolor = p.color !== f.color;
       p.hp = f.hp; p.name = f.name; p.color = f.color;
       if (recolor) {

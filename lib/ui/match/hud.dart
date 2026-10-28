@@ -15,10 +15,15 @@ import '../theme.dart';
 import '../widgets.dart';
 import 'dials.dart';
 import 'hero_items.dart';
+import 'plate_parts.dart';
 
 // ------------------------------------------------------------------------------- name plates
 
-/// A player's name plate. The big one sits bottom-left for you; compact ones top-right.
+/// A player's plate, after Unmatched: Digital Edition: the hero's diamond emblem with the seat
+/// number, a plate in the hero's colour with the name, and stat cells for health, deck and move;
+/// under it the hero's companions (sidekicks, pets, fellow heroes) with their health, the actions
+/// left on their turn, and the hero's pieces. Opponents show their hand as card backs above. The
+/// big one sits bottom-left for you; the others top-right.
 class PlayerPlate extends StatelessWidget {
   const PlayerPlate({
     super.key,
@@ -45,52 +50,98 @@ class PlayerPlate extends StatelessWidget {
   final int? actionsLeft;
   final VoidCallback? onTap;
 
+  static double _emblem(bool big) => big ? 66 : 50;
+  static double _cell(bool big) => big ? 46 : 34;
+  static double _nameW(bool big) => big ? 150 : 84;
+
+  /// The plate's width, before UiScale (the match screen keeps the hand clear of it). The rows
+  /// under it wrap to this width.
+  static double widthFor({required bool big}) {
+    final e = _emblem(big);
+    return e * 0.6 + e * 0.46 + _nameW(big) + 6 + 3 * _cell(big) + 4; // + the border, both sides
+  }
+
   @override
   Widget build(BuildContext context) {
     final out = player.eliminated;
-    final hero = player.heroFighter;
-    final avatar = big ? 58.0 : 40.0;
+    final heroes = player.heroes.toList();
+    final hero = heroes.length == 1 ? player.heroFighter : heroes.first;
     final status = player.script.status();
+    final e = _emblem(big);
+    final h = _cell(big); // plate height = cell size
+    final w = widthFor(big: big);
+    final heroColor = hexColor(player.hero.color);
+    final tint = out ? Palette.panel : plateColor(heroColor);
+    final ai = subtitle.contains('AI ');
     final plate = Container(
-      padding: EdgeInsets.fromLTRB(big ? 16 : 12, big ? 4 : 3, big ? 26 : 20, big ? 5 : 3),
+      height: h,
+      padding: EdgeInsets.only(left: e * 0.46),
       decoration: ShapeDecoration(
-        color: out ? Palette.panel : plateColor(hexColor(player.hero.color)),
-        shape: PlateBorder(
-          side: BorderSide(color: active ? Palette.gold : Palette.bone.withValues(alpha: 0.35), width: active ? 1.8 : 1),
+        gradient: LinearGradient(colors: [tint, Color.lerp(tint, Palette.bgDeep, 0.72)!], stops: const [0.25, 1]),
+        shape: ChamferBorder(
+          cut: h * 0.22,
+          side: BorderSide(color: active ? Palette.gold : Palette.bone.withValues(alpha: 0.28), width: active ? 1.8 : 1),
         ),
         shadows: const [BoxShadow(color: Color(0x99000000), blurRadius: 8, offset: Offset(0, 3))],
       ),
-      child: Column(
+      child: Row(
         mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            player.name.toUpperCase(),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: titleStyle(big ? 19 : 14, color: out ? Palette.muted : Colors.white, spacing: 0.8),
+          SizedBox(
+            width: _nameW(big),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  hero.name.toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: titleStyle(big ? 18 : 13.5, color: out ? Palette.muted : Colors.white, spacing: big ? 0.8 : 0.4),
+                ),
+                Row(
+                  children: [
+                    Icon(ai ? Icons.smart_toy_rounded : Icons.person_rounded, size: big ? 12 : 10, color: Palette.gold),
+                    const SizedBox(width: 3),
+                    Flexible(
+                      child: Text(
+                        out ? 'Out of the game' : subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: bodyStyle(big ? 12 : 10, color: Colors.white.withValues(alpha: 0.8), weight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
-          Text(
-            out ? 'Out of the game' : subtitle,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: bodyStyle(big ? 12.5 : 11, color: Colors.white.withValues(alpha: 0.78), weight: FontWeight.w600),
-          ),
+          const SizedBox(width: 6),
+          StatCell(value: hero.defeated ? 0 : hero.hp, size: h, heart: true, low: hero.hp <= 3, tooltip: '${hero.name}: ${hero.defeated ? 'defeated' : '${hero.hp} health'}'),
+          StatCell(value: player.deck.length, size: h, icon: Icons.layers_rounded, tooltip: 'Cards left in deck'),
+          StatCell(value: player.hero.move, size: h, icon: Icons.directions_walk_rounded, tooltip: 'Move value'),
         ],
       ),
     );
-    final stats = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        FighterDials(player: player, color: color, heroSize: big ? 46 : 38, sidekickSize: big ? 28 : 24),
-        const SizedBox(width: 8),
-        if (!showHandBacks) ...[
-          _Count(icon: Icons.style_rounded, value: player.hand.length, tooltip: 'Cards in hand', small: !big),
-          const SizedBox(width: 6),
+    final head = SizedBox(
+      height: e + e * 0.36 * 0.3,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Padding(
+            padding: EdgeInsets.only(left: e * 0.6, top: (e - h) / 2),
+            child: plate,
+          ),
+          HeroEmblem(image: player.hero.avatar, color: readable(heroColor), size: e, seat: player.seat + 1, active: active, grey: out),
         ],
-        _Count(icon: Icons.layers_rounded, value: player.deck.length, tooltip: 'Cards left in deck', small: !big),
-        if (actionsLeft != null) ...[
-          const SizedBox(width: 10),
+      ),
+    );
+    final under = Wrap(
+      spacing: 5,
+      runSpacing: 4,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        if (actionsLeft != null)
           // The prompt bar also says how many are left; the pips stay compact so the hand fits.
           Tooltip(
             message: '$actionsLeft action${actionsLeft == 1 ? '' : 's'} left',
@@ -101,18 +152,19 @@ class PlayerPlate extends StatelessWidget {
                   Padding(
                     padding: const EdgeInsets.only(right: 3),
                     child: Container(
-                      width: big ? 12 : 9,
-                      height: big ? 12 : 9,
+                      width: big ? 13 : 10,
+                      height: big ? 13 : 10,
                       decoration: ShapeDecoration(
-                        color: i < actionsLeft! ? Palette.bone : Colors.transparent,
-                        shape: HexBorder(side: BorderSide(color: Palette.bone.withValues(alpha: 0.7))),
+                        color: i < actionsLeft! ? Palette.gold : Colors.transparent,
+                        shape: HexBorder(side: BorderSide(color: Palette.gold.withValues(alpha: 0.8))),
                       ),
                     ),
                   ),
               ],
             ),
           ),
-        ],
+        for (final g in CompanionsRow.groups(player)) CompanionChip(group: g, color: readable(color), size: big ? 28 : 23),
+        AbilityChip(hero: player.hero, size: big ? 28 : 23, maxWidth: big ? 190 : 130),
       ],
     );
     return Semantics(
@@ -122,65 +174,40 @@ class PlayerPlate extends StatelessWidget {
         onTap: onTap,
         child: Opacity(
           opacity: out ? 0.6 : 1,
-          child: Row(
+          child: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Avatar(player.hero.avatar, size: avatar, ring: active ? Palette.bone : color, ringWidth: active ? 2.5 : 2, grey: out),
-              const SizedBox(width: 4),
-              Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  plate,
-                  const SizedBox(height: 3),
-                  stats,
-                  if (showHandBacks && !out) ...[
-                    const SizedBox(height: 4),
-                    HandBacks(count: player.hand.length, back: player.hero.back, height: 28),
-                  ],
-                  // The hero's pieces (Alice's size card, Hellfire, the cauldron...), for every
-                  // player: they are open information, like on the table.
-                  if (status.isNotEmpty && !out) ...[
-                    const SizedBox(height: 3),
-                    HeroItemsRow(player: player, small: !big),
-                  ],
-                ],
-              ),
+              if (showHandBacks && !out) ...[
+                Padding(
+                  padding: EdgeInsets.only(left: e * 0.7),
+                  child: HandBacks(count: player.hand.length, back: player.hero.back, height: big ? 30 : 24),
+                ),
+                const SizedBox(height: 2),
+              ],
+              head,
+              if (!out) ...[
+                const SizedBox(height: 4),
+                Padding(
+                  padding: EdgeInsets.only(left: e * 0.12),
+                  child: SizedBox(width: w - e * 0.12, child: under),
+                ),
+              ],
+              // The hero's pieces (Alice's size card, Hellfire, the cauldron...), for every
+              // player: they are open information, like on the table.
+              if (status.isNotEmpty && !out) ...[
+                const SizedBox(height: 3),
+                Padding(
+                  padding: EdgeInsets.only(left: e * 0.12),
+                  child: SizedBox(width: w - e * 0.12, child: HeroItemsRow(player: player, small: !big)),
+                ),
+              ],
             ],
           ),
         ),
       ),
     );
   }
-}
-
-class _Count extends StatelessWidget {
-  const _Count({required this.icon, required this.value, required this.tooltip, this.small = false});
-  final IconData icon;
-  final int value;
-  final String tooltip;
-  final bool small;
-  @override
-  Widget build(BuildContext context) => Tooltip(
-    message: tooltip,
-    child: Container(
-      height: small ? 20 : 24,
-      padding: const EdgeInsets.symmetric(horizontal: 6),
-      decoration: ShapeDecoration(
-        color: const Color(0xCC0A0D13),
-        shape: ChamferBorder(cut: 4, side: BorderSide(color: Palette.bone.withValues(alpha: 0.2))),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: small ? 12 : 14, color: Palette.boneDim),
-          const SizedBox(width: 3),
-          Text('$value', style: titleStyle(small ? 12 : 14, weight: FontWeight.w700, spacing: 0)),
-        ],
-      ),
-    ),
-  );
 }
 
 class _Chip extends StatelessWidget {
@@ -1019,9 +1046,7 @@ class _HeroSheetState extends State<_HeroSheet> {
       ('Discard pile', p.discard.reversed.toList()),
       ('Removed from the game', p.removed),
     ];
-    final ability = p.hero.ability.trim().split('\n');
-    final abilityName = ability.length > 1 && ability.first.length <= 40 && !ability.first.endsWith('.') ? ability.first : null;
-    final abilityText = (abilityName == null ? ability : ability.skip(1)).join(' ');
+    final (abilityName, abilityText) = abilityParts(p.hero);
     final status = p.script.status();
     final reference = p.script.reference();
 

@@ -45,6 +45,19 @@ Last updated: 2026-10-24. For the full engine/API reference see `HANDOFF.md`.
   pinch's midpoint; scripted moves (fit, the duel push-in, pull back, turn, tilt) zoom in log
   space. The match screen batches gestures into one message per frame for the web view bridge.
   The 2D board uses the same ideas (`_CamTween`, `_wheel` in match_screen.dart).
+- Fighter tags (3D and 2D), after the digital edition: a heart with the health and an attack-type
+  chip (melee rings / ranged arrow, edged in the player's colour) off the left of the base, the
+  hero's pieces above; no more portrait shield over the head. Selection is a glowing ring.
+- Player plates (`PlayerPlate` in hud.dart, `_MiniPlate` in match_screen.dart, parts in
+  plate_parts.dart): diamond hero emblem with the seat number, a plate in the hero's colour with
+  the name, heart / deck / move cells, then companions (sidekicks, pets, fellow heroes; packs as
+  one chip with a count) and the special-ability chip (tap: full text).
+- HUD layout: worked out from the pieces' real sizes. Allies down the left above your plate,
+  opponents down the right above the actions, each column shrinking to fit; prompt bar between
+  the top corners; hand between your plate and the actions; camera controls open sideways.
+  `test/hud_layout_test.dart` checks nothing overlaps at 7 screen sizes in every mode.
+- GTAO (Ultra's ambient occlusion) skips sprites, see-through overlays and the backdrop (a
+  texture background is drawn as a 2x2 plane there, which showed as a dark square mid-board).
 - The web view is laid out at the screen's real pixel density (`_NativeScale` in board3d.dart):
   under UiScale (tablets, desktops, the web) it used to render at up to 1/1.6 resolution.
 - Sharpness: native resolution up to 3x on phones (within the budget), MSAA in the composer's

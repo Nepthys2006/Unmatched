@@ -44,6 +44,35 @@ class HexBorder extends OutlinedBorder {
   HexBorder copyWith({BorderSide? side}) => HexBorder(side: side ?? this.side);
 }
 
+/// A diamond (a square on its point): the hero emblems on the player plates.
+class DiamondBorder extends OutlinedBorder {
+  const DiamondBorder({super.side});
+
+  static Path pathFor(Rect r) => Path()
+    ..moveTo(r.center.dx, r.top)
+    ..lineTo(r.right, r.center.dy)
+    ..lineTo(r.center.dx, r.bottom)
+    ..lineTo(r.left, r.center.dy)
+    ..close();
+
+  @override
+  EdgeInsetsGeometry get dimensions => EdgeInsets.all(side.width);
+  @override
+  Path getInnerPath(Rect rect, {TextDirection? textDirection}) => pathFor(rect.deflate(side.width * 1.42));
+  @override
+  Path getOuterPath(Rect rect, {TextDirection? textDirection}) => pathFor(rect);
+  @override
+  void paint(Canvas canvas, Rect rect, {TextDirection? textDirection}) {
+    if (side.style == BorderStyle.none) return;
+    canvas.drawPath(pathFor(rect.deflate(side.width * 0.71)), side.toPaint()..strokeJoin = StrokeJoin.miter);
+  }
+
+  @override
+  ShapeBorder scale(double t) => DiamondBorder(side: side.scale(t));
+  @override
+  DiamondBorder copyWith({BorderSide? side}) => DiamondBorder(side: side ?? this.side);
+}
+
 /// An angled name plate: the left edge leans, the right edge can end in an arrow point
 /// (the DEFENDER / ATTACKER banners) or lean the other way.
 class PlateBorder extends OutlinedBorder {

@@ -412,7 +412,7 @@ class BoardLayerPainter extends CustomPainter {
     final it = _label(initial, rad * 0.95, Colors.white);
     it.paint(canvas, c - Offset(it.width / 2, it.height / 2 + rad * 0.04));
 
-    _nameHeartMarks(canvas, f, c, r, rad, p, c + Offset(rad * 0.85, -rad * 0.8));
+    _tagAndMarks(canvas, f, c, r, rad, p);
   }
 
   void _figure(Canvas canvas, Fighter f, Offset c, double r, bool glow, double p, FigureImage art) {
@@ -471,7 +471,7 @@ class BoardLayerPainter extends CustomPainter {
 
     // The hero's pieces (Alice's card, Hellfire...) float beside the main hero.
     if (f == f.owner.heroFighter) _items(canvas, f.owner, Offset(dst.left - r * 0.08, dst.top + r * 0.1), r);
-    _nameHeartMarks(canvas, f, c, r, rad, p, Offset(math.min(dst.right, c.dx + rad * 1.1), dst.top + r * 0.22));
+    _tagAndMarks(canvas, f, c, r, rad, p);
   }
 
   /// Small pieces stacked down the left of the figure: an icon and a count or name each.
@@ -497,23 +497,30 @@ class BoardLayerPainter extends CustomPainter {
     }
   }
 
-  void _nameHeartMarks(Canvas canvas, Fighter f, Offset c, double r, double rad, double p, Offset heartAt) {
-    // Name tag under the fighter.
-    final name = _label(f.name.toUpperCase(), r * 0.34, Palette.bone);
-    final tag = Rect.fromCenter(center: c + Offset(0, rad + r * 0.34), width: name.width + r * 0.24, height: name.height + r * 0.06);
-    canvas.drawRRect(RRect.fromRectAndRadius(tag, Radius.circular(r * 0.06)), Paint()..color = const Color(0xCC0A0D13));
-    name.paint(canvas, tag.topLeft + Offset(r * 0.12, r * 0.03));
-
-    // Health heart.
-    final hs = r * (f.isHero ? 0.66 : 0.54);
-    final hRect = Rect.fromCenter(center: heartAt, width: hs, height: hs);
+  /// The fighter's tag off the left of its base, as on the digital edition's board (and the 3D
+  /// map): health in a heart, the attack type on a chip edged in the player's colour above it.
+  /// Then the selection marks.
+  void _tagAndMarks(Canvas canvas, Fighter f, Offset c, double r, double rad, double p) {
+    final hs = r * (f.isHero ? 0.62 : 0.5);
+    final hRect = Rect.fromCenter(center: c + Offset(-rad - hs * 0.42, -hs * 0.05), width: hs, height: hs);
     canvas
       ..save()
       ..translate(hRect.left, hRect.top);
-    HeartPainter(Palette.heart, Palette.bone).paint(canvas, hRect.size);
+    HeartPainter(f.hp <= 3 ? const Color(0xFFA3141D) : Palette.heart, Palette.bone).paint(canvas, hRect.size);
     canvas.restore();
-    final hp = _label('${f.hp}', hs * 0.48, Colors.white);
-    hp.paint(canvas, hRect.center - Offset(hp.width / 2, hp.height / 2 + hs * 0.06));
+    final hp = _label('${f.hp}', hs * 0.46, Colors.white);
+    hp.paint(canvas, hRect.center - Offset(hp.width / 2, hp.height / 2 + hs * 0.04));
+    final chip = Rect.fromCenter(center: hRect.topCenter - Offset(0, hs * 0.2), width: hs * 0.86, height: hs * 0.4);
+    final pill = RRect.fromRectAndRadius(chip, Radius.circular(chip.height / 2));
+    canvas.drawRRect(pill, Paint()..color = const Color(0xEB0C0F15));
+    canvas.drawRRect(
+      pill,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = chip.height * 0.09
+        ..color = colorOf(f.owner),
+    );
+    paintAttackIcon(canvas, chip.center, chip.height * 0.7, ranged: f.isRanged);
 
     // Selection marks.
     if (marks.select.contains(f) || marks.pending == f) {
@@ -604,5 +611,40 @@ class SteppedPulse extends Animation<double>
     clearListeners();
     clearStatusListeners();
     super.dispose();
+  }
+}
+
+/// The attack type icon in bone: melee two linked rings with a bar through them, ranged an arrow
+/// flying into a target (the same marks as the 3D map's tags). [c] centre, [s] size.
+void paintAttackIcon(Canvas canvas, Offset c, double s, {required bool ranged, Color color = Palette.bone}) {
+  final line = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = s * 0.13
+    ..strokeCap = StrokeCap.round
+    ..strokeJoin = StrokeJoin.round
+    ..color = color;
+  final fill = Paint()..color = color;
+  if (!ranged) {
+    canvas.drawCircle(c + Offset(-s * 0.3, 0), s * 0.3, line);
+    canvas.drawCircle(c + Offset(s * 0.3, 0), s * 0.3, line);
+    canvas.drawLine(c + Offset(-s * 0.78, 0), c + Offset(s * 0.78, 0), line);
+    return;
+  }
+  final t = c + Offset(s * 0.42, 0);
+  canvas.drawCircle(t, s * 0.32, line);
+  canvas.drawCircle(t, s * 0.08, fill);
+  canvas.drawLine(c + Offset(-s * 0.85, 0), t - Offset(s * 0.1, 0), line);
+  canvas.drawPath(
+    Path()
+      ..moveTo(t.dx - s * 0.06, t.dy)
+      ..lineTo(t.dx - s * 0.3, t.dy - s * 0.16)
+      ..lineTo(t.dx - s * 0.3, t.dy + s * 0.16)
+      ..close(),
+    fill,
+  );
+  for (final d in [0.0, 0.18]) {
+    final a = c + Offset(-s * (0.85 - d), 0);
+    canvas.drawLine(a, a + Offset(-s * 0.13, -s * 0.16), line);
+    canvas.drawLine(a, a + Offset(-s * 0.13, s * 0.16), line);
   }
 }

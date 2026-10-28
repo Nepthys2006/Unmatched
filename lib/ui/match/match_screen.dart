@@ -34,11 +34,11 @@ import '../theme.dart';
 import '../widgets.dart';
 import 'agents.dart';
 import 'board_layer.dart';
-import 'dials.dart';
 import 'figure_art.dart';
 import 'hero_items.dart';
 import 'hud.dart';
 import 'match_config.dart';
+import 'plate_parts.dart';
 
 /// Dev-only: `--dart-define=AUTOPLAY=true` lets an AI answer your prompts (after showing them)
 /// so whole matches can be screenshot and soak-tested. Never set in real builds.
@@ -333,6 +333,8 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
               'hero': f.isHero,
               'hp': f.hp,
               'name': f.name,
+              // melee or ranged, for the attack chip on the fighter's tag
+              if (f.isRanged) 'ranged': true,
               // which figure to draw: the hero's id, the fighter's id (a sidekick's token) and, for
               // heroes with several hero fighters (the three Raptors), which of them this is
               'mini': f.owner.hero.id,
@@ -1238,15 +1240,25 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
     // The HUD was laid out for a landscape phone (~412 px tall); bigger screens scale it up.
     final ui = (size.shortestSide / 470).clamp(1.0, 1.4);
     final cardW = (size.height * 0.27 * cardAspect).clamp(60.0, 200.0);
-    // Clear of your name plate on the left and the action buttons on the right.
-    final handLeft = isCompact
-        ? math.min(230.0 * ui, size.width * 0.28)
-        : math.min(320.0 * ui + 10, size.width * 0.32);
-    final handRight = isCompact
-        ? math.min(170.0 * ui, size.width * 0.22)
-        : math.min(260.0 * ui + 10, size.width * 0.26);
-    final combatCardH = (size.height * 0.46).clamp(150.0, 380.0);
     final others = game.players.where((o) => o != me).toList();
+    // HUD regions, worked out from the pieces' real sizes (each drawn `ui` times larger) so that
+    // nothing covers anything else at any screen size: the menu row top-left with the camera
+    // button under it; down the left, your allies (team games) above your plate; down the right,
+    // your opponents above the action buttons; the prompt bar between the top corners; the hand
+    // between your plate and the action buttons.
+    final pad = MediaQuery.paddingOf(context);
+    final bigPlate = size.width >= 900 && size.height >= 550;
+    final menuButtons = canToggleFullscreen && !isFullscreen ? 4 : 3;
+    final menuW = (menuButtons * 44 * 1.16 + (menuButtons - 1) * 6) * ui;
+    final camTop = 8 + 44 * ui + 10;
+    final camBottom = camTop + 38 * ui;
+    final allies = [for (final o in others) if (o.team == me.team) o];
+    final enemies = [for (final o in others) if (o.team != me.team) o];
+    final compactEnemies = enemies.length > 1 || allies.isNotEmpty || size.height < 560;
+    final enemiesW = enemies.isEmpty ? 0.0 : (compactEnemies ? _MiniPlate.width : PlayerPlate.widthFor(big: false)) * ui;
+    final handLeft = pad.left + 10 + PlayerPlate.widthFor(big: bigPlate) * ui + 10;
+    final handRight = pad.right + 10 + _actionClusterWidth(isCompact) * ui + 10;
+    final combatCardH = (size.height * 0.46).clamp(150.0, 380.0);
     final playable = _playable;
     final boardPick = _marks.pending != null;
     final focus = _combat == null ? <Fighter>{} : {_combat!.attacker.fighter, _combat!.defender.fighter};
@@ -1421,8 +1433,8 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
               // Prompt bar.
               Positioned(
                 top: 0,
-                left: (isCompact ? 130.0 : 160.0) * ui,
-                right: (others.isNotEmpty ? (isCompact ? 160.0 : 220.0) : 110.0) * ui,
+                left: pad.left + 10 + menuW + 8,
+                right: pad.right + 10 + enemiesW + 8,
                 child: SafeArea(
                   bottom: false,
                   child: LayoutBuilder(
@@ -1500,11 +1512,11 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
                   ),
                 ),
 
-              // Camera controls: one button under the menu that opens the rest, so they stay
-              // out of the way of the board.
+              // Camera controls: one button under the menu that opens the rest beside it (a row, so
+              // it never reaches down over your allies or your plate).
               Positioned(
                 left: 10,
-                top: 62 * ui,
+                top: camTop,
                 child: SafeArea(
                   child: _hideInCombat(
                     Align(
@@ -1512,31 +1524,31 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
                       child: _scaled(
                         ui,
                         Alignment.topLeft,
-                        Column(
+                        Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             HexButton(
-                              icon: _camOpen ? Icons.expand_less_rounded : Icons.videocam_rounded,
+                              icon: _camOpen ? Icons.chevron_left_rounded : Icons.videocam_rounded,
                               tooltip: _camOpen ? 'Hide camera controls' : 'Camera controls',
                               size: 38,
                               onPressed: () => setState(() => _camOpen = !_camOpen),
                             ),
                             if (_camOpen) ...[
-                              const SizedBox(height: 6),
+                              const SizedBox(width: 6),
                               HexButton(icon: Icons.add_rounded, tooltip: 'Zoom in', size: 38, onPressed: () => _zoom(1.25)),
-                              const SizedBox(height: 6),
+                              const SizedBox(width: 6),
                               HexButton(icon: Icons.remove_rounded, tooltip: 'Zoom out', size: 38, onPressed: () => _zoom(0.8)),
-                              const SizedBox(height: 6),
+                              const SizedBox(width: 6),
                               HexButton(icon: Icons.fit_screen_rounded, tooltip: 'Fit board', size: 38, onPressed: _fit),
                               if (_in3d) ...[
-                                const SizedBox(height: 6),
+                                const SizedBox(width: 6),
                                 HexButton(
                                   icon: Icons.rotate_left_rounded,
                                   tooltip: 'Turn the board',
                                   size: 38,
                                   onPressed: () => _b3?.send({'t': 'cam', 'op': 'turn', 'a': math.pi / 4}),
                                 ),
-                                const SizedBox(height: 6),
+                                const SizedBox(width: 6),
                                 HexButton(
                                   icon: Icons.threed_rotation_rounded,
                                   tooltip: 'Top view / table view',
@@ -1547,29 +1559,6 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
                             ],
                           ],
                         ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-
-              // Top-right: everyone else.
-              Positioned(
-                top: 8,
-                right: 10,
-                child: SafeArea(
-                  child: _hideInCombat(
-                    _scaled(
-                      ui,
-                      Alignment.topRight,
-                      _OpponentColumn(
-                        players: others,
-                        active: game.turnNumber == 0 ? null : game.active,
-                        colorOf: colorOf,
-                        me: me,
-                        actions: game.actions,
-                        compact: others.length > 1 || (size.height < 560 && others.isNotEmpty),
-                        onTap: _heroSheet,
                       ),
                     ),
                   ),
@@ -1594,37 +1583,107 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
                 ),
               ),
 
-              // Bottom-left: you.
+              // Down the left: your allies (team games) under the camera button, you at the bottom.
+              // The allies shrink to fit the space your plate leaves them.
               Positioned(
                 left: 10,
+                top: camBottom + 10,
                 bottom: 10,
                 child: SafeArea(
-                  top: false,
-                  child: _scaled(
-                    ui,
-                    Alignment.bottomLeft,
-                    PlayerPlate(
-                      player: me,
-                      color: colorOf(me),
-                      subtitle: settings.username,
-                      big: size.width >= 900 && size.height >= 550,
-                      active: game.turnNumber > 0 && game.active == me,
-                      actionsLeft: game.turnNumber > 0 && game.active == me
-                          ? (p?.ask == Ask.action ? game.actions + 1 : game.actions)
-                          : null,
-                      onTap: () => _heroSheet(me),
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Flexible(
+                        child: allies.isEmpty
+                            ? const SizedBox.shrink()
+                            : _hideInCombat(
+                                FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.topLeft,
+                                  child: _scaled(
+                                    ui,
+                                    Alignment.topLeft,
+                                    _OpponentColumn(
+                                      key: const ValueKey('hud-allies'),
+                                      players: allies,
+                                      active: game.turnNumber == 0 ? null : game.active,
+                                      colorOf: colorOf,
+                                      me: me,
+                                      actions: game.actions,
+                                      compact: true,
+                                      left: true,
+                                      onTap: _heroSheet,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                      ),
+                      const SizedBox(height: 10),
+                      _scaled(
+                        ui,
+                        Alignment.bottomLeft,
+                        PlayerPlate(
+                          key: const ValueKey('hud-me'),
+                          player: me,
+                          color: colorOf(me),
+                          subtitle: settings.username,
+                          big: bigPlate,
+                          active: game.turnNumber > 0 && game.active == me,
+                          actionsLeft: game.turnNumber > 0 && game.active == me
+                              ? (p?.ask == Ask.action ? game.actions + 1 : game.actions)
+                              : null,
+                          onTap: () => _heroSheet(me),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
 
-              // Bottom-right: actions, skip, confirm.
+              // Down the right: your opponents at the top, the actions (skip, confirm) at the bottom.
+              // The opponents shrink to fit above the actions.
               Positioned(
-                right: 12,
+                right: 10,
+                top: 8,
                 bottom: 12,
                 child: SafeArea(
-                  top: false,
-                  child: _scaled(ui, Alignment.bottomRight, _actionCluster(p, boardPick, compact: isCompact)),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Flexible(
+                        child: enemies.isEmpty
+                            ? const SizedBox.shrink()
+                            : _hideInCombat(
+                                FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.topRight,
+                                  child: _scaled(
+                                    ui,
+                                    Alignment.topRight,
+                                    _OpponentColumn(
+                                      key: const ValueKey('hud-opponents'),
+                                      players: enemies,
+                                      active: game.turnNumber == 0 ? null : game.active,
+                                      colorOf: colorOf,
+                                      me: me,
+                                      actions: game.actions,
+                                      compact: compactEnemies,
+                                      onTap: _heroSheet,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                      ),
+                      const SizedBox(height: 10),
+                      _scaled(
+                        ui,
+                        Alignment.bottomRight,
+                        KeyedSubtree(key: const ValueKey('hud-actions'), child: _actionCluster(p, boardPick, compact: isCompact)),
+                      ),
+                    ],
+                  ),
                 ),
               ),
 
@@ -1747,9 +1806,12 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
     child: AnimatedOpacity(opacity: _combatCovers ? 0 : 1, duration: const Duration(milliseconds: 220), child: child),
   );
 
+  /// The action buttons' width (every button in the cluster is this wide or narrower).
+  static double _actionClusterWidth(bool compact) => compact ? 142.0 : 178.0;
+
   Widget _actionCluster(Prompt? p, bool boardPick, {bool compact = false}) {
     final children = <Widget>[];
-    final btnW = compact ? 142.0 : 178.0;
+    final btnW = _actionClusterWidth(compact);
     final btnH = compact ? 38.0 : 46.0;
     final fontSz = compact ? 14.5 : 17.0;
     final gap = compact ? 5.0 : 8.0;
@@ -1800,6 +1862,7 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
             label: p.skipLabel ?? 'Skip',
             icon: Icons.skip_next_rounded,
             style: PlateStyle.secondary,
+            width: _actionClusterWidth(compact),
             height: compact ? 38 : 44,
             fontSize: compact ? 14 : 16,
             onPressed: _skip,
@@ -1859,8 +1922,10 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
   }
 }
 
+/// The other players' plates, stacked: opponents down the right, allies down the left.
 class _OpponentColumn extends StatelessWidget {
   const _OpponentColumn({
+    super.key,
     required this.players,
     required this.active,
     required this.colorOf,
@@ -1868,6 +1933,7 @@ class _OpponentColumn extends StatelessWidget {
     required this.actions,
     required this.compact,
     required this.onTap,
+    this.left = false,
   });
   final List<Player> players;
   final Player? active;
@@ -1877,6 +1943,9 @@ class _OpponentColumn extends StatelessWidget {
   final bool compact;
   final void Function(Player) onTap;
 
+  /// Down the left side (allies): aligned to the left edge.
+  final bool left;
+
   @override
   Widget build(BuildContext context) {
     final plates = [
@@ -1884,7 +1953,7 @@ class _OpponentColumn extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.only(bottom: 6),
           child: compact
-              ? _MiniPlate(player: o, color: colorOf(o), active: active == o, ally: o.team == me.team, onTap: () => onTap(o))
+              ? _MiniPlate(player: o, color: colorOf(o), active: active == o, ally: o.team == me.team, left: left, onTap: () => onTap(o))
               : PlayerPlate(
                   player: o,
                   color: colorOf(o),
@@ -1896,55 +1965,118 @@ class _OpponentColumn extends StatelessWidget {
                 ),
         ),
     ];
-    if (!compact) return Column(crossAxisAlignment: CrossAxisAlignment.end, children: plates);
-    return Wrap(direction: Axis.vertical, spacing: 0, runSpacing: 6, crossAxisAlignment: WrapCrossAlignment.end, children: plates);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: left ? CrossAxisAlignment.start : CrossAxisAlignment.end,
+      children: plates,
+    );
   }
 }
 
-/// Avatar + heart only: for 3+ other players on a phone.
 class _MiniPlate extends StatelessWidget {
-  const _MiniPlate({required this.player, required this.color, required this.active, required this.ally, required this.onTap});
+  const _MiniPlate({required this.player, required this.color, required this.active, required this.ally, required this.onTap, this.left = false});
   final Player player;
   final Color color;
   final bool active;
   final bool ally;
   final VoidCallback onTap;
+  final bool left;
 
+  static const _e = 40.0, _h = 30.0, _nameW = 74.0;
+
+  /// Its width before UiScale (fixed, so the HUD can keep clear of it).
+  static const width = _e * 0.6 + _e * 0.46 + _nameW + 2 * _h + 4; // + the border, both sides
+
+  /// The compact plate (phones, team games): the same parts as PlayerPlate, smaller: the diamond
+  /// emblem with the seat number, the name, health and hand on a plate in the hero's colour, and
+  /// the companions under it.
   @override
-  Widget build(BuildContext context) => Semantics(
-    button: true,
-    label: '${ally ? 'Ally ' : ''}${player.name}, ${player.heroFighter.hp} health',
-    child: GestureDetector(
-      onTap: onTap,
-      child: Opacity(
-        opacity: player.eliminated ? 0.5 : 1,
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(4, 3, 14, 3),
-          decoration: ShapeDecoration(
-            color: const Color(0xD90A0D13),
-            shape: PlateBorder(
-              slant: 0.3,
-              side: BorderSide(color: active ? Palette.bone : color.withValues(alpha: 0.6), width: active ? 1.8 : 1.2),
-            ),
-          ),
-          child: Row(
+  Widget build(BuildContext context) {
+    final heroes = player.heroes.toList();
+    final hero = heroes.length == 1 ? player.heroFighter : heroes.first;
+    final heroColor = hexColor(player.hero.color);
+    final tint = player.eliminated ? Palette.panel : plateColor(heroColor);
+    const e = _e, h = _h;
+    return Semantics(
+      button: true,
+      label: '${ally ? 'Ally ' : ''}${player.name}, ${hero.hp} health',
+      child: GestureDetector(
+        onTap: onTap,
+        child: Opacity(
+          opacity: player.eliminated ? 0.5 : 1,
+          child: Column(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: left ? CrossAxisAlignment.start : CrossAxisAlignment.end,
             children: [
-              Avatar(player.hero.avatar, size: 30, ring: color, ringWidth: 1.6, grey: player.eliminated),
-              const SizedBox(width: 6),
               SizedBox(
-                width: 76,
-                child: Text(player.name.toUpperCase(), maxLines: 1, overflow: TextOverflow.ellipsis, style: titleStyle(12, spacing: 0.4)),
+                width: width,
+                height: e + e * 0.36 * 0.3,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(left: e * 0.6, top: (e - h) / 2),
+                      child: Container(
+                        height: h,
+                        padding: const EdgeInsets.only(left: e * 0.46),
+                        decoration: ShapeDecoration(
+                          gradient: LinearGradient(colors: [tint, Color.lerp(tint, Palette.bgDeep, 0.72)!], stops: const [0.25, 1]),
+                          shape: ChamferBorder(
+                            cut: 6,
+                            side: BorderSide(color: active ? Palette.gold : Palette.bone.withValues(alpha: 0.28), width: active ? 1.6 : 1),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SizedBox(
+                              width: _nameW,
+                              child: Text(
+                                hero.name.toUpperCase(),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: titleStyle(12, color: Colors.white, spacing: 0.4),
+                              ),
+                            ),
+                            StatCell(value: hero.defeated ? 0 : hero.hp, size: h, heart: true, low: hero.hp <= 3, tooltip: '${hero.name}: ${hero.hp} health'),
+                            StatCell(value: player.hand.length, size: h, icon: Icons.style_rounded, tooltip: 'Cards in hand'),
+                          ],
+                        ),
+                      ),
+                    ),
+                    HeroEmblem(
+                      image: player.hero.avatar,
+                      color: readable(heroColor),
+                      size: e,
+                      seat: player.seat + 1,
+                      active: active,
+                      grey: player.eliminated,
+                    ),
+                  ],
+                ),
               ),
-              FighterDials(player: player, color: color, heroSize: 30, sidekickSize: 20),
-              const SizedBox(width: 6),
-              HandBacks(count: player.hand.length, back: player.hero.back, height: 22),
+              if (!player.eliminated)
+                Padding(
+                  padding: const EdgeInsets.only(top: 3),
+                  child: SizedBox(
+                    width: width - e * 0.12,
+                    child: Wrap(
+                      spacing: 4,
+                      runSpacing: 3,
+                      alignment: left ? WrapAlignment.start : WrapAlignment.end,
+                      children: [
+                        for (final g in CompanionsRow.groups(player)) CompanionChip(group: g, color: readable(color), size: 20),
+                        AbilityChip(hero: player.hero, size: 20, iconOnly: true),
+                      ],
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 /// Covers the 3D map while its model loads.
