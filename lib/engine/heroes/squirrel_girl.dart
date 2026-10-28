@@ -1,7 +1,6 @@
 /// Marvel Teen Spirit: Squirrel Girl and her squirrels (small fighters).
 library;
 
-import '../events.dart';
 import '../game.dart';
 import '../hero_script.dart';
 import '../prompt.dart';
@@ -56,9 +55,7 @@ class SquirrelGirl extends HeroScript {
     if (s == null) return false;
     if (spare != null) return g.revive(f, s);
     if (s == f.space) return true;
-    final from = f.space!;
-    f.space = s;
-    await g.emit(FighterMoved(f, [from, s], placed: true));
+    await g.placeOn(f, s); // placed like any placement (traps, "when a fighter moves")
     return true;
   }
 

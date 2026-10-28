@@ -316,19 +316,20 @@ class InvisibleMan extends HeroScript {
 
   /// [who] moves one fog token up to [n] spaces (along the lines; never onto another fog). The
   /// prompts name the card and say whose move it is: "your opponent moves a fog token" cards ask
-  /// the opposing player.
-  Future<void> moveFog(Player who, int n, {Token? only, Token? except, bool anywhere = false, String why = ''}) async {
+  /// the opposing player. The token is picked on the board, then where it goes; "up to" lets it
+  /// stay. Returns the token picked (moved or not), so "a different fog token" can exclude it.
+  Future<Token?> moveFog(Player who, int n, {Token? only, Token? except, bool anywhere = false, String why = ''}) async {
     final tokens = only != null ? [only] : fog.where((t) => t != except).toList();
-    if (tokens.isEmpty) return;
+    if (tokens.isEmpty) return null;
     final how = anywhere ? 'to any space' : 'up to $n space${n == 1 ? '' : 's'}';
     final lead = why.isEmpty ? '' : '$why: ';
     final whose = who == me ? '' : "Invisible Man's ";
     final t = tokens.length == 1
         ? tokens.first
-        : await game.choose<Token>(who, Ask.space, '${lead}choose ${whose.isEmpty ? 'a' : whose}fog token to move $how',
+        : await game.choose<Token>(who, Ask.space, '${lead}choose ${whose.isEmpty ? 'a ' : whose}fog token to move $how',
             [for (final t in tokens) Choice('Fog at ${t.space}', t)],
             intent: Intent.none);
-    if (t == null) return;
+    if (t == null) return null;
     final dest = anywhere
         ? game.board.spaceIds.where((s) => s != t.space && !onFog(s)).toList()
         : _within(t.space!, n).where((s) => s == t.space || !onFog(s)).toList();
@@ -338,6 +339,7 @@ class InvisibleMan extends HeroScript {
       t.space = s;
       await game.emit(StatusChanged(me, ''));
     }
+    return t;
   }
 
   Set<int> _within(int from, int n) {
@@ -363,10 +365,22 @@ class InvisibleMan extends HeroScript {
             await x.discard(x.opp, 1);
             return;
           }
-          for (final t in fog.toList()) {
-            if (await x.yesNo('Move the fog at space ${t.space} to another space?', intent: Intent.none)) {
-              await moveFog(x.me, 0, only: t, anywhere: true, why: 'Confound');
-            }
+          // Each fog token may move once, to any other space: pick them on the board one by one,
+          // Done when finished.
+          final left = fog.toList();
+          while (left.isNotEmpty) {
+            final t = await x.game.choose<Token>(
+              x.me,
+              Ask.space,
+              'Confound: choose a fog token to move to any other space',
+              [for (final t in left) Choice('Fog at ${t.space}', t)],
+              optional: true,
+              skipLabel: 'Done',
+              source: x.card,
+            );
+            if (t == null) break;
+            left.remove(t);
+            await moveFog(x.me, 0, only: t, anywhere: true, why: 'Confound');
           }
         }),
         'DREAMING OF REVENGE': CardScript(after: (x) async {
@@ -405,10 +419,9 @@ class InvisibleMan extends HeroScript {
         'COVERT PREPARATION': CardScript(after: (x) async {
           await x.draw(1);
           if (fog.isEmpty) return;
-          final before = {for (final t in fog) t: t.space};
-          await moveFog(x.me, 2, why: 'Covert Preparation');
-          final moved = fog.where((t) => t.space != before[t]).firstOrNull;
-          await moveFog(x.opp, 2, except: moved ?? fog.first, why: 'Covert Preparation');
+          // "a different fog token": not the one he picked, whether or not he moved it
+          final mine = await moveFog(x.me, 2, why: 'Covert Preparation');
+          await moveFog(x.opp, 2, except: mine, why: 'Covert Preparation');
         }),
         'EMERGE FROM MIST': valueIf((x) => startedOnFog, 5),
         'LURKING': CardScript(after: (x) async {
@@ -436,17 +449,17 @@ class InvisibleMan extends HeroScript {
           if (fog.isEmpty || !im.onBoard) return;
           final t = fog.length == 1
               ? fog.first
-              : await x.game.choose<Token>(x.me, Ask.space, 'Choose a fog token', [for (final t in fog) Choice('Fog at ${t.space}', t)]);
-          final dest = x.game.emptySpaces().where((s) => !onFog(s) || s == t!.space).toList();
-          final s = await x.chooseSpace(dest, 'Move the fog to a space without a fighter; Invisible Man goes there', intent: Intent.moveOwn, subject: im);
+              : await x.game.choose<Token>(x.me, Ask.space, 'Slip Away: choose a fog token to move',
+                  [for (final t in fog) Choice('Fog at ${t.space}', t)], source: x.card);
+          if (t == null) return;
+          final dest = x.game.emptySpaces().where((s) => !onFog(s) || s == t.space).toList();
+          final s = await x.chooseSpace(dest, 'Slip Away: move the fog to a space without a fighter; Invisible Man goes there',
+              intent: Intent.moveOwn, subject: t);
           if (s == null) return;
-          t!.space = s;
-          if (!x.game.cannotLeave(im)) {
-            final from = im.space!;
-            im.space = s;
-            x.game.turn.leftSpace.add(im);
-            await x.game.emit(FighterMoved(im, [from, s], placed: true));
-          }
+          t.space = s;
+          await x.game.emit(StatusChanged(x.me, ''));
+          // placed like any placement: traps and "when a fighter moves" effects apply
+          if (!x.game.cannotLeave(im)) await x.game.placeOn(im, s);
         }),
       };
 }

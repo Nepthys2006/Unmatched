@@ -844,9 +844,7 @@ class Game {
       if (f == null) return false;
       final s = await chooseSpace(p, options, text ?? 'Choose a space', intent: Intent.moveOwn, subject: f);
       if (s == null) return false;
-      final from = f.space!;
-      f.space = s;
-      await emit(FighterMoved(f, [from, s], placed: true));
+      await placeOn(f, s, who: p);
       return true;
     }
     if (f == null) return false;
@@ -1295,15 +1293,22 @@ class Game {
     final s = await chooseSpace(who, options, text ?? 'Place ${f.name}',
         optional: optional, intent: who == f.owner ? Intent.moveOwn : Intent.moveEnemy, subject: f, source: source);
     if (s == null || s == f.space) return false;
+    await placeOn(f, s, who: who);
+    return true;
+  }
+
+  /// Puts [f] on space [s] (already chosen and free), as a placement: it left its space, the
+  /// back of a large fighter is placed by [who], and moved/entered effects run (traps...).
+  Future<void> placeOn(Fighter f, int s, {Player? who}) async {
     final from = f.space!;
+    if (s == from) return;
     f.space = s;
     f.tail = null;
     turn.leftSpace.add(f);
     await emit(FighterMoved(f, [from, s], placed: true));
-    if (f.owner.script.isLarge(f)) await placeTail(f, who);
+    if (f.owner.script.isLarge(f)) await placeTail(f, who ?? f.owner);
     await _relocated(f, [from, s]);
     await _entered(f);
-    return true;
   }
 
   /// A large fighter just placed: whoever placed her picks which adjacent empty space the back of

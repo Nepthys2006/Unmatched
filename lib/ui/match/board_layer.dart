@@ -35,6 +35,9 @@ class BoardMarks {
   /// The fighter a space/path choice is about.
   Fighter? subject;
 
+  /// The space of the token a space choice is about (the fog token being moved).
+  int? subjectSpace;
+
   /// Picked but not yet confirmed: a Fighter, a space id or an edge.
   Object? pending;
   List<int>? previewPath;
@@ -48,6 +51,7 @@ class BoardMarks {
     spaces.clear();
     edges.clear();
     subject = null;
+    subjectSpace = null;
     pending = null;
     previewPath = null;
     harmful = false;
@@ -144,67 +148,6 @@ class BoardLayerPainter extends CustomPainter {
     final p = pulse.value;
     final glow = quality.glow;
 
-    // Destination spaces.
-    final spaceColor = marks.harmful ? Palette.target : Palette.select;
-    for (final s in marks.spaces) {
-      final c = geo.of(s);
-      canvas.drawCircle(c, r * 1.02, Paint()..color = spaceColor.withValues(alpha: 0.22 + 0.12 * p));
-      canvas.drawCircle(
-        c,
-        r * (1.08 + 0.05 * p),
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = r * 0.12
-          ..color = spaceColor.withValues(alpha: 0.85),
-      );
-    }
-    // Path preview to the pending space.
-    final path = marks.previewPath;
-    if (path != null && path.length > 1) {
-      final line = Paint()
-        ..color = Palette.bone
-        ..strokeWidth = r * 0.14
-        ..strokeCap = StrokeCap.round
-        ..style = PaintingStyle.stroke;
-      final pp = Path()..moveTo(geo.of(path.first).dx, geo.of(path.first).dy);
-      for (final s in path.skip(1)) {
-        pp.lineTo(geo.of(s).dx, geo.of(s).dy);
-      }
-      canvas.drawPath(
-        pp,
-        Paint()
-          ..color = Colors.black54
-          ..strokeWidth = r * 0.26
-          ..strokeCap = StrokeCap.round
-          ..strokeJoin = StrokeJoin.round
-          ..style = PaintingStyle.stroke,
-      );
-      canvas.drawPath(pp, line..strokeJoin = StrokeJoin.round);
-    }
-    if (marks.pending is int) {
-      final c = geo.of(marks.pending! as int);
-      canvas.drawCircle(
-        c,
-        r * 1.14,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = r * 0.2
-          ..color = Palette.bone,
-      );
-    }
-    // Paths (Foot soldiers).
-    for (final e in marks.edges) {
-      final pending = marks.pending == e;
-      canvas.drawLine(
-        geo.of(e.$1),
-        geo.of(e.$2),
-        Paint()
-          ..color = (pending ? Palette.bone : Palette.select).withValues(alpha: pending ? 1 : 0.55 + 0.3 * p)
-          ..strokeWidth = r * (pending ? 0.34 : 0.24)
-          ..strokeCap = StrokeCap.round,
-      );
-    }
-
     // Tokens.
     for (final t in game.board.tokens) {
       if (t.kind == 'fog' && t.space != null) {
@@ -217,12 +160,19 @@ class BoardLayerPainter extends CustomPainter {
           cloud.addOval(Rect.fromCircle(center: c + o * r, radius: r * s));
         }
         canvas.drawShadow(cloud, const Color(0xFF000000), r * 0.18, false);
+        // A cloud you can pick (or the one being moved) is outlined in the choice's colour.
+        final pickable = marks.spaces.contains(t.space);
+        final moving = marks.subjectSpace == t.space;
         canvas.drawPath(
           cloud,
           Paint()
             ..style = PaintingStyle.stroke
-            ..strokeWidth = r * 0.12
-            ..color = const Color(0xFF39404E),
+            ..strokeWidth = r * (pickable || moving ? 0.2 : 0.12)
+            ..color = moving
+                ? Palette.bone
+                : pickable
+                ? (marks.harmful ? Palette.target : Palette.select).withValues(alpha: 0.75 + 0.25 * p)
+                : const Color(0xFF39404E),
         );
         canvas.drawPath(
           cloud,
@@ -295,6 +245,79 @@ class BoardLayerPainter extends CustomPainter {
         );
       }
     }
+
+    // Choices over the tokens, so a fog cloud never hides that its space can be picked.
+    final spaceColor = marks.harmful ? Palette.target : Palette.select;
+    for (final s in marks.spaces) {
+      final c = geo.of(s);
+      canvas.drawCircle(c, r * 1.02, Paint()..color = spaceColor.withValues(alpha: 0.22 + 0.12 * p));
+      canvas.drawCircle(
+        c,
+        r * (1.08 + 0.05 * p),
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = r * 0.12
+          ..color = spaceColor.withValues(alpha: 0.85),
+      );
+    }
+    // Path preview to the pending space.
+    final path = marks.previewPath;
+    if (path != null && path.length > 1) {
+      final line = Paint()
+        ..color = Palette.bone
+        ..strokeWidth = r * 0.14
+        ..strokeCap = StrokeCap.round
+        ..style = PaintingStyle.stroke;
+      final pp = Path()..moveTo(geo.of(path.first).dx, geo.of(path.first).dy);
+      for (final s in path.skip(1)) {
+        pp.lineTo(geo.of(s).dx, geo.of(s).dy);
+      }
+      canvas.drawPath(
+        pp,
+        Paint()
+          ..color = Colors.black54
+          ..strokeWidth = r * 0.26
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round
+          ..style = PaintingStyle.stroke,
+      );
+      canvas.drawPath(pp, line..strokeJoin = StrokeJoin.round);
+    }
+    // The fog token being moved: a bone ring where it is now.
+    if (marks.subjectSpace case final at?) {
+      canvas.drawCircle(
+        geo.of(at),
+        r * 1.22,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = r * 0.1
+          ..color = Palette.bone.withValues(alpha: 0.9),
+      );
+    }
+    if (marks.pending is int) {
+      final c = geo.of(marks.pending! as int);
+      canvas.drawCircle(
+        c,
+        r * 1.14,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = r * 0.2
+          ..color = Palette.bone,
+      );
+    }
+    // Paths (Foot soldiers).
+    for (final e in marks.edges) {
+      final pending = marks.pending == e;
+      canvas.drawLine(
+        geo.of(e.$1),
+        geo.of(e.$2),
+        Paint()
+          ..color = (pending ? Palette.bone : Palette.select).withValues(alpha: pending ? 1 : 0.55 + 0.3 * p)
+          ..strokeWidth = r * (pending ? 0.34 : 0.24)
+          ..strokeCap = StrokeCap.round,
+      );
+    }
+
 
     // Fighters. A large fighter in two spaces (T. Rex) shows the back of her base as a band to a
     // smaller orb on the second space.

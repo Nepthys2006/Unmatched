@@ -167,7 +167,9 @@ class BlackWidow extends HeroScript {
         }),
         'THE KINSHASA DIRECTIVE': mission((g, p, f) => _inStart(g, me.startSpace), (x) => x.discard(x.opp, 2)),
         'THE MADRIPOOR SANCTION': mission((g, p, f) => g.enemiesOf(me).any((o) => _inStart(g, o.startSpace)), (x) async {
-          final o = x.opponents.firstWhere((o) => o.startSpace == widow.space);
+          // (she may have been moved off it since the mission was checked)
+          final o = x.opponents.where((o) => widow.onBoard && o.startSpace == widow.space).firstOrNull;
+          if (o == null) return;
           for (final f in o.onBoard.toList()) {
             await x.damage(f, 2);
           }

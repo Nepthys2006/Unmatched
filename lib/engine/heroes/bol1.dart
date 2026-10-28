@@ -51,19 +51,25 @@ class KingArthur extends HeroScript {
         'PROPHECY': CardScript(effect: (x) async {
           final top = x.me.deck.take(4).toList();
           if (top.isEmpty) return;
-          final keep = await x.game.chooseCards(x.me, top, 1, 2, 'Prophecy: add 2 cards to your hand', intent: Intent.gainOwn);
+          // "Add 2 of them to your hand" (all of them if there are fewer), the others back on top in
+          // the order you choose.
+          final n = top.length < 2 ? top.length : 2;
+          final keep = await x.game.chooseCards(x.me, top, n, n, 'Prophecy: add 2 cards to your hand', intent: Intent.gainOwn, source: x.card);
           for (final c in keep) {
             await x.game.toHand(c, reason: ' (Prophecy)');
           }
           final rest = top.where((c) => !keep.contains(c)).toList();
-          if (rest.length == 2) {
-            final first = await x.game.chooseCard(x.me, rest, 'Which card goes on top of your deck?', intent: Intent.gainOwn);
-            final second = rest.firstWhere((c) => c != first);
-            x.me.deck
-              ..remove(first)
-              ..remove(second)
-              ..insertAll(0, [first!, second]);
+          final order = <Card>[];
+          while (rest.length > 1) {
+            final c = await x.game.chooseCard(x.me, rest, 'Prophecy: which card goes on top of your deck?', intent: Intent.gainOwn, source: x.card);
+            if (c == null) break;
+            rest.remove(c);
+            order.add(c);
           }
+          order.addAll(rest);
+          x.me.deck
+            ..removeWhere(order.contains)
+            ..insertAll(0, order);
         }),
         'AID THE CHOSEN ONE': CardScript(after: (x) async {
           if (x.won) await x.draw(2);

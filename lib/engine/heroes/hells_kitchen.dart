@@ -66,15 +66,10 @@ class Bullseye extends HeroScript {
       if (!bullseye.onBoard || x.game.cannotLeave(bullseye)) return;
       // Exactly 4 spaces: only destinations whose path takes exactly 4 steps.
       final reach = x.game.reachable(bullseye, 4, throughOpp: true);
-      final exact = reach.entries.where((e) => e.value.length == 5).map((e) => e.key).toList();
+      final exact = {for (final e in reach.entries) if (e.value.length == 5) e.key: e.value};
       if (exact.isEmpty) return;
-      final s = await x.chooseSpace(exact, 'Master Strategist: move Bullseye exactly 4 spaces', intent: Intent.moveOwn, subject: bullseye);
-      if (s != null) {
-        final path = reach[s]!;
-        bullseye.space = s;
-        x.game.turn.leftSpace.add(bullseye);
-        await x.game.emit(FighterMoved(bullseye, path));
-      }
+      // A real move along those paths: traps can stop it, "when a fighter moves" effects apply.
+      await x.game.moveFighter(bullseye, 4, routes: exact, text: 'Master Strategist: move Bullseye exactly 4 spaces', source: x.card);
     }),
     'RIGHT BETWEEN THE EYES': CardScript(immediately: (x) async {
       if (wonThisTurn(x.game)) await x.discard(x.opp, 1);

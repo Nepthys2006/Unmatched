@@ -7,7 +7,7 @@
    Flutter -> page (window.board.receive(json), WebView2 web messages, or iframe postMessage):
      init   {art|glb, home, gfx, spaces:[{id,x,y}], links:[[a,b]]}  gfx {graphics settings}
             art {file, w, h, unitPx}: a printed map drawn on a slab (glb: a 3D Map model)
-     state  {fighters:[{id,space,color,hero,hp,name,mini,fid,v,ranged}], marks:{...}, tokens:[...], focus:[id]}
+     state  {fighters:[{id,space,color,hero,hp,name,mini,fid,v,ranged}], marks:{...,subjectSpace}, tokens:[...], focus:[id]}
             (mini: hero id, fid: fighter id, v: which of a hero's hero fighters; they pick the figure)
      move   {id, path:[space], ms}        fx {id, text, color, sparks, ms}        shake {}
      cam    {op:'fit'|'zoom'|'push'|'pull'|'turn'|'tilt', k, a, b, ms}
@@ -1261,13 +1261,20 @@ function buildMarks(m) {
     const fill = new THREE.Mesh(spaceFill, basic(color, .3));
     const ring = new THREE.Mesh(spaceRing, basic(color, .9));
     fill.position.copy(at(id, .004)); ring.position.copy(at(id, .005));
-    fill.renderOrder = ring.renderOrder = 2;
+    // over the fog puffs (4): a cloud never hides that its space can be picked
+    fill.renderOrder = ring.renderOrder = 5;
     pulseMats.push(fill.material);
     markGroup.add(fill, ring);
   }
   if (m.pendingSpace != null && spaces.has(m.pendingSpace)) {
     const r = new THREE.Mesh(pendRing, basic(BONE));
-    r.position.copy(at(m.pendingSpace, .006)); r.renderOrder = 3;
+    r.position.copy(at(m.pendingSpace, .006)); r.renderOrder = 6;
+    markGroup.add(r);
+  }
+  // the token being moved (Invisible Man's fog): a bone ring where it is now
+  if (m.subjectSpace != null && spaces.has(m.subjectSpace)) {
+    const r = new THREE.Mesh(pendRing, basic(BONE, .75));
+    r.position.copy(at(m.subjectSpace, .007)); r.scale.setScalar(1.12); r.renderOrder = 6;
     markGroup.add(r);
   }
   if (m.preview && m.preview.length > 1) {
@@ -1287,19 +1294,26 @@ function buildMarks(m) {
   pulsing = pulseMats.length > 0 || (m.select || []).length > 0 || (m.targets || []).length > 0;
 }
 
+let fogSpots = [];  // [{space, at: V3}]: where a tap on a cloud picks its space
+
 function buildTokens(tokens) {
   clearGroup(tokenGroup);
+  fogSpots = [];
   const shadowCount = {}, insightCount = {};
+  const pickable = new Set(marks.spaces || []);
   for (const t of tokens || []) {
     if (t.kind === 'fog' && spaces.has(t.space)) {
-      // Invisible Man's fog: a bank of cloud puffs over a soft grey shadow on the space.
+      // Invisible Man's fog: a bank of cloud puffs over a soft grey shadow on the space. A cloud
+      // that can be picked (or the one being moved) is tinted the choice's colour.
       const c = at(t.space, 0);
+      const tint = marks.subjectSpace === t.space ? '#fff4dc' : pickable.has(t.space) ? (marks.harmful ? '#ffc2ba' : '#d4f7b4') : '#ffffff';
       const shade = new THREE.Mesh(spaceFill, basic('#5a6478', .45));
       shade.position.set(c.x, c.y + .004, c.z);
       shade.scale.setScalar(1.25);
       tokenGroup.add(shade);
+      fogSpots.push({ space: t.space, at: new V3(c.x, c.y + .28, c.z) });
       for (const [dx, dy, dz, s] of [[-.2, .2, .06, .5], [.2, .22, .1, .48], [0, .3, -.14, .56], [.04, .18, .2, .44], [-.06, .42, 0, .46], [.16, .38, -.06, .4]]) {
-        const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: PUFF, transparent: true, depthWrite: false, opacity: .96 }));
+        const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: PUFF, color: tint, transparent: true, depthWrite: false, opacity: .96 }));
         sp.position.set(c.x + dx, c.y + dy, c.z + dz);
         sp.scale.setScalar(s);
         sp.renderOrder = 4;
@@ -1443,6 +1457,16 @@ function tap(cx, cy) {
     const d = at && at.distanceTo(raycaster.ray.origin);
     if (d != null && d < bestD) { bestD = d; best = p; }
   }
+  // A fog cloud floats over its space: a tap on the cloud picks that space (nearer than a fighter
+  // hit behind it), wherever the ray meets the table.
+  let cloud = null;
+  for (const f of fogSpots) {
+    sphere.set(f.at, .42);
+    const hit = raycaster.ray.intersectSphere(sphere, new V3());
+    const d = hit && hit.distanceTo(raycaster.ray.origin);
+    if (d != null && d < bestD) { bestD = d; cloud = f; }
+  }
+  if (cloud) { const s = spaces.get(cloud.space); post({ t: 'tap', x: s.x, y: s.z }); return; }
   // The piece's own position (not its space's centre), so a tap picks between fighters sharing a space.
   if (best && spaces.has(best.space)) { post({ t: 'tap', x: best.group.position.x, y: best.group.position.z }); return; }
   // Otherwise the nearest point on the board's surface (bridges are a little higher).

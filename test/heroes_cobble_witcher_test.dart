@@ -239,6 +239,151 @@ void main() {
       expect(s.hero(s.p1).space, 7);
     });
 
+    test('the 3 fog tokens start in separate spaces of his zone', () async {
+      final s = Scenario('invisible-man', 'medusa');
+      final im = s.p1.script as InvisibleMan;
+      s.place(s.hero(s.p1), 5);
+      s.place(s.hero(s.p2), 10);
+      await im.afterHeroPlaced();
+      final at = im.fog.map((t) => t.space!).toList();
+      expect(at, hasLength(3));
+      expect(at.toSet(), hasLength(3), reason: 'separate spaces');
+      expect(at.every((sp) => s.game.board.zoneOf(5).contains(sp)), isTrue, reason: "in Invisible Man's zone");
+      final asks = s.a1.asked.where((p) => p.text.contains('fog')).toList();
+      expect(asks, hasLength(3));
+      expect(asks.every((p) => p.ask == Ask.space && p.subject is Token), isTrue, reason: 'picked on the board, the token as subject');
+    });
+
+    test('fog is picked on the board: the token choice offers each fog by its space', () async {
+      final s = Scenario('invisible-man', 'medusa');
+      final im = setupFog(s, [2, 6, 9]);
+      s.place(s.hero(s.p1), 4);
+      s.place(s.hero(s.p2), 11);
+      s.a1
+        ..then('Fog at 6')
+        ..then(sp(1));
+      await s.game.playScheme(s.p1, s.give(s.p1, 'Rolling Fog'));
+      final pick = s.a1.asked.firstWhere((p) => p.text.contains('Rolling Fog: choose a fog token'));
+      expect(pick.ask, Ask.space);
+      expect([for (final c in pick.choices) c.label], ['Fog at 2', 'Fog at 6', 'Fog at 9']);
+      expect(pick.choices.every((c) => c.value is Token), isTrue);
+      final dest = s.a1.asked.firstWhere((p) => p.text.contains('move the fog token'));
+      expect(dest.subject, isA<Token>(), reason: 'the board rings the token that moves');
+      expect([for (final c in dest.choices) c.value as int], isNot(anyOf(contains(2), contains(9))), reason: 'never onto another fog');
+      expect(im.fog.map((t) => t.space).toSet(), {1, 2, 9});
+      expect(s.game.actions, greaterThanOrEqualTo(1), reason: 'Rolling Fog gains an action');
+    });
+
+    test('"up to N spaces": along the lines, may stay, never onto fog (Into Thin Air, opponent)', () async {
+      final s = Scenario('medusa', 'invisible-man');
+      final im = s.p2.script as InvisibleMan;
+      for (final sp in [5, 7]) {
+        s.game.board.tokens.add(Token('fog', s.p2, space: sp));
+      }
+      s.place(s.hero(s.p1), 3);
+      s.place(s.hero(s.p2), 4);
+      // Medusa attacks; Invisible Man defends with Into Thin Air: he moves 1, then Medusa's player
+      // moves a fog token up to 3.
+      await s.fight(s.hero(s.p1), s.hero(s.p2), 'Snipe', 'Into Thin Air', then2: [sp(4)], then1: ['Fog at 5', sp(2)]);
+      final dest = s.a1.asked.lastWhere((p) => p.text.contains('move the fog token'));
+      expect(dest.text, contains('Into Thin Air'));
+      expect(dest.intent, Intent.moveEnemy, reason: "the opponent moves Invisible Man's fog: drawn as a harmful choice");
+      expect({for (final c in dest.choices) c.value as int}, {2, 3, 4, 5, 6, 8, 12}, reason: 'within 3 of 5, staying allowed, not onto 7');
+      expect(im.fog.map((t) => t.space).toSet(), {2, 7});
+    });
+
+    test('Covert Preparation: the opponent moves a different token even if his stayed put', () async {
+      final s = Scenario('invisible-man', 'medusa');
+      final im = setupFog(s, [2, 9]);
+      s.place(s.hero(s.p1), 4);
+      s.place(s.hero(s.p2), 5);
+      // He picks the fog at 2 and leaves it there; the opponent gets only the fog at 9.
+      await s.fight(s.hero(s.p1), s.hero(s.p2), 'Covert Preparation', null, then1: ['Fog at 2', sp(2)], then2: [sp(11)]);
+      expect(im.fog.map((t) => t.space).toSet(), {2, 11});
+      final theirs = s.a2.asked.where((p) => p.text.contains('Covert Preparation')).toList();
+      expect(theirs, hasLength(1), reason: 'one token left to them: only where it goes is asked');
+      expect(theirs.single.subject, isA<Token>());
+      expect((theirs.single.subject! as Token).space, 11);
+    });
+
+    test('Confound: he picks each fog on the board in turn, then Done', () async {
+      final s = Scenario('invisible-man', 'medusa');
+      final im = setupFog(s, [2, 6, 9]);
+      s.place(s.hero(s.p1), 4);
+      s.place(s.hero(s.p2), 5);
+      s.p2.hand.clear(); // the opponent can't pay to stop it
+      await s.fight(s.hero(s.p1), s.hero(s.p2), 'Confound', null, then1: ['Fog at 9', sp(0), 'Fog at 2', sp(11), skip]);
+      expect(im.fog.map((t) => t.space).toSet(), {0, 6, 11});
+      final picks = s.a1.asked.where((p) => p.text.startsWith('Confound: choose a fog token')).toList();
+      expect(picks, hasLength(3), reason: 'two moves, then Done');
+      expect(picks.every((p) => p.ask == Ask.space && p.optional && p.skipLabel == 'Done'), isTrue);
+      expect(picks[1].choices, hasLength(2), reason: 'a moved token is not offered again');
+    });
+
+    test('Confound: the opponent may discard a card to stop it', () async {
+      final s = Scenario('invisible-man', 'medusa');
+      final im = setupFog(s, [2, 6]);
+      s.place(s.hero(s.p1), 4);
+      s.place(s.hero(s.p2), 5);
+      s.p2.hand.clear();
+      s.give(s.p2, 'Snipe');
+      await s.fight(s.hero(s.p1), s.hero(s.p2), 'Confound', null, then2: ['Yes', card('Snipe')]);
+      expect(im.fog.map((t) => t.space).toSet(), {2, 6});
+      expect(s.p2.hand, isEmpty);
+    });
+
+    test('Surprise Attack moves the fog he stands on to another space', () async {
+      final s = Scenario('invisible-man', 'medusa');
+      final im = setupFog(s, [4, 9]);
+      s.place(s.hero(s.p1), 4);
+      s.place(s.hero(s.p2), 5);
+      await s.fight(s.hero(s.p1), s.hero(s.p2), 'Surprise Attack', null, then1: [sp(1)]);
+      expect(im.fog.map((t) => t.space).toSet(), {1, 9});
+    });
+
+    test('Lurking: move him to a free fog space, or move a fog up to 3', () async {
+      final s = Scenario('invisible-man', 'medusa');
+      final im = setupFog(s, [5, 8, 10]);
+      s.place(s.hero(s.p1), 4);
+      s.place(s.hero(s.p2), 5); // a fog space with a fighter on it: not a place to go
+      s.startTurn(s.p2);
+      await s.fight(s.hero(s.p2), s.hero(s.p1), 'Snipe', 'Lurking', then2: ['Move Invisible Man', sp(8)]);
+      final place = s.a1.asked.lastWhere((p) => p.text.contains('fog space'));
+      expect({for (final c in place.choices) c.value as int}, {8, 10});
+      expect(s.hero(s.p1).space, 8);
+      s.place(s.hero(s.p1), 4); // back within Medusa's reach
+      await s.fight(s.hero(s.p2), s.hero(s.p1), 'Snipe', 'Lurking', then2: ['Move 1 fog', 'Fog at 10', sp(11)]);
+      expect(im.fog.map((t) => t.space).toSet(), {5, 8, 11});
+    });
+
+    test('Slip Away: the fog goes to a free space and he is placed there (traps spring)', () async {
+      final s = Scenario('invisible-man', 'robert-muldoon');
+      final im = setupFog(s, [2, 9]);
+      s.place(s.hero(s.p1), 4);
+      s.place(s.hero(s.p2), 5);
+      s.game.board.tokens.add(Token('trap', s.p2, space: 7));
+      final hp = s.hero(s.p1).hp;
+      await s.fight(s.hero(s.p1), s.hero(s.p2), 'Slip Away', null, then1: ['Fog at 9', sp(7)]);
+      expect(s.hero(s.p1).space, 7);
+      expect(im.fog.map((t) => t.space).toSet(), {2, 7});
+      expect(s.hero(s.p1).hp, lessThan(hp), reason: "entering Muldoon's trap hurts, as any placement");
+      expect(s.events.whereType<FighterMoved>().where((e) => e.fighter == s.hero(s.p1) && e.placed), isNotEmpty);
+    });
+
+    test('he moves between fog spaces as if adjacent, even through the middle of a move', () async {
+      final s = Scenario('invisible-man', 'medusa');
+      setupFog(s, [3, 10]);
+      s.place(s.hero(s.p1), 2);
+      s.place(s.hero(s.p2), 0);
+      // 2 -> 3 (1 step) -> 10 (fog to fog) -> 11: three spaces with move 3
+      final paths = s.game.reachable(s.hero(s.p1), 3);
+      expect(paths.keys, containsAll([10, 11]));
+      expect(paths[11], [2, 3, 10, 11]);
+      // an opposing fighter on fog doesn't get the shortcut
+      s.place(s.hero(s.p2), 3);
+      expect(s.game.reachable(s.hero(s.p2), 1).keys, isNot(contains(10)));
+    });
+
     test('Step Lightly deals 3 on fog; Reign of Terror needs fog', () async {
       final s = Scenario('invisible-man', 'medusa');
       setupFog(s, [4, 11]);

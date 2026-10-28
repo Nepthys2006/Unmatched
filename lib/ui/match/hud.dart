@@ -837,6 +837,7 @@ class ChoicePanel extends StatelessWidget {
                         children: [
                           for (var i = 0; i < labels.length; i++)
                             PlateButton(
+                              key: ValueKey('choice-$i'),
                               label: labels[i],
                               style: labels[i] == 'Yes' ? PlateStyle.confirm : PlateStyle.secondary,
                               height: 46,
@@ -845,6 +846,7 @@ class ChoicePanel extends StatelessWidget {
                             ),
                           if (onSkip != null)
                             PlateButton(
+                              key: const ValueKey('choice-skip'),
                               label: skipLabel ?? 'Skip',
                               style: PlateStyle.secondary,
                               height: 46,
@@ -932,6 +934,7 @@ class _CardPickerState extends State<CardPicker> {
                   itemBuilder: (_, i) {
                     final sel = _picked.contains(i);
                     return Semantics(
+                      key: ValueKey('pick-$i'),
                       button: true,
                       selected: sel,
                       child: GestureDetector(
@@ -977,6 +980,7 @@ class _CardPickerState extends State<CardPicker> {
                   ),
                   if (widget.onSkip != null) ...[
                     PlateButton(
+                      key: const ValueKey('pick-skip'),
                       label: widget.skipLabel ?? 'Skip',
                       style: PlateStyle.secondary,
                       height: 44,
@@ -987,6 +991,7 @@ class _CardPickerState extends State<CardPicker> {
                   ],
                   if (!single)
                     PlateButton(
+                      key: const ValueKey('pick-confirm'),
                       label: 'Confirm',
                       icon: Icons.check_rounded,
                       style: PlateStyle.confirm,

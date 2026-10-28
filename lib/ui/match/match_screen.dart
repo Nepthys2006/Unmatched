@@ -122,6 +122,56 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
   final ValueNotifier<double> _pxPerUnit = ValueNotifier(1);
   double _dpr = 1;
   Matrix4? _camHome;
+
+  /// The 2D board's own box (inside the camera's transform), for [debugSpaceOnScreen].
+  final GlobalKey _boardKey = GlobalKey();
+
+  /// Tests: where space [id] is on screen now (2D board), and how wide a space is there.
+  @visibleForTesting
+  (Offset, double)? debugSpaceOnScreen(int id) {
+    final box = _boardKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !box.attached) return null;
+    final c = box.localToGlobal(geo.of(id));
+    return (c, (box.localToGlobal(geo.of(id) + Offset(geo.radius, 0)) - c).distance);
+  }
+
+  /// Tests: the prompt waiting on this player, and the spaces it highlights.
+  @visibleForTesting
+  Prompt? get debugPrompt => _prompt;
+  @visibleForTesting
+  List<int> get debugMarkedSpaces => _marks.spaces.toList();
+
+  /// Tests: where fighter [f] is drawn on screen now (2D board).
+  @visibleForTesting
+  Offset? debugFighterOnScreen(Fighter f) {
+    final box = _boardKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !box.attached || !f.onBoard) return null;
+    return box.localToGlobal(geo.of(f.space!) + slotOffset(game, f, geo.radius));
+  }
+
+  /// Tests: the middle of the path between two spaces, on screen now (2D board).
+  @visibleForTesting
+  Offset? debugEdgeOnScreen((int, int) e) {
+    final box = _boardKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !box.attached) return null;
+    return box.localToGlobal((geo.of(e.$1) + geo.of(e.$2)) / 2);
+  }
+
+  /// Tests: whether a tap at [global] reaches the board (nothing of the HUD on top of it).
+  @visibleForTesting
+  bool debugTapReachesBoard(Offset global) {
+    final box = _boardKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !box.attached) return false;
+    final r = HitTestResult();
+    WidgetsBinding.instance.hitTestInView(r, global, View.of(context).viewId);
+    return r.path.any((e) => e.target == box);
+  }
+
+  /// Tests: the picks of the last answered prompt, and a way to answer one directly.
+  @visibleForTesting
+  List<int>? debugLastPicks;
+  @visibleForTesting
+  void debugAnswer(List<int> picks) => _submit(picks);
   Size _viewport = Size.zero;
   Animation<Matrix4>? _camTween;
 
@@ -157,7 +207,7 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
   }
 
   void _trackZoom() {
-    final s = _cam.value.getMaxScaleOnAxis() * _dpr;
+    final s = _planeScale(_cam.value) * _dpr;
     if (s <= 0 || !s.isFinite) return;
     final step = math.pow(2, (math.log(s) / math.ln2 * 4).round() / 4).toDouble();
     if (step != _pxPerUnit.value) _pxPerUnit.value = step;
@@ -356,6 +406,7 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
         'subject': _marks.subject?.uid,
         'pendingFighter': pend is Fighter ? pend.uid : null,
         'pendingSpace': pend is int ? pend : null,
+        'subjectSpace': _marks.subjectSpace,
         'pendingEdge': pend is (int, int) ? [pend.$1, pend.$2] : null,
         'preview': _marks.previewPath,
         'harmful': _marks.harmful,
@@ -703,7 +754,7 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
     final dy = top + (avail.height - geo.size.height * s) / 2;
     return Matrix4.identity()
       ..translateByDouble(dx, dy, 0, 1)
-      ..scaleByDouble(s, s, 1, 1);
+      ..scaleByDouble(s, s, s, 1);
   }
 
   void _animateCam(Matrix4 to, {Duration? d, Curve curve = Curves.easeInOutCubic, Offset? anchor}) {
@@ -723,12 +774,12 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
     if (e.scrollDelta.dy == 0) return;
     final factor = math.exp(-e.scrollDelta.dy.clamp(-300.0, 300.0) / 800);
     final base = _camA.isAnimating && _camGoal != null ? _camGoal! : _cam.value;
-    final next = (base.getMaxScaleOnAxis() * factor).clamp(_minScale, _maxScale);
+    final next = (_planeScale(base) * factor).clamp(_minScale, _maxScale);
     final screen = MatrixUtils.transformPoint(_cam.value, scene);
     _animateCam(
       Matrix4.identity()
         ..translateByDouble(screen.dx - scene.dx * next, screen.dy - scene.dy * next, 0, 1)
-        ..scaleByDouble(next, next, 1, 1),
+        ..scaleByDouble(next, next, next, 1),
       d: const Duration(milliseconds: 240),
       curve: Curves.easeOutCubic,
       anchor: screen,
@@ -747,18 +798,18 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
     final c = Offset(_viewport.width / 2, _viewport.height / 2);
     final m = _cam.value.clone();
     final scene = _cam.toScene(c);
-    final cur = m.getMaxScaleOnAxis();
+    final cur = _planeScale(m);
     final next = (cur * factor).clamp(_minScale, _maxScale);
     final k = next / cur;
     final to = m
       ..translateByDouble(scene.dx, scene.dy, 0, 1)
-      ..scaleByDouble(k, k, 1, 1)
+      ..scaleByDouble(k, k, k, 1)
       ..translateByDouble(-scene.dx, -scene.dy, 0, 1);
     _animateCam(to, d: const Duration(milliseconds: 260), curve: Curves.easeOutCubic);
   }
 
-  double get _minScale => (_camHome?.getMaxScaleOnAxis() ?? 0.3) * 0.7;
-  double get _maxScale => (_camHome?.getMaxScaleOnAxis() ?? 0.3) * 3.5;
+  double get _minScale => (_camHome == null ? 0.3 : _planeScale(_camHome!)) * 0.7;
+  double get _maxScale => (_camHome == null ? 0.3 : _planeScale(_camHome!)) * 3.5;
 
   /// The dramatic push-in: frame the two fighters between the combat cards.
   void _pushIn(Combat c) {
@@ -769,7 +820,7 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
     final pa = geo.of(a), pd = geo.of(d);
     final mid = Offset.lerp(pa, pd, 0.5)!;
     final span = (pa - pd).distance + geo.unit * 2.2;
-    final home = _camHome?.getMaxScaleOnAxis() ?? 0.4;
+    final home = _camHome == null ? 0.4 : _planeScale(_camHome!);
     final want = (_viewport.width * 0.36) / span;
     final s = want.clamp(home * 1.15, home * 2.4);
     // Below the combat cards, which sit across the top of the screen.
@@ -777,7 +828,7 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
     _animateCam(
       Matrix4.identity()
         ..translateByDouble(target.dx - mid.dx * s, target.dy - mid.dy * s, 0, 1)
-        ..scaleByDouble(s, s, 1, 1),
+        ..scaleByDouble(s, s, s, 1),
       d: Duration(milliseconds: _camMs(800)),
     );
   }
@@ -845,6 +896,7 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
   void _submit(List<int> picks) {
     final c = _answer;
     if (c == null || c.isCompleted) return;
+    debugLastPicks = picks;
     _clearPrompt();
     _refresh();
     c.complete(picks);
@@ -926,6 +978,10 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
       if (subj is Fighter && subj.onBoard) {
         _marks.subject = subj;
         _marks.spaces.remove(subj.space);
+      } else if (subj is Token && subj.space != null) {
+        // Moving a token (Invisible Man's fog): ring the one that's moving. Its own space stays
+        // a choice when it may stay put ("up to N spaces").
+        _marks.subjectSpace = subj.space;
       }
       _marks.harmful = p.intent == Intent.moveEnemy || p.intent == Intent.harm;
     } else if (_isPathPrompt) {
@@ -981,9 +1037,23 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
       return;
     }
 
-    if (_isBoardSpacePrompt && space != null) {
-      final i = _values.indexWhere((v) => _spaceOf(v) == space);
-      if (i < 0) return;
+    if (_isBoardSpacePrompt) {
+      // The nearest space that can be picked, within a couple of space-widths: a tap on a fog
+      // cloud (drawn above its space), a fighter on the space, or a fat finger just off the
+      // circle still picks it; a tap far from every choice does nothing.
+      int? best;
+      var bestD = geo.radius * 2.2;
+      for (final v in _values) {
+        final s = _spaceOf(v);
+        if (s == null) continue;
+        final d = (geo.of(s) - local).distance;
+        if (d < bestD) {
+          bestD = d;
+          best = s;
+        }
+      }
+      if (best == null) return;
+      final i = _values.indexWhere((v) => _spaceOf(v) == best);
       _s.audio.sfx(Sfx.click, volume: 0.4);
       _submit([i]);
       return;
@@ -1347,6 +1417,7 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
                                   GestureBinding.instance.pointerSignalResolver.register(e, (ev) => _wheel(ev as PointerScrollEvent, scene));
                                 },
                                 child: SizedBox(
+                                  key: _boardKey,
                                   width: geo.size.width,
                                   height: geo.size.height,
                                   child: Stack(
@@ -1821,6 +1892,7 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
       final hasAttack = _actions.any((a) => a.kind == ActionKind.attack);
       children.addAll([
         PlateButton(
+          key: const ValueKey('hud-maneuver'),
           label: 'Maneuver',
           icon: Icons.directions_run_rounded,
           style: PlateStyle.secondary,
@@ -1831,6 +1903,7 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
         ),
         SizedBox(height: gap),
         PlateButton(
+          key: const ValueKey('hud-scheme'),
           label: 'Scheme',
           icon: Icons.auto_awesome_rounded,
           style: _schemeHint ? PlateStyle.primary : PlateStyle.secondary,
@@ -1841,6 +1914,7 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
         ),
         SizedBox(height: gap),
         PlateButton(
+          key: const ValueKey('hud-attack'),
           label: _attackMode ? 'Cancel attack' : 'Attack',
           icon: _attackMode ? Icons.close_rounded : Icons.flash_on_rounded,
           style: _attackMode ? PlateStyle.primary : PlateStyle.danger,
@@ -1859,6 +1933,7 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
       children: [
         if (showSkip) ...[
           PlateButton(
+            key: const ValueKey('hud-skip'),
             label: p.skipLabel ?? 'Skip',
             icon: Icons.skip_next_rounded,
             style: PlateStyle.secondary,
@@ -2219,14 +2294,19 @@ class _Board3DInputState extends State<_Board3DInput> {
   );
 }
 
+/// The board camera's zoom: the scale along the board's x axis. (`getMaxScaleOnAxis` also counts
+/// the depth axis; a matrix scaled in x and y only reads as 1 there, which sent every camera move
+/// on a big board, where the fit is below 1x, to 1x: far too close.)
+double _planeScale(Matrix4 m) => math.sqrt(m.storage[0] * m.storage[0] + m.storage[1] * m.storage[1]);
+
 /// A 2D camera move that zooms at an even pace (log scale) while the board point at [anchor]
 /// travels in a straight line. A plain matrix tween lerps scale and offset separately, which
 /// swings the board sideways through a push-in; with the anchor on a fixed point (the pointer for
 /// the wheel) that point stays exactly put.
 class _CamTween extends Animatable<Matrix4> {
   _CamTween(Matrix4 begin, Matrix4 end, this.anchor)
-    : _s0 = begin.getMaxScaleOnAxis(),
-      _s1 = end.getMaxScaleOnAxis(),
+    : _s0 = _planeScale(begin),
+      _s1 = _planeScale(end),
       _c0 = _sceneAt(begin, anchor),
       _c1 = _sceneAt(end, anchor);
 
@@ -2235,7 +2315,7 @@ class _CamTween extends Animatable<Matrix4> {
   final Offset _c0, _c1;
 
   static Offset _sceneAt(Matrix4 m, Offset screen) {
-    final t = m.getTranslation(), s = m.getMaxScaleOnAxis();
+    final t = m.getTranslation(), s = _planeScale(m);
     return Offset((screen.dx - t.x) / s, (screen.dy - t.y) / s);
   }
 
@@ -2245,6 +2325,6 @@ class _CamTween extends Animatable<Matrix4> {
     final c = Offset.lerp(_c0, _c1, t)!;
     return Matrix4.identity()
       ..translateByDouble(anchor.dx - c.dx * s, anchor.dy - c.dy * s, 0, 1)
-      ..scaleByDouble(s, s, 1, 1);
+      ..scaleByDouble(s, s, s, 1);
   }
 }
