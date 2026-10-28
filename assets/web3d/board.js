@@ -24,7 +24,6 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 
 const V3 = THREE.Vector3;
 const TAU = Math.PI * 2;
@@ -68,48 +67,6 @@ function tierAniso(cap = 16) {
   const devMax = renderer.capabilities.getMaxAnisotropy();
   return Math.min(tier().maxAniso, cap, devMax);
 }
-
-/* ---------------------------------------------------------------- CAS Sharpening */
-const CASShader = {
-  name: 'CASShader',
-  uniforms: {
-    tDiffuse: { value: null },
-    resolution: { value: new THREE.Vector2(1, 1) },
-    sharpness: { value: 0.5 },
-  },
-  vertexShader: `
-    varying vec2 vUv;
-    void main() {
-      vUv = uv;
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-    }
-  `,
-  fragmentShader: `
-    uniform sampler2D tDiffuse;
-    uniform vec2 resolution;
-    uniform float sharpness;
-    varying vec2 vUv;
-
-    void main() {
-      vec2 step = 1.0 / resolution;
-      vec3 a = texture2D(tDiffuse, vUv + vec2(0.0, -step.y)).rgb;
-      vec3 b = texture2D(tDiffuse, vUv + vec2(-step.x, 0.0)).rgb;
-      vec3 c = texture2D(tDiffuse, vUv).rgb;
-      vec3 d = texture2D(tDiffuse, vUv + vec2(step.x, 0.0)).rgb;
-      vec3 e = texture2D(tDiffuse, vUv + vec2(0.0, step.y)).rgb;
-
-      vec3 min_rgb = min(min(min(a, b), min(d, e)), c);
-      vec3 max_rgb = max(max(max(a, b), max(d, e)), c);
-
-      vec3 w = sqrt(min(min_rgb, 2.0 - max_rgb) / max(max_rgb, 0.001));
-      vec3 peak = -1.0 / mix(8.0, 5.0, clamp(sharpness, 0.0, 1.0));
-      vec3 weight = w * peak;
-
-      vec3 color = (a + b + d + e) * weight + c;
-      gl_FragColor = vec4(clamp(color / (1.0 + 4.0 * weight), 0.0, 1.0), 1.0);
-    }
-  `,
-};
 
 /* ---------------------------------------------------------------- Hardware Starting Tier */
 function detectHardwareTier() {
@@ -205,7 +162,7 @@ function setup() {
   try {
     // No multisampling on the canvas: antialiasing happens in the composer's target, so it can
     // follow the resolution and be changed while the page runs.
-    renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance', stencil: false });
+    renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance', stencil: false, preserveDrawingBuffer: true });
   } catch (e) {
     post({ t: 'error', fatal: true, msg: 'WebGL is not available' });
     return false;
@@ -285,17 +242,14 @@ let built = { bloom: null, ao: null, aa: null, samples: null };
     on, then tone mapping. With no antialiasing and no effects it renders straight out. MSAA
     samples follow the resolution: a 3x phone screen is already supersampled, so it skips them
     (and the memory they'd take); bloom and AO run at no more than the screen's CSS resolution. */
-let casPass = null;
-
 function buildComposer() {
   const fx = fxOn();
   const samples = !G.aa ? 0 : prMax >= 2.5 ? 0 : prMax >= 1.5 ? 2 : 4;
-  const needCas = G.auto && (gov.level > 0 || prNow < prMax * 0.98);
-  if (built.bloom === fx.bloom && built.ao === fx.ao && built.aa === G.aa && built.samples === samples && built.cas === needCas) return;
-  built = { bloom: fx.bloom, ao: fx.ao, aa: G.aa, samples, cas: needCas };
+  if (built.bloom === fx.bloom && built.ao === fx.ao && built.aa === G.aa && built.samples === samples) return;
+  built = { bloom: fx.bloom, ao: fx.ao, aa: G.aa, samples };
   disposeComposer();
   for (const p of pieces.values()) sizePiece(p);
-  if (!fx.bloom && !fx.ao && !G.aa && !needCas) return;
+  if (!fx.bloom && !fx.ao && !G.aa) return;
   const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples });
   composer = new EffectComposer(renderer, rt);
   composer.setPixelRatio(prNow);
@@ -307,11 +261,6 @@ function buildComposer() {
     ao.updateGtaoMaterial({ radius: .32, distanceExponent: 1.4, thickness: 1, scale: 1.1, samples: G.tier >= 3 ? 12 : 8 });
     ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 4, rings: 2, samples: G.tier >= 3 ? 16 : 12 });
     capPassSize(ao, 1);
-    // Its depth/normal pass draws everything but points and lines with one override material,
-    // which printed dark boxes of "occlusion" on the table: round the fighters from their tags,
-    // glows and highlight rings (sprites and see-through overlays), and in the middle of the
-    // board from the backdrop (a texture background is drawn as a 2x2 plane, which the override
-    // material puts at the world's origin). All of those sit that pass out.
     const hide = ao.overrideVisibility.bind(ao), show = ao.restoreVisibility.bind(ao);
     let backdrop = null;
     ao.overrideVisibility = () => {
@@ -330,14 +279,6 @@ function buildComposer() {
     const bloom = new UnrealBloomPass(new THREE.Vector2(Math.floor(innerWidth / 2), Math.floor(innerHeight / 2)), .32, .5, .88);
     capPassSize(bloom, G.tier >= 3 ? 1.5 : 1);
     composer.addPass(bloom);
-  }
-  if (needCas) {
-    casPass = new ShaderPass(CASShader);
-    casPass.uniforms.resolution.value.set(innerWidth * prNow, innerHeight * prNow);
-    casPass.uniforms.sharpness.value = clamp(0.35 + (1 - RES_STEP[govRes()]) * 0.8, 0.25, 0.8);
-    composer.addPass(casPass);
-  } else {
-    casPass = null;
   }
   composer.addPass(new OutputPass());
   invalidate();
@@ -1669,12 +1610,15 @@ const FRAME_MS = 1000 / 60;
 let nextFrame = 0, lastRender = 0, lastStep = 0, frameNo = 0;
 
 function loop(now) {
-  // Frame pacing: at most 60 frames a second (a 90/120/144 Hz screen would otherwise draw two or
-  // more frames per one that's needed, halving the headroom). Ultra is left uncapped.
-  if (G.tier < 3 && now < nextFrame - 2) {
-    if (!document.hidden) loopId = requestAnimationFrame(loop);
+  if (!document.hidden) {
+    loopId = requestAnimationFrame(loop);
+  } else {
+    pauseLoop();
     return;
   }
+  // Frame pacing: at most 60 frames a second (a 90/120/144 Hz screen would otherwise draw two or
+  // more frames per one that's needed, halving the headroom). Ultra is left uncapped.
+  if (G.tier < 3 && now < nextFrame - 2) return;
   let busy = false, motion = dirty > 0, moving = false;
 
   if (camTween) {
@@ -1777,16 +1721,7 @@ function loop(now) {
     post({ t: 'fps', v: Math.round(fpsFrames * 1000 / (now - fpsStart)) });
     fpsFrames = 0; fpsStart = now;
   }
-  if (draw) stepWarmupBench(now - (lastStep || now));
-
-  const anyMoving = Array.from(pieces.values()).some(p => p.anim != null);
-  const stillActive = (camTween != null) || fling.lengthSq() > 0 || fxList.length > 0 ||
-                      (now < shakeUntil) || (dirty > 0) || pulsing || anyMoving;
-  if (!document.hidden && stillActive) {
-    loopId = requestAnimationFrame(loop);
-  } else {
-    pauseLoop();
-  }
+  if (draw) stepWarmupBench(dt * 1000);
 }
 let fpsFrames = 0, fpsStart = 0;
 
@@ -1863,10 +1798,10 @@ function receive(raw) {
 function handle(m) {
   switch (m.t) {
     case 'init': if (!renderer) { init(m); scene && (scene.add(markGroup), scene.add(tokenGroup)); } break;
-    case 'state': applyState(m); break;
+    case 'state': applyState(m); invalidate(2); break;
     case 'move': if (loaded) startMove(m.id, m.path, m.ms); invalidate(); break;
     case 'fx': if (loaded) burst(m.id, m.text, m.color, m.sparks, m.ms); break;
-    case 'shake': shakeUntil = performance.now() + 320; break;
+    case 'shake': shakeUntil = performance.now() + 320; invalidate(2); break;
     case 'gfx': applyGfx(m.gfx); break;
     case 'drag': if (loaded) drag(m.dx, m.dy); break;
     case 'orbit': if (loaded) orbit(m.dx, m.dy); break;

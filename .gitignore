@@ -54,4 +54,5 @@ app.*.map.json
 Private.md
 *.sql
 /supabase/
+supabase/
 .mcp.json

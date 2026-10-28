@@ -40,6 +40,10 @@ def main():
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(src, dest)
         total += dest.stat().st_size
+    # Ensure all directories declared in pubspec.yaml exist even if skipped
+    fallback_dir = OUT / 'assets' / 'fonts' / 'fallback'
+    fallback_dir.mkdir(parents=True, exist_ok=True)
+    (fallback_dir / '.keep').touch(exist_ok=True)
     print(f'web runtime: {total / 1e6:.1f} MB in {OUT.relative_to(ROOT)}')
 
 
