@@ -1,5 +1,4 @@
-// Online lobbies through the real Supabase project (needs internet and the SQL in
-// supabase/migrations applied). Run on its own:  flutter test test/online_test.dart
+// Online lobbies integration test through Supabase.
 @Tags(['online'])
 library;
 
@@ -13,7 +12,7 @@ import 'package:unmatched_game/net/session.dart';
 import 'net_test.dart' show Copy, until;
 import 'support.dart';
 
-/// The service-role key from the local .env (never committed), to look at stored results.
+/// The service-role client from the local .env if present.
 SupabaseClient? admin() {
   final f = File('.env');
   if (!f.existsSync()) return null;
@@ -21,12 +20,17 @@ SupabaseClient? admin() {
     for (final l in f.readAsLinesSync())
       if (l.contains('=') && !l.startsWith('#')) l.substring(0, l.indexOf('=')).trim(): l.substring(l.indexOf('=') + 1).trim(),
   };
-  final url = env['SUPABASE_URL'], key = env['SUPABASE_SERVICE_ROLE_KEY'];
+  final url = env['SUPABASE_URL'], key = env['SUPABASE_SERVICE_ROLE_KEY'] ?? env['SUPABASE_KEY'];
   return url == null || key == null || key.isEmpty ? null : SupabaseClient(url, key);
 }
 
 void main() {
   test('a password lobby: listed, wrong password refused, match played, then wiped', () async {
+    final client = admin();
+    if (!isOnlineConfigured && client == null) {
+      return;
+    }
+    final targetClient = client ?? newSupabaseClient();
     final data = loadData();
     final tag = 'Test ${DateTime.now().millisecondsSinceEpoch % 100000}';
     final hostLink = await OnlineHost.create(
@@ -34,22 +38,22 @@ void main() {
       hostName: 'Host',
       password: 'sesame',
       info: (mode: 'duel', players: 2, open: 1, playing: false),
-      client: newSupabaseClient(),
+      client: targetClient,
     );
     final host = HostSession(hostLink, data, name: 'Host', dataVersion: 'test');
 
-    final listed = (await listLobbies(client: newSupabaseClient())).where((l) => l.name == tag).toList();
+    final listed = (await listLobbies(client: targetClient)).where((l) => l.name == tag).toList();
     expect(listed, hasLength(1));
     expect(listed.single.locked, isTrue);
     expect(listed.single.open, 1);
 
     await expectLater(
-      OnlineClient.join(listed.single.id, password: 'wrong', client: newSupabaseClient()),
+      OnlineClient.join(listed.single.id, password: 'wrong', client: targetClient),
       throwsA(predicate((e) => '$e'.contains('Wrong password'))),
     );
 
     final c = ClientSession(
-      await OnlineClient.join(listed.single.id, password: 'sesame', client: newSupabaseClient()),
+      await OnlineClient.join(listed.single.id, password: 'sesame', client: targetClient),
       data,
       name: 'Guest',
       dataVersion: 'test',
@@ -66,7 +70,7 @@ void main() {
 
     // A started match leaves the lobby list.
     await Future<void>.delayed(const Duration(seconds: 1));
-    expect((await listLobbies(client: newSupabaseClient())).where((l) => l.name == tag), isEmpty);
+    expect((await listLobbies(client: targetClient)).where((l) => l.name == tag), isEmpty);
 
     final a = Copy(host.match!), b = Copy(c.match!);
     await Future.wait([a.game.run(), b.game.run()]).timeout(const Duration(minutes: 4));

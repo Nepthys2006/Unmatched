@@ -47,7 +47,11 @@ app.*.map.json
 # Widget Preview related
 .widget_preview/
 
-# Secrets: Supabase keys and database password (see .env)
+# Secrets & Databases: Supabase keys, database credentials, SQL files, and tool config
 .env
 .env.*
+*.env
 Private.md
+*.sql
+/supabase/
+.mcp.json

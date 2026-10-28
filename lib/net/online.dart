@@ -2,7 +2,7 @@
 /// appears in everyone's lobby list; joining checks the password on the server and hands out
 /// the lobby's secret Realtime channel, over which the match runs exactly as on LAN (the host's
 /// device is the authority, see session.dart). When a match ends the lobby is deleted and only
-/// the winner and the players' names are kept. Database side: supabase/migrations/.
+/// the winner and the players' names are kept.
 ///
 /// Messages are batched (one broadcast per ~40 ms) to stay well inside Realtime's rate limits.
 library;
@@ -14,18 +14,32 @@ import 'package:supabase/supabase.dart';
 
 import 'link.dart';
 
-/// The game's Supabase project. The publishable key is meant to ship inside apps; it can only
-/// call the lobby functions (row level security blocks everything else).
-const _supabaseUrl = 'https://qpucguxttjhmhbczckvm.supabase.co';
-const _supabaseKey = 'sb_publishable_WLth3N0w10CyHUkYOpEBHQ_N9t5cVOF';
+/// The game's Supabase project configuration (passed via --dart-define or environment).
+const _supabaseUrl = String.fromEnvironment('SUPABASE_URL', defaultValue: '');
+const _supabaseKey = String.fromEnvironment('SUPABASE_KEY', defaultValue: '');
+
+/// Whether online play credentials have been configured.
+bool get isOnlineConfigured => _supabaseUrl.isNotEmpty && _supabaseKey.isNotEmpty;
 
 /// Created the first time online play is opened (not at app start, so the game starts fast and
 /// works offline). No sign-in is needed.
 SupabaseClient? _supabase;
-SupabaseClient get _client => _supabase ??= newSupabaseClient();
+SupabaseClient get _client {
+  if (!isOnlineConfigured) {
+    throw StateError('Online play is not configured (missing SUPABASE_URL / SUPABASE_KEY).');
+  }
+  return _supabase ??= newSupabaseClient();
+}
 
 /// A separate connection (tests use one per simulated device).
-SupabaseClient newSupabaseClient() => SupabaseClient(_supabaseUrl, _supabaseKey);
+SupabaseClient newSupabaseClient([String? url, String? key]) {
+  final targetUrl = url ?? _supabaseUrl;
+  final targetKey = key ?? _supabaseKey;
+  if (targetUrl.isEmpty || targetKey.isEmpty) {
+    throw StateError('Online play is not configured (missing SUPABASE_URL / SUPABASE_KEY).');
+  }
+  return SupabaseClient(targetUrl, targetKey);
+}
 
 const _alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 String _id(math.Random r) => List.generate(12, (_) => _alphabet[r.nextInt(_alphabet.length)]).join();
@@ -36,6 +50,9 @@ typedef OnlineLobby = ({String id, String name, String host, String mode, int pl
 
 /// The lobbies waiting for players, newest first.
 Future<List<OnlineLobby>> listLobbies({SupabaseClient? client}) async {
+  if (client == null && !isOnlineConfigured) {
+    return const [];
+  }
   final rows = await _rpc(client ?? _client, 'list_lobbies', {}) as List;
   return [
     for (final r in rows.cast<Map>())
@@ -57,7 +74,7 @@ Future<Object?> _rpc(SupabaseClient c, String fn, Map<String, Object?> params) a
     return await c.rpc(fn, params: params).timeout(const Duration(seconds: 12));
   } on PostgrestException catch (e) {
     if (e.code == 'PGRST202' || e.message.contains('Could not find the function')) {
-      throw StateError('Online lobbies aren\'t set up on the server yet (run supabase/migrations in the Supabase SQL editor).');
+      throw StateError('Online lobbies are not available on the server yet.');
     }
     throw StateError(e.message);
   } on TimeoutException {

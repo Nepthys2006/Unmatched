@@ -1,13 +1,12 @@
-/// Player accounts (username + password) on the game's Supabase project, the same account on
-/// every device. The device keeps a session token, not the password. See
-/// supabase/migrations/0002_accounts.sql.
+/// Player accounts (username + password) on the game's Supabase backend, the same account on
+/// every device. The device keeps a session token, not the password.
 library;
 
 import 'dart:async';
 
 import 'package:supabase/supabase.dart';
 
-import 'online.dart' show newSupabaseClient;
+import 'online.dart' show isOnlineConfigured, newSupabaseClient;
 
 /// Usernames: 3-16 letters, numbers or _, unique ignoring capitals (checked on the server too).
 final usernamePattern = RegExp(r'^[A-Za-z0-9_]{3,16}$');
@@ -37,6 +36,9 @@ class AccountService {
   SupabaseClient get _c => _given ?? (_made ??= newSupabaseClient());
 
   Future<Object?> _call(String fn, Map<String, Object?> params) async {
+    if (_given == null && !isOnlineConfigured) {
+      throw StateError("Online accounts are not configured.");
+    }
     try {
       return await _c.rpc(fn, params: params).timeout(const Duration(seconds: 12));
     } on PostgrestException catch (e) {
