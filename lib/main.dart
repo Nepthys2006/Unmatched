@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -9,8 +10,12 @@ import 'ui/theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Landscape only on phones and tablets; ignored on desktop and the web.
-  await SystemChrome.setPreferredOrientations([DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
+  // Landscape only on phones and tablets. On the web the page handles orientation itself
+  // (the JS rotate overlay and the Flutter RotatePrompt guide users to landscape; locking here
+  // would prevent the overlay from ever appearing).
+  if (!kIsWeb) {
+    await SystemChrome.setPreferredOrientations([DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
+  }
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   final settings = await Settings.load();
   runApp(UnmatchedApp(services: Services(settings: settings, audio: Audio(settings))));

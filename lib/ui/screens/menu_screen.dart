@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 
 import '../../engine/defs.dart';
 import '../audio.dart';
-import '../platform/fullscreen.dart';
+import '../match/fullscreen_button.dart';
 import '../services.dart';
 import '../shapes.dart';
 import '../theme.dart';
@@ -145,22 +145,11 @@ class _MenuScreenState extends State<MenuScreen> with SingleTickerProviderStateM
                 ),
               ),
               // Web: full screen (and landscape on phones).
-              if (canToggleFullscreen)
-                Positioned(
-                  right: 16,
-                  bottom: 12,
-                  child: StatefulBuilder(
-                    builder: (context, set) => HexButton(
-                      icon: isFullscreen ? Icons.fullscreen_exit_rounded : Icons.fullscreen_rounded,
-                      tooltip: isFullscreen ? 'Leave full screen' : 'Full screen',
-                      size: 48,
-                      onPressed: () async {
-                        await toggleFullscreen();
-                        set(() {});
-                      },
-                    ),
-                  ),
-                ),
+              const Positioned(
+                left: 16,
+                top: 12,
+                child: FullscreenButton(size: 48),
+              ),
               // Bottom left: who is playing.
               Positioned(
                 left: 16,
