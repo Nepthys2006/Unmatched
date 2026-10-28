@@ -4,6 +4,12 @@
 /// device is the authority, see session.dart). When a match ends the lobby is deleted and only
 /// the winner and the players' names are kept.
 ///
+/// The lobby's chat goes over the same channel; the host also keeps each message in the
+/// `chat_messages` table (`chat_post`) while the lobby lives, keyed by the lobby's secret topic,
+/// and deletes them all (`chat_clear`) when the match ends or the lobby closes. The server
+/// deletes messages over 6 hours old too, for hosts that vanished mid-match. (The SQL for these,
+/// supabase/chat.sql, is kept out of git with the rest of the database setup.)
+///
 /// Messages are batched (one broadcast per ~40 ms) to stay well inside Realtime's rate limits.
 library;
 
@@ -126,8 +132,8 @@ class _Outbox {
   }
 }
 
-class OnlineHost implements HostLink {
-  OnlineHost._(this.name, this._sb, this._id, this._token);
+class OnlineHost implements HostLink, ChatKeeper {
+  OnlineHost._(this.name, this._sb, this._id, this._token, this._room);
 
   /// Creates a lobby called [name] (an empty [password] means anyone can join).
   static Future<OnlineHost> create({
@@ -147,9 +153,9 @@ class OnlineHost implements HostLink {
       'p_open': info.open,
     }) as List;
     final row = rows.first as Map;
-    final h = OnlineHost._(name, sb, row['id'] as String, row['host_token'] as String);
+    final h = OnlineHost._(name, sb, row['id'] as String, row['host_token'] as String, row['topic'] as String);
     try {
-      h._ch = await _join(sb, _channel(row['topic'] as String), 'host', bind: h._bind);
+      h._ch = await _join(sb, _channel(h._room), 'host', bind: h._bind);
       await h._ch.track({'role': 'host', 'name': hostName});
     } catch (_) {
       await _rpc(sb, 'close_lobby', {'p_id': h._id, 'p_token': h._token});
@@ -166,6 +172,9 @@ class OnlineHost implements HostLink {
   final SupabaseClient _sb;
   final String _id;
   final String _token;
+
+  /// The lobby's secret channel topic: only its players know it. The chat is kept under it.
+  final String _room;
   late RealtimeChannel _ch;
   late _Outbox _out;
   late LobbyInfo _info;
@@ -222,11 +231,36 @@ class OnlineHost implements HostLink {
     _debounce = Timer(const Duration(milliseconds: 400), _push);
   }
 
+  /// Chat messages being stored, in order (the last one).
+  Future<void> _chatWrites = Future.value();
+
+  @override
+  Future<void> keepChat(Msg m) {
+    // Once the match is over nothing more is kept (the "gg" after it is only passed on).
+    if (_closed) return Future.value();
+    return _chatWrites = _chatWrites.then(
+      (_) => _rpc(_sb, 'chat_post', {
+        'p_room': _room,
+        'p_seq': m['id'],
+        'p_seat': m['seat'],
+        'p_name': m['name'],
+        'p_body': m['text'],
+      }).then((_) {}, onError: (Object _) {}),
+    );
+  }
+
+  /// Deletes the lobby's chat from the server, after the messages still being stored.
+  Future<void> _clearChat() async {
+    await _chatWrites;
+    await _rpc(_sb, 'chat_clear', {'p_room': _room}).catchError((_) => null);
+  }
+
   @override
   Future<void> finished({String? winner, required List<String> players}) async {
     if (_closed) return;
     _closed = true;
     _beat?.cancel();
+    await _clearChat();
     await _rpc(_sb, 'finish_lobby', {'p_id': _id, 'p_token': _token, 'p_winner': winner, 'p_players': players}).catchError((_) => null);
   }
 
@@ -252,6 +286,7 @@ class OnlineHost implements HostLink {
     _debounce?.cancel();
     if (!_closed) {
       _closed = true;
+      await _clearChat();
       await _rpc(_sb, 'close_lobby', {'p_id': _id, 'p_token': _token}).catchError((_) => null);
     }
     _out.flush();

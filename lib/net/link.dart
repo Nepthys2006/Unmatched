@@ -47,6 +47,13 @@ abstract class HostLink {
   Future<void> close();
 }
 
+/// A host link that keeps the lobby's chat on a server while the lobby lives (online), and
+/// deletes it when the match ends.
+abstract interface class ChatKeeper {
+  /// Stores one chat message ([ChatMessage.toJson]).
+  Future<void> keepChat(Msg m);
+}
+
 /// A player's side: one connection to the host.
 abstract class ClientLink {
   Stream<Msg> get messages;

@@ -5,8 +5,9 @@
 /// Messages (JSON):
 ///   player -> host  hello {v, data, name} · hero {id} · ready {on} · seat {i} · ans {seq, picks}
 ///                   resend {from}  (a message got lost: send the answers from `from` again)
+///                   chat {text} · chatResend {from}  (chat messages from number `from` again)
 ///   host -> player  welcome {seat} · lobby {lobby} · reject {why} · start {lobby, heroes, seed}
-///                   ans {seq, seat, picks} · seatAi {seat}
+///                   ans {seq, seat, picks} · seatAi {seat} · chat {m} · chatLog {from, ms}
 library;
 
 import 'dart:async';
@@ -18,6 +19,7 @@ import '../engine/ai.dart';
 import '../engine/defs.dart';
 import '../engine/prompt.dart';
 import '../ui/match/match_config.dart';
+import 'chat.dart';
 import 'link.dart';
 import 'lockstep.dart';
 
@@ -85,6 +87,8 @@ class NetMatch {
     required this.isHost,
     required List<String> names,
     required this.aiSeats,
+    required this.chat,
+    required this._say,
   }) : names = ValueNotifier(names);
 
   final MatchConfig config;
@@ -100,6 +104,13 @@ class NetMatch {
 
   /// Set when the connection is lost mid-match (the reason to show).
   final ValueNotifier<String?> lost = ValueNotifier(null);
+
+  /// The lobby's chat, carried on into the match.
+  final ChatLog chat;
+  final void Function(String text) _say;
+
+  /// Sends a chat message to everyone in the match.
+  void say(String text) => _say(text);
   void Function()? _leave;
 
   /// The agent for [seat]: [human] for the person on this device, [ai] for AI seats the host
@@ -142,6 +153,12 @@ abstract class LobbySession extends ChangeNotifier {
   /// Why the session ended (shown, then back to the menu).
   String? closed;
 
+  /// Table talk, in the lobby and through the match.
+  final ChatLog chat = ChatLog();
+
+  /// Sends a chat message as this player.
+  void say(String text);
+
   /// Set once the host starts the match.
   NetMatch? match;
 
@@ -179,6 +196,8 @@ abstract class LobbySession extends ChangeNotifier {
         for (var i = 0; i < l.seats.length; i++)
           if (l.seats[i].kind == SeatKind.ai) i,
       },
+      chat: chat,
+      say: say,
     );
   }
 
@@ -271,6 +290,7 @@ class HostSession extends LobbySession {
         final name = '${m['name'] ?? ''}'.trim();
         _l.seats[open] = LobbySeat(SeatKind.human, name: name.isEmpty ? 'Player ${open + 1}' : name, peer: peer);
         link.send(peer, {'t': 'welcome', 'seat': open});
+        _sendChat(peer, 1);
         _sync();
       case 'hero' when seat != null && match == null:
         final id = m['id'];
@@ -289,6 +309,12 @@ class HostSession extends LobbySession {
       case 'ans' when seat != null && match != null:
         final seq = m['seq'], picks = m['picks'];
         if (seq is int && picks is List && picks.every((x) => x is int)) match!.ls.offer(seq, seat, picks.cast<int>());
+      case 'chat' when seat != null:
+        final text = m['text'];
+        if (text is String) _post(seat, text, peer: peer);
+      case 'chatResend' when seat != null:
+        final from = m['from'];
+        if (from is int) _sendChat(peer, from);
       case 'resend' when seat != null && match != null:
         final from = m['from'];
         if (from is! int) return;
@@ -296,6 +322,42 @@ class HostSession extends LobbySession {
           link.send(peer, {'t': 'ans', 'seq': seq, 'seat': a.seat, 'picks': a.picks});
         }
     }
+  }
+
+  int _chatSeq = 0;
+  final Map<String, List<DateTime>> _chatTimes = {};
+
+  @override
+  void say(String text) {
+    if (mySeat != null) _post(mySeat!, text);
+  }
+
+  /// Numbers a message, shows it here and on every device, and keeps it on the server (online).
+  void _post(int seat, String text, {String? peer}) {
+    final clean = cleanChat(text);
+    if (clean.isEmpty || seat >= _l.seats.length) return;
+    // At most 5 messages in 5 seconds from anyone.
+    final now = DateTime.now();
+    final times = _chatTimes.putIfAbsent(peer ?? '', () => [])..removeWhere((t) => now.difference(t) > const Duration(seconds: 5));
+    if (times.length >= 5) return;
+    times.add(now);
+    final m = ChatMessage(id: ++_chatSeq, seat: seat, name: _l.seats[seat].name ?? 'Player ${seat + 1}', text: clean, at: now);
+    chat.add(m, mine: mySeat);
+    link.broadcast({'t': 'chat', 'm': m.toJson()});
+    if (link case final ChatKeeper k) unawaited(k.keepChat(m.toJson()));
+  }
+
+  /// The chat from message number [from] on (what a newcomer missed, or what got lost).
+  void _sendChat(String peer, int from) {
+    final ms = chat.messages;
+    link.send(peer, {
+      't': 'chatLog',
+      'from': ms.isEmpty ? _chatSeq + 1 : ms.first.id,
+      'ms': [
+        for (final m in ms)
+          if (m.id >= from) m.toJson(),
+      ],
+    });
   }
 
   void _move(int from, Object? to) {
@@ -472,6 +534,8 @@ class ClientSession extends LobbySession {
   /// Online messages can get lost: ask again for answers we've waited on for a while, and send
   /// again our own answers the host hasn't confirmed.
   void _checkLost() {
+    final gap = chat.gap;
+    if (gap != null) link.send({'t': 'chatResend', 'from': gap});
     final m = match;
     if (m == null) return;
     final w = m.ls.oldestWaiting;
@@ -528,7 +592,19 @@ class ClientSession extends LobbySession {
           n[seat] = '${n[seat]} (AI)';
           match!.names.value = n;
         }
+      case 'chat':
+        final c = ChatMessage.fromJson(m['m']);
+        if (c != null) chat.add(c, mine: mySeat);
+      case 'chatLog':
+        final ms = m['ms'], from = m['from'];
+        if (ms is List) chat.addAll(ms.map(ChatMessage.fromJson).whereType<ChatMessage>(), mine: mySeat, from: from is int ? from : null);
     }
+  }
+
+  @override
+  void say(String text) {
+    final clean = cleanChat(text);
+    if (clean.isNotEmpty) link.send({'t': 'chat', 'text': clean});
   }
 
   void _onDone(String? reason) {

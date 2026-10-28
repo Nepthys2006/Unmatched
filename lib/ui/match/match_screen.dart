@@ -25,7 +25,9 @@ import '../audio.dart';
 import '../platform/fullscreen.dart';
 import '../board/board_painter.dart';
 import '../board3d/board3d.dart';
+import '../../net/chat.dart';
 import '../../net/session.dart';
+import '../chat_panel.dart';
 import '../screens/settings_screen.dart';
 import '../settings.dart';
 import '../services.dart';
@@ -83,6 +85,11 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
   // Presentation state.
   final List<LogLine> _log = [];
   bool _showLog = false;
+
+  /// Multiplayer: the chat panel, and the message that just came in (shown for a moment).
+  bool _showChat = false;
+  ChatMessage? _chatToast;
+  Timer? _chatToastTimer;
   Combat? _combat;
   bool _revealed = false;
   bool _resolved = false;
@@ -172,6 +179,10 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
   List<int>? debugLastPicks;
   @visibleForTesting
   void debugAnswer(List<int> picks) => _submit(picks);
+
+  /// Tests: the error that stopped the match, if one did.
+  @visibleForTesting
+  String? get debugError => _error;
   Size _viewport = Size.zero;
   Animation<Matrix4>? _camTween;
 
@@ -245,6 +256,8 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
       _applyNames();
       net.names.addListener(_applyNames);
       net.lost.addListener(_onLost);
+      net.chat.addListener(_onChat);
+      _chatSeen = net.chat.latestIncoming?.id ?? 0;
     }
     _s.audio.music(Music.battle);
     _ensure3d();
@@ -277,6 +290,36 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
         ..isAI = net.aiSeats.contains(p.seat) || names[p.seat].endsWith('(AI)');
     }
     if (!_disposed && mounted) setState(() {});
+  }
+
+  int _chatSeen = 0;
+
+  /// Multiplayer: a message came in; with the chat closed it shows for a moment at the top left.
+  void _onChat() {
+    final m = widget.net?.chat.latestIncoming;
+    if (_disposed || m == null || m.id <= _chatSeen) return;
+    _chatSeen = m.id;
+    if (_showChat) return;
+    _s.audio.sfx(Sfx.click, volume: 0.35);
+    setState(() => _chatToast = m);
+    _chatToastTimer?.cancel();
+    _chatToastTimer = Timer(const Duration(seconds: 5), () {
+      if (!_disposed) setState(() => _chatToast = null);
+    });
+  }
+
+  void _toggleChat([bool? on]) {
+    final net = widget.net;
+    if (net == null) return;
+    setState(() {
+      _showChat = on ?? !_showChat;
+      if (_showChat) {
+        _showLog = false;
+        _chatToast = null;
+      }
+    });
+    net.chat.open = _showChat;
+    if (!_showChat) FocusManager.instance.primaryFocus?.unfocus();
   }
 
   /// Multiplayer: the connection is gone.
@@ -481,6 +524,9 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
     _drop3d();
     widget.net?.names.removeListener(_applyNames);
     widget.net?.lost.removeListener(_onLost);
+    widget.net?.chat.removeListener(_onChat);
+    widget.net?.chat.open = false;
+    _chatToastTimer?.cancel();
     widget.net?.leave();
     if (_answer != null && !_answer!.isCompleted) _answer!.completeError(const _Abandoned());
     _pulse.dispose();
@@ -1318,7 +1364,7 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
     // between your plate and the action buttons.
     final pad = MediaQuery.paddingOf(context);
     final bigPlate = size.width >= 900 && size.height >= 550;
-    final menuButtons = canToggleFullscreen && !isFullscreen ? 4 : 3;
+    final menuButtons = (canToggleFullscreen && !isFullscreen ? 4 : 3) + (widget.net != null ? 1 : 0);
     final menuW = (menuButtons * 44 * 1.16 + (menuButtons - 1) * 6) * ui;
     final camTop = 8 + 44 * ui + 10;
     final camBottom = camTop + 38 * ui;
@@ -1346,6 +1392,8 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
       },
       child: Scaffold(
         backgroundColor: Palette.bgDeep,
+        // The chat's keyboard goes over the board; the HUD stays where it is.
+        resizeToAvoidBottomInset: false,
         body: TableBackground(
           ornament: false,
           child: Stack(
@@ -1544,10 +1592,17 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
                           icon: Icons.receipt_long_rounded,
                           tooltip: 'Game log',
                           size: 44,
-                          onPressed: () => setState(() => _showLog = !_showLog),
+                          onPressed: () => setState(() {
+                            _showLog = !_showLog;
+                            if (_showLog && _showChat) _toggleChat(false);
+                          }),
                         ),
                         const SizedBox(width: 6),
                         HexButton(icon: Icons.badge_rounded, tooltip: 'Identity cards', size: 44, onPressed: () => _heroSheet(me)),
+                        if (widget.net case final net?) ...[
+                          const SizedBox(width: 6),
+                          ChatButton(chat: net.chat, onPressed: _toggleChat),
+                        ],
                         if (canToggleFullscreen && !isFullscreen) ...[
                           const SizedBox(width: 6),
                           HexButton(
@@ -1819,6 +1874,36 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
                 width: math.min(340, size.width * 0.45),
                 child: LogPanel(lines: _log, onClose: () => setState(() => _showLog = false)),
               ),
+
+              // Multiplayer chat: slides in from the left like the log, above the keyboard.
+              if (widget.net case final net?) ...[
+                AnimatedPositioned(
+                  duration: const Duration(milliseconds: 240),
+                  curve: Curves.easeOutCubic,
+                  left: _showChat ? pad.left + 10 : -400,
+                  top: MediaQuery.viewInsetsOf(context).bottom > 0 ? 4 : 60,
+                  bottom: 10 + MediaQuery.viewInsetsOf(context).bottom,
+                  width: math.min(340, size.width * 0.45),
+                  child: Offstage(
+                    offstage: !_showChat,
+                    child: ChatPanel(
+                      chat: net.chat,
+                      onSend: net.say,
+                      colorOf: (seat) => seat < game.players.length ? colorOf(game.players[seat]) : Palette.bone,
+                      mySeat: net.localSeat,
+                      onClose: () => _toggleChat(false),
+                    ),
+                  ),
+                ),
+                if (_chatToast case final m? when !_showChat)
+                  Positioned(
+                    top: camBottom + 8,
+                    left: pad.left + 10,
+                    child: IgnorePointer(
+                      child: _ChatToast(message: m, color: m.seat < game.players.length ? colorOf(game.players[m.seat]) : Palette.bone),
+                    ),
+                  ),
+              ],
 
               TurnBanner(animation: _banner, title: _bannerTitle, sub: _bannerSub, color: _bannerColor),
 
@@ -2327,4 +2412,43 @@ class _CamTween extends Animatable<Matrix4> {
       ..translateByDouble(anchor.dx - c.dx * s, anchor.dy - c.dy * s, 0, 1)
       ..scaleByDouble(s, s, s, 1);
   }
+}
+
+/// A chat message that just came in, shown for a moment under the camera button.
+class _ChatToast extends StatelessWidget {
+  const _ChatToast({required this.message, required this.color});
+  final ChatMessage message;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => TweenAnimationBuilder<double>(
+    key: ValueKey(message.id),
+    tween: Tween(begin: 0, end: 1),
+    duration: const Duration(milliseconds: 220),
+    curve: Curves.easeOutCubic,
+    builder: (_, t, child) => Opacity(
+      opacity: t,
+      child: Transform.translate(offset: Offset(-16 * (1 - t), 0), child: child),
+    ),
+    child: Container(
+      key: const ValueKey('chat-toast'),
+      constraints: const BoxConstraints(maxWidth: 300),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: ShapeDecoration(
+        color: const Color(0xE60A0D13),
+        shape: ChamferBorder(cut: 8, side: BorderSide(color: color.withValues(alpha: 0.7))),
+        shadows: const [BoxShadow(color: Color(0x80000000), blurRadius: 10, offset: Offset(0, 3))],
+      ),
+      child: Text.rich(
+        TextSpan(
+          children: [
+            TextSpan(text: '${message.name}  ', style: titleStyle(14, color: color, spacing: 0.3)),
+            TextSpan(text: message.text, style: bodyStyle(14.5)),
+          ],
+        ),
+        maxLines: 3,
+        overflow: TextOverflow.ellipsis,
+      ),
+    ),
+  );
 }

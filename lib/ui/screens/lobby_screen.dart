@@ -10,6 +10,7 @@ import '../../engine/defs.dart';
 import '../../net/lan.dart';
 import '../../net/session.dart';
 import '../board/board_painter.dart';
+import '../chat_panel.dart';
 import '../dialogs/map_inspect_dialog.dart';
 import '../match/match_config.dart';
 import '../qr_dialog.dart';
@@ -86,6 +87,17 @@ class _LobbyScreenState extends State<LobbyScreen> {
     if (id != null) s.pickHero(id);
   }
 
+  Future<void> _chat() => showChatSheet(
+    context,
+    chat: s.chat,
+    onSend: s.say,
+    mySeat: s.mySeat,
+    colorOf: (i) {
+      final teams = s.lobby?.mode.isTeams ?? false;
+      return teams ? (i.isEven ? Palette.teamA.first : Palette.teamB.first) : Palette.seats[i % Palette.seats.length];
+    },
+  );
+
   Future<void> _leave() async {
     final ok = await showConfirm(context, title: 'Leave the lobby?', confirm: 'Leave', danger: true);
     if (ok && mounted) Navigator.of(context).pop();
@@ -119,7 +131,16 @@ class _LobbyScreenState extends State<LobbyScreen> {
                       : (s.isHost ? 'Your lobby' : 'Lobby'),
                   step: _view == 1 && l != null ? '${allMaps.length} maps' : null,
                   onBack: _view == 1 ? () => setState(() => _view = 0) : _leave,
-                  trailing: _address(),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(child: _address()),
+                      if (s.mySeat != null) ...[
+                        const SizedBox(width: 10),
+                        ChatButton(chat: s.chat, size: 40, onPressed: _chat),
+                      ],
+                    ],
+                  ),
                 ),
                 Expanded(
                   child: l == null || s.mySeat == null || currentMap == null
