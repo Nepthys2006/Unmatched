@@ -1,24 +1,33 @@
-/// Colours, text styles and the app theme, after Unmatched: Digital Edition: a graphite table,
-/// bone-white linework, hero-coloured plates, a green confirm hex, red attacker / blue defender.
+/// Colours, text styles and the app theme, after Unmatched: Digital Edition: a deep navy table
+/// under a warm lamp, gold trim and inlay, bone-white lettering, hero-coloured plates, a green
+/// confirm hex, red attacker / blue defender.
 library;
 
 import 'package:flutter/material.dart';
 
 abstract final class Palette {
-  static const bg = Color(0xFF1B1C20);
-  static const bgDeep = Color(0xFF0E0F12);
-  static const panel = Color(0xFF25272C);
-  static const panelHi = Color(0xFF30333A);
-  static const line = Color(0xFF4A4D55);
+  /// The table: deep navy slate, darker toward the rim.
+  static const bg = Color(0xFF151A23);
+  static const bgDeep = Color(0xFF0A0D13);
+
+  /// The pool of lamplight in the middle of the table.
+  static const bgLit = Color(0xFF263044);
+  static const panel = Color(0xFF1C2330);
+  static const panelHi = Color(0xFF283141);
+  static const line = Color(0xFF434D60);
+
+  /// Gold trim: frames, selected edges, inlay linework, the deco rules.
+  static const gold = Color(0xFFD9B45E);
+  static const goldDim = Color(0xFF8E7642);
 
   /// Bone: the off-white of the printed linework and lettering.
   static const bone = Color(0xFFECE6D8);
   static const boneDim = Color(0xFFB9B3A5);
 
-  /// Brass, from the logo plate on the card backs. Used sparingly (start numbers, badges).
-  static const brass = Color(0xFFD3A954);
+  /// Brass, from the logo plate on the card backs (start numbers, badges): the gold trim.
+  static const brass = gold;
   static const text = bone;
-  static const muted = Color(0xFF9D998F);
+  static const muted = Color(0xFF99A0AB);
 
   static const confirm = Color(0xFF5DB443);
   static const confirmHi = Color(0xFF8BE05A);
@@ -83,6 +92,7 @@ ThemeData buildTheme() {
       secondary: Palette.confirm,
       surface: Palette.panel,
       onSurface: Palette.text,
+      tertiary: Palette.gold,
       error: Palette.danger,
     ),
     scaffoldBackgroundColor: Palette.bg,
@@ -98,7 +108,7 @@ ThemeData buildTheme() {
       activeTrackColor: Palette.bone,
       thumbColor: Palette.bone,
       inactiveTrackColor: Palette.line,
-      overlayColor: Color(0x22ECE6D8),
+      overlayColor: Color(0x22D9B45E),
       trackHeight: 3,
     ),
     switchTheme: SwitchThemeData(
@@ -107,7 +117,11 @@ ThemeData buildTheme() {
       trackOutlineColor: const WidgetStatePropertyAll(Palette.line),
     ),
     tooltipTheme: const TooltipThemeData(
-      decoration: BoxDecoration(color: Palette.panelHi, borderRadius: BorderRadius.all(Radius.circular(3))),
+      decoration: BoxDecoration(
+        color: Palette.panelHi,
+        borderRadius: BorderRadius.all(Radius.circular(3)),
+        border: Border.fromBorderSide(BorderSide(color: Color(0x66D9B45E))),
+      ),
       textStyle: TextStyle(color: Palette.text, fontSize: 13, fontFamily: Fonts.body),
     ),
     scrollbarTheme: const ScrollbarThemeData(

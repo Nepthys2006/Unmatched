@@ -58,16 +58,16 @@ class PlateButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final enabled = onPressed != null;
     final (Color fill, Color fg, Color edge) = !enabled
-        ? (const Color(0xFF2A2C31), Palette.muted, Palette.line)
+        ? (Palette.panelHi.withValues(alpha: 0.7), Palette.muted, Palette.line)
         : switch (style) {
-            PlateStyle.primary => (Palette.bone, Palette.bgDeep, Palette.bone),
-            PlateStyle.secondary => (Palette.panel, Palette.bone, Palette.bone.withValues(alpha: 0.55)),
+            PlateStyle.primary => (Palette.bone, Palette.bgDeep, Palette.gold),
+            PlateStyle.secondary => (Palette.panel, Palette.bone, Palette.gold.withValues(alpha: 0.55)),
             PlateStyle.confirm => (Palette.confirm, Colors.white, Palette.confirmHi),
             PlateStyle.danger => (Palette.attacker, Colors.white, const Color(0xFFF07A6E)),
             PlateStyle.hero => (plateColor(color ?? Palette.attacker), Colors.white, Palette.bone.withValues(alpha: 0.7)),
           };
     final shape = PlateBorder(
-      side: BorderSide(color: edge, width: 1.5),
+      side: BorderSide(color: edge, width: style == PlateStyle.primary && enabled ? 2 : 1.5),
       point: point,
     );
     Widget content(bool bounded) => Row(
@@ -184,7 +184,9 @@ class HexButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final enabled = onPressed != null;
-    final shape = HexBorder(side: BorderSide(color: enabled ? fg.withValues(alpha: 0.8) : Palette.line, width: 1.5));
+    // Bone-on-navy hexes get the gold rim of the digital edition's buttons; coloured ones keep their own.
+    final rim = fg == Palette.bone ? Palette.gold.withValues(alpha: 0.75) : fg.withValues(alpha: 0.8);
+    final shape = HexBorder(side: BorderSide(color: enabled ? rim : Palette.line, width: 1.5));
     final w = size * 1.16;
     return Tooltip(
       message: tooltip,
@@ -260,7 +262,7 @@ class ConfirmHex extends StatelessWidget {
   }
 }
 
-/// A chamfered graphite panel with a bone hairline.
+/// A chamfered navy panel with a fine gold hairline (full gold when highlighted).
 class Panel extends StatelessWidget {
   const Panel({super.key, required this.child, this.padding = const EdgeInsets.all(12), this.highlight = false, this.color, this.cut = 10});
   final Widget child;
@@ -276,7 +278,7 @@ class Panel extends StatelessWidget {
       color: (color ?? Palette.panel).withValues(alpha: 0.95),
       shape: ChamferBorder(
         cut: cut,
-        side: BorderSide(color: highlight ? Palette.bone : Palette.bone.withValues(alpha: 0.18), width: highlight ? 1.6 : 1),
+        side: BorderSide(color: highlight ? Palette.gold : Palette.gold.withValues(alpha: 0.22), width: highlight ? 1.6 : 1),
       ),
       shadows: const [BoxShadow(color: Color(0x80000000), blurRadius: 14, offset: Offset(0, 5))],
     ),
@@ -303,7 +305,14 @@ class SectionLabel extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 10),
-        Expanded(child: Container(height: 1, color: Palette.bone.withValues(alpha: 0.14))),
+        Expanded(
+          child: Container(
+            height: 1,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(colors: [Palette.gold.withValues(alpha: 0.45), Palette.gold.withValues(alpha: 0)]),
+            ),
+          ),
+        ),
         if (trailing != null) ...[
           const SizedBox(width: 10),
           Flexible(child: trailing!),
@@ -313,7 +322,7 @@ class SectionLabel extends StatelessWidget {
   );
 }
 
-/// A selectable chamfered tile (modes, difficulty, quality...). Selected tiles turn bone.
+/// A selectable chamfered tile (modes, difficulty, quality...). Selected tiles turn bone, rimmed in gold.
 class ChoiceTile extends StatelessWidget {
   const ChoiceTile({
     super.key,
@@ -340,7 +349,7 @@ class ChoiceTile extends StatelessWidget {
     final fg = selected ? Palette.bgDeep : (onTap == null ? Palette.muted : Palette.bone);
     final shape = ChamferBorder(
       cut: 7,
-      side: BorderSide(color: selected ? Palette.bone : Palette.bone.withValues(alpha: 0.25), width: selected ? 1.6 : 1),
+      side: BorderSide(color: selected ? Palette.gold : Palette.bone.withValues(alpha: 0.2), width: selected ? 2 : 1),
     );
     return Semantics(
       button: true,

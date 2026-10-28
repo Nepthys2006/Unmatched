@@ -149,7 +149,7 @@ class _MapSelectScreenState extends State<MapSelectScreen> {
     return Container(
       padding: const EdgeInsets.fromLTRB(24, 10, 24, 14),
       decoration: const ShapeDecoration(
-        color: Color(0xEB0E0F12),
+        color: Color(0xEB0A0D13),
         shape: Border(top: BorderSide(color: Palette.line, width: 1.5)),
       ),
       child: Center(
@@ -243,7 +243,7 @@ class MapCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final shape = ChamferBorder(
       cut: 10,
-      side: BorderSide(color: selected ? Palette.bone : Palette.bone.withValues(alpha: 0.2), width: selected ? 2 : 1),
+      side: BorderSide(color: selected ? Palette.gold : Palette.bone.withValues(alpha: 0.2), width: selected ? 2 : 1),
     );
     final starts = map.spaces.where((s) => s.start != null).length;
     return Semantics(
@@ -274,7 +274,7 @@ class MapCard extends StatelessWidget {
                             right: 4,
                             bottom: 4,
                             child: Material(
-                              color: const Color(0xB30E0F12),
+                              color: const Color(0xB30A0D13),
                               shape: const ChamferBorder(cut: 4, side: BorderSide(color: Palette.line)),
                               child: InkWell(
                                 customBorder: const ChamferBorder(cut: 4),

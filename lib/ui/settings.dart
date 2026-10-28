@@ -1,7 +1,6 @@
 /// Player settings, persisted with shared_preferences.
 library;
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -35,11 +34,20 @@ extension QualityX on Quality {
   /// Pulsing highlights (animated every frame).
   bool get pulse => this != Quality.low;
 
-  /// Texture filter quality: High and Ultra use bicubic filtering to eliminate blurriness when zooming.
+  /// Texture filter quality for a picture of unknown on-screen size (High and Ultra: bicubic).
   FilterQuality get filterQuality => switch (this) {
     Quality.low => FilterQuality.low,
     Quality.medium => FilterQuality.medium,
     Quality.high || Quality.ultra => FilterQuality.high,
+  };
+
+  /// Texture filter for a picture drawn at [screenPxPerImagePx] (above 1: magnified). Bicubic
+  /// (high) is the sharpest way to enlarge, but it samples no mipmaps, so a picture shrunk with
+  /// it shimmers and looks pixelated; shrinking uses mipmapped bilinear (medium) instead.
+  FilterQuality filterFor(double screenPxPerImagePx) => switch (this) {
+    Quality.low => FilterQuality.low,
+    Quality.medium => FilterQuality.medium,
+    Quality.high || Quality.ultra => screenPxPerImagePx > 1 ? FilterQuality.high : FilterQuality.medium,
   };
 
   /// Target width limit for decoding map textures (null = native 100% resolution for crystal sharpness).
@@ -57,12 +65,12 @@ extension QualityX on Quality {
     Quality.ultra => 4.0,
   };
 
-  /// Ticker step duration for highlights (higher FPS on High/Ultra, battery-saving on Low/Medium).
+  /// Step of the highlights' breathing pulse on the 2D board. Each step repaints the board layer,
+  /// so it stays at a vsync divisor (30 or 20 a second) that a 0.9 s pulse doesn't need more of;
+  /// a faster one only took frame time from the camera and the moving pieces.
   Duration get pulseStep => switch (this) {
-    Quality.low => const Duration(milliseconds: 65),
-    Quality.medium => const Duration(milliseconds: 40),
-    Quality.high => const Duration(milliseconds: 20),
-    Quality.ultra => const Duration(milliseconds: 16),
+    Quality.low || Quality.medium => const Duration(milliseconds: 50),
+    Quality.high || Quality.ultra => const Duration(milliseconds: 33),
   };
 }
 
@@ -134,11 +142,8 @@ class Settings extends ChangeNotifier {
   /// the account's name.
   String accountToken = '';
   bool get signedIn => accountToken.isNotEmpty;
-  Quality quality =
-      defaultTargetPlatform == TargetPlatform.android ||
-          defaultTargetPlatform == TargetPlatform.iOS
-      ? Quality.medium
-      : Quality.high;
+  /// High everywhere: the 3D board's frame-rate governor keeps phones at 60 fps by itself.
+  Quality quality = Quality.high;
   AnimSpeed animSpeed = AnimSpeed.normal;
   CombatPace combatPace = CombatPace.slow;
   double musicVolume = 0.6;
@@ -152,10 +157,11 @@ class Settings extends ChangeNotifier {
 
   // 3D map graphics. Choosing a quality preset sets all of these; each can then be changed.
 
-  /// Render resolution as a share of the screen's pixels (0.5–1.5).
+  /// Render resolution as a share of the screen's pixels (0.5–1.5), within the quality's pixel
+  /// budget.
   double renderScale = 1;
 
-  /// Lower the resolution by itself when frames run long.
+  /// Trade resolution and effects for a steady 60 fps when frames run long.
   bool autoResolution = true;
   Shadows shadows = Shadows.medium;
   bool antialias = true;
@@ -184,8 +190,8 @@ class Settings extends ChangeNotifier {
   void applyPreset(Quality q) {
     quality = q;
     final (scale, shadow, aa, glow, ao) = switch (q) {
-      Quality.low => (0.7, Shadows.off, false, false, false),
-      Quality.medium => (0.85, Shadows.low, true, true, false),
+      Quality.low => (0.75, Shadows.off, false, false, false),
+      Quality.medium => (0.9, Shadows.low, true, true, false),
       Quality.high => (1.0, Shadows.medium, true, true, false),
       Quality.ultra => (1.25, Shadows.high, true, true, true),
     };
@@ -210,6 +216,8 @@ class Settings extends ChangeNotifier {
     'brightness': brightness,
     'labels': labelSize,
     'fps': showFps,
+    // texture, figure and badge detail, and the pixel budget
+    'tier': quality.index,
   };
 
   void _read() {

@@ -11,7 +11,8 @@
             (mini: hero id, fid: fighter id, v: which of a hero's hero fighters; they pick the figure)
      move   {id, path:[space], ms}        fx {id, text, color, sparks, ms}        shake {}
      cam    {op:'fit'|'zoom'|'push'|'pull'|'turn'|'tilt', k, a, b, ms}
-     drag {dx, dy} / orbit {dx, dy} (fractions of the view) / pinch {k, a} / pick {x, y}
+     drag {dx, dy} / orbit {dx, dy} (fractions of the view) / pinch {k, a, fx, fy} / pick {x, y}
+     fling {vx, vy} (fractions of the view per second, when a slide is let go)
    Page -> Flutter: loaded, ready, progress {p}, error {msg}, tap {x, y}, fps {v}. */
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -43,12 +44,24 @@ window.addEventListener('error', e => post({ t: 'error', msg: String(e.message |
 window.addEventListener('unhandledrejection', e => post({ t: 'error', msg: String(e.reason && e.reason.message || e.reason) }));
 
 /* ---------------------------------------------------------------- graphics settings
-   scale: render resolution as a share of the screen's pixels (capped at 2x); auto: let the
-   frame-time governor lower it when frames run long; shadows 0-3 (off / 1024 / 2048 / 4096);
-   aa: multisampling (fixed when the page starts); bloom: glow; ao: ambient occlusion;
-   scenery: trees, rocks and buildings; brightness: exposure; labels: name plate size. */
-const G = { scale: 1, auto: true, shadows: 2, aa: true, bloom: true, ao: false, scenery: true, brightness: 1, labels: 1, fps: false };
+   scale: render resolution as a share of the screen's pixels (up to 3x, within the tier's pixel
+   budget); auto: let the frame-time governor trade resolution and effects for a steady 60 fps;
+   shadows 0-3 (off / 1024 / 2048 / 4096); aa: multisampling; bloom: glow; ao: ambient occlusion;
+   scenery: trees, rocks and buildings; brightness: exposure; labels: name plate size;
+   tier 0-3: the quality preset (Low..Ultra), which sets texture, figure and badge detail. */
+const G = { scale: 1, auto: true, shadows: 2, aa: true, bloom: true, ao: false, scenery: true, brightness: 1, labels: 1, fps: false, tier: 2 };
 const SHADOW_SIZE = [512, 1024, 2048, 4096];
+const DPR = () => clamp(window.devicePixelRatio || 1, 1, 3);
+/* Per tier: most pixels drawn per frame (millions), how sharp the figures' pictures are upscaled
+   (longest side, 0 = as shipped), the relief's detail grid, badge/number canvas density, and how
+   often idle highlights (pulses with nothing else moving) are redrawn. */
+const TIER = [
+  { budget: 2.0, figure: 0, grid: 110, coin: 64, label: 1, idleFps: 20 },
+  { budget: 3.7, figure: 640, grid: 140, coin: 72, label: 1.5, idleFps: 30 },
+  { budget: 8.3, figure: 900, grid: 160, coin: 80, label: 2, idleFps: 60 },
+  { budget: 12.5, figure: 1200, grid: 190, coin: 96, label: 2.5, idleFps: 60 },
+];
+const tier = () => TIER[clamp(G.tier | 0, 0, 3)];
 let prMax = 1, prNow = 1, prMin = .5;
 
 /* ---------------------------------------------------------------- scene */
@@ -63,7 +76,9 @@ const invalidate = (n = 2) => { dirty = Math.max(dirty, n); };
 
 function setup() {
   try {
-    renderer = new THREE.WebGLRenderer({ antialias: G.aa, powerPreference: 'high-performance', stencil: false });
+    // No multisampling on the canvas: antialiasing happens in the composer's target, so it can
+    // follow the resolution and be changed while the page runs.
+    renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance', stencil: false });
   } catch (e) {
     post({ t: 'error', fatal: true, msg: 'WebGL is not available' });
     return false;
@@ -94,49 +109,90 @@ function setup() {
   scene.userData.fill = fill;
 
   addEventListener('resize', () => {
-    renderer.setSize(innerWidth, innerHeight);
-    if (composer) composer.setSize(innerWidth, innerHeight);
     camera.aspect = innerWidth / Math.max(1, innerHeight);
     camera.updateProjectionMatrix();
-    invalidate();
+    applyResolution(true); // the pixel budget depends on the window's size
+    buildComposer();
   });
   applyResolution();
   requestAnimationFrame(loop);
   return true;
 }
 
-function applyResolution() {
-  prMax = clamp(Math.min(window.devicePixelRatio || 1, 2) * G.scale, .5, 3);
-  prMin = Math.max(.75, prMax * .85); // never blurrier than 85% of the chosen resolution
-  prNow = prMax;
+/** Full resolution is the screen's own pixels (phones up to 3x) times the chosen scale, kept within
+    the tier's pixel budget so a big, dense screen can't sink the frame rate. `keep` holds the
+    governor's current step (a resize); otherwise it starts again from full resolution. */
+function applyResolution(keep) {
+  const css = Math.max(1, innerWidth * innerHeight);
+  const fit = Math.sqrt(tier().budget * 1e6 / css);
+  prMax = clamp(Math.min(DPR() * G.scale, fit, 3), .5, 3);
+  prMin = Math.min(prMax, Math.max(.6, prMax * .6));
+  if (!keep) gov.level = 0;
+  setPixelRatio(G.auto ? clamp(prMax * RES_STEP[govRes()], prMin, prMax) : prMax);
+}
+
+function setPixelRatio(pr) {
+  prNow = pr;
   renderer.setPixelRatio(prNow);
   renderer.setSize(innerWidth, innerHeight);
   if (composer) { composer.setPixelRatio(prNow); composer.setSize(innerWidth, innerHeight); }
   invalidate();
 }
 
-/** Bloom and ambient occlusion need a composer; without them the scene renders straight out. */
+/** The effects actually drawn: the settings, less what the governor has turned off for speed. */
+const fxOn = () => ({ bloom: G.bloom && !(G.auto && gov.level >= GOV_NO_BLOOM), ao: G.ao && !(G.auto && gov.level >= GOV_NO_AO) });
+let built = { bloom: null, ao: null, aa: null, samples: null };
+
+/** The scene renders into a multisampled half-float target, then bloom and ambient occlusion when
+    on, then tone mapping. With no antialiasing and no effects it renders straight out. MSAA
+    samples follow the resolution: a 3x phone screen is already supersampled, so it skips them
+    (and the memory they'd take); bloom and AO run at no more than the screen's CSS resolution. */
 function buildComposer() {
+  const fx = fxOn();
+  const samples = !G.aa ? 0 : prMax >= 2.5 ? 0 : prMax >= 1.5 ? 2 : 4;
+  if (built.bloom === fx.bloom && built.ao === fx.ao && built.aa === G.aa && built.samples === samples) return;
+  built = { bloom: fx.bloom, ao: fx.ao, aa: G.aa, samples };
   if (composer) { composer.dispose(); composer = null; }
-  if (!G.bloom && !G.ao) return;
-  const isWebGl2 = renderer.capabilities.isWebGL2;
-  const rt = new THREE.WebGLRenderTarget(1, 1, {
-    type: THREE.HalfFloatType,
-    samples: (G.aa && isWebGl2) ? 2 : 0,
-  });
+  for (const p of pieces.values()) sizePiece(p);
+  if (!fx.bloom && !fx.ao && !G.aa) return;
+  const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples });
   composer = new EffectComposer(renderer, rt);
   composer.setPixelRatio(prNow);
   composer.setSize(innerWidth, innerHeight);
   composer.addPass(new RenderPass(scene, camera));
-  if (G.ao) {
+  if (fx.ao) {
     const ao = new GTAOPass(scene, camera, innerWidth, innerHeight);
     ao.blendIntensity = .85;
-    ao.updateGtaoMaterial({ radius: .32, distanceExponent: 1.4, thickness: 1, scale: 1.1, samples: 12 });
-    ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 4, rings: 2, samples: 16 });
+    ao.updateGtaoMaterial({ radius: .32, distanceExponent: 1.4, thickness: 1, scale: 1.1, samples: G.tier >= 3 ? 12 : 8 });
+    ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 4, rings: 2, samples: G.tier >= 3 ? 16 : 12 });
+    capPassSize(ao, 1);
+    // Its depth/normal pass draws everything but points and lines, so the badges, glows and
+    // highlight rings (sprites and see-through overlays) printed dark boxes of "occlusion"
+    // round the fighters; they're left out of it too.
+    const hide = ao.overrideVisibility.bind(ao);
+    ao.overrideVisibility = () => {
+      hide();
+      scene.traverse(o => { if (o.isSprite || (o.isMesh && !Array.isArray(o.material) && o.material.transparent)) o.visible = false; });
+    };
     composer.addPass(ao);
   }
-  if (G.bloom) composer.addPass(new UnrealBloomPass(new THREE.Vector2(Math.floor(innerWidth / 2), Math.floor(innerHeight / 2)), .32, .5, .88));
+  if (fx.bloom) {
+    const bloom = new UnrealBloomPass(new THREE.Vector2(Math.floor(innerWidth / 2), Math.floor(innerHeight / 2)), .32, .5, .88);
+    capPassSize(bloom, G.tier >= 3 ? 1.5 : 1);
+    composer.addPass(bloom);
+  }
   composer.addPass(new OutputPass());
+  invalidate();
+}
+
+/** Runs a soft, full-screen pass at no more than `k` times the CSS resolution (glow and shading
+    don't need a 3x phone's pixels; they're upsampled when blended). */
+function capPassSize(pass, k) {
+  const setSize = pass.setSize.bind(pass);
+  pass.setSize = (w, h) => {
+    const s = Math.min(1, innerWidth * k / Math.max(1, w));
+    setSize(Math.max(1, Math.round(w * s)), Math.max(1, Math.round(h * s)));
+  };
 }
 
 function applyShadows() {
@@ -162,14 +218,13 @@ function applyGfx(g, first) {
   const old = { ...G };
   Object.assign(G, g || {});
   if (!renderer) return;
-  if (first || old.scale !== G.scale) applyResolution();
+  if (first || old.scale !== G.scale || old.tier !== G.tier || old.auto !== G.auto) applyResolution();
   if (first || old.shadows !== G.shadows) applyShadows();
-  if (first || old.bloom !== G.bloom || old.ao !== G.ao) buildComposer();
+  buildComposer();
   renderer.toneMappingExposure = G.brightness;
   const scenery = boardRoot && boardRoot.getObjectByName('Scenery');
   if (scenery && scenery.visible !== G.scenery) { scenery.visible = G.scenery; renderer.shadowMap.needsUpdate = true; }
   for (const p of pieces.values()) sizePiece(p);
-  if (!G.auto && prNow !== prMax) applyResolution();
   invalidate();
 }
 
@@ -188,11 +243,18 @@ async function init(msg) {
   }
   boardRoot.updateMatrixWorld(true);
   if (!msg.art) boardRoot = mergeStatic(boardRoot); // an art board is a single mesh already
+  // Full anisotropic filtering on the board's textures: the camera looks at the table at a slant,
+  // where plain mipmapping smears the printed art. (An art board's slab has a material per face.)
+  const aniso = renderer.capabilities.getMaxAnisotropy();
   boardRoot.traverse(o => {
     if (!o.isMesh) return;
     o.userData.casts = isUnder(o, 'Scenery');
-    const m = o.material;
-    if (m && m.map) m.map.anisotropy = Math.min(16, renderer.capabilities.getMaxAnisotropy());
+    for (const m of [].concat(o.material || [])) {
+      if (!m.map) continue;
+      m.map.anisotropy = Math.min(16, aniso);
+      m.map.minFilter = THREE.LinearMipmapLinearFilter;
+      m.map.needsUpdate = true;
+    }
   });
   scene.add(boardRoot);
   boardRoot.updateMatrixWorld(true);
@@ -250,8 +312,13 @@ async function init(msg) {
 function printedLight(W, D) {
   renderer.toneMapping = THREE.NoToneMapping;
   scene.environment = null;
-  scene.background = new THREE.Color('#101114');
-  scene.fog.color.set('#101114');
+  // The app's navy table: a lit backdrop falling off to a dark rim, fog of the rim's colour.
+  scene.background = canvasTex(512, 512, (g, w, h) => {
+    const r = g.createRadialGradient(w / 2, h * .42, 0, w / 2, h * .42, w * .75);
+    r.addColorStop(0, '#1d2533'); r.addColorStop(.55, '#121722'); r.addColorStop(1, '#07090d');
+    g.fillStyle = r; g.fillRect(0, 0, w, h);
+  });
+  scene.fog.color.set('#0a0d13');
   scene.traverse(o => { if (o.isHemisphereLight) { o.color.set('#fff6e8'); o.groundColor.set('#30302c'); o.intensity = 1.9; } });
   scene.userData.fill.intensity = 0;
   // the lamp becomes a sun: white, no fall-off, wide enough to cover the board evenly
@@ -267,8 +334,37 @@ function printedLight(W, D) {
   lamp.shadow.camera.near = h * .5;
   lamp.shadow.camera.far = h * 2;
   scene.traverse(o => {
-    if (o.isMesh && o.material && o.material.color && o.geometry.type === 'PlaneGeometry' && o.position.y < 0) o.material.color.set('#1c1b19');
+    if (o.isMesh && o.material && o.material.color && o.geometry.type === 'PlaneGeometry' && o.position.y < 0) {
+      o.material.color.set('#ffffff');
+      o.material.map = feltTexture();
+      o.material.roughness = .95;
+      o.material.needsUpdate = true;
+    }
   });
+}
+
+/* The table cloth: navy felt with a fine grain, lit in a pool under the board and falling off to
+   the rim (baked in, so it costs one texture lookup). Made once, on first use. */
+let feltTex = null;
+function feltTexture() {
+  if (!feltTex) {
+    feltTex = canvasTex(1024, 1024, (g, w, h) => {
+      const r = g.createRadialGradient(w / 2, h / 2, w * .04, w / 2, h / 2, w * .5);
+      r.addColorStop(0, '#2b364b'); r.addColorStop(.22, '#1d2535'); r.addColorStop(.5, '#111622'); r.addColorStop(1, '#090c12');
+      g.fillStyle = r; g.fillRect(0, 0, w, h);
+      // grain: faint light and dark flecks
+      const img = g.getImageData(0, 0, w, h), d = img.data;
+      let seed = 7;
+      const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+      for (let i = 0; i < d.length; i += 4) {
+        const n = (rnd() - .5) * 14;
+        d[i] = clamp(d[i] + n, 0, 255); d[i + 1] = clamp(d[i + 1] + n, 0, 255); d[i + 2] = clamp(d[i + 2] + n * 1.1, 0, 255);
+      }
+      g.putImageData(img, 0, 0);
+    });
+    feltTex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  }
+  return feltTex;
 }
 
 function loadGlb(url) {
@@ -284,6 +380,7 @@ async function artBoard(art) {
   const tex = await new THREE.TextureLoader().loadAsync(art.file);
   post({ t: 'progress', p: 1 });
   tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = Math.min(16, renderer.capabilities.getMaxAnisotropy());
   const W = art.w / art.unitPx, D = art.h / art.unitPx, T = .14;
   const edge = new THREE.MeshStandardMaterial({ color: '#1d1c1a', roughness: .8 });
   const top = new THREE.MeshStandardMaterial({ map: tex, roughness: .82 });
@@ -346,9 +443,17 @@ function isUnder(o, name) {
 
 /* ---------------------------------------------------------------- camera
    A simple rig: a target on the board and the camera on a sphere around it (r, phi from
-   straight down... up, theta around). The game sends drags, pinches and orbits. */
+   straight down... up, theta around). The game sends drags, pinches, orbits and flicks; they
+   move the `goal`, and the camera glides after it every frame (exponential smoothing, the same
+   feel at any frame rate), so uneven touch events and mouse-wheel notches come out as one fluid
+   motion. A flick keeps the board sliding and slowing. Scripted moves (fit, push-in for a
+   duel, pull back, turn, tilt) are timed tweens that the goal follows. */
 let camTween = null, shakeUntil = 0, preCombat = null;
 const rig = { target: new V3(), r: 20, phi: .62, theta: 0 };
+const goal = { target: new V3(), r: 20, phi: .62, theta: 0 };
+const fling = new V3();          // board slide after a flick, world units per second
+const CAM_TAU = .07;             // seconds for the camera to close ~63% of the gap to the goal
+const FLING_DRAG = 4.2;          // how fast a flick slows (per second)
 const PHI_MIN = .08, PHI_MAX = 1.3, R_MIN = 2.5;
 const rMax = () => span * 2.2;
 const spherical = (target, dist, polar, azim) =>
@@ -360,40 +465,111 @@ function setRig(pos, target) {
   rig.r = Math.max(1e-3, o.length());
   rig.phi = Math.acos(clamp(o.y / rig.r, -1, 1));
   rig.theta = Math.atan2(o.x, o.z);
+  goalToRig();
+}
+
+function goalToRig() {
+  goal.target.copy(rig.target); goal.r = rig.r; goal.phi = rig.phi; goal.theta = rig.theta;
+}
+
+function clampTarget(t) {
+  if (box.isEmpty()) return;
+  t.x = clamp(t.x, box.min.x - 3, box.max.x + 3);
+  t.z = clamp(t.z, box.min.z - 3, box.max.z + 3);
+}
+
+/** Input takes over from a scripted move where the camera is now. */
+function takeControl() {
+  if (camTween) { camTween = null; goalToRig(); }
+  invalidate();
 }
 
 function syncCamera() {
-  if (!box.isEmpty()) {
-    rig.target.x = clamp(rig.target.x, box.min.x - 3, box.max.x + 3);
-    rig.target.z = clamp(rig.target.z, box.min.z - 3, box.max.z + 3);
-  }
+  clampTarget(rig.target);
   camera.position.copy(spherical(rig.target, rig.r, rig.phi, rig.theta));
   camera.lookAt(rig.target);
   invalidate();
 }
 
+/** World size of the view at the goal's distance, and its ground axes. */
+function goalAxes() {
+  const k = 2 * goal.r * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+  const right = new V3(Math.cos(goal.theta), 0, -Math.sin(goal.theta));
+  const fwd = new V3(-Math.sin(goal.theta), 0, -Math.cos(goal.theta));
+  return { k, right, fwd, along: k / Math.max(.35, Math.cos(goal.phi)) };
+}
+
 /** One finger / left button: slide the board under the finger. */
 function drag(dx, dy) {
-  camTween = null;
-  const k = 2 * rig.r * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
-  const right = new V3(Math.cos(rig.theta), 0, -Math.sin(rig.theta));
-  const fwd = new V3(-Math.sin(rig.theta), 0, -Math.cos(rig.theta));
-  rig.target.addScaledVector(right, -dx * k * camera.aspect).addScaledVector(fwd, dy * k / Math.max(.35, Math.cos(rig.phi)));
-  syncCamera();
+  takeControl();
+  fling.set(0, 0, 0);
+  const { k, right, fwd, along } = goalAxes();
+  goal.target.addScaledVector(right, -dx * k * camera.aspect).addScaledVector(fwd, dy * along);
+  clampTarget(goal.target);
+}
+/** The finger left the board moving (fractions of the view per second): let it glide on. */
+function flick(vx, vy) {
+  const { k, right, fwd, along } = goalAxes();
+  fling.set(0, 0, 0).addScaledVector(right, -vx * k * camera.aspect).addScaledVector(fwd, vy * along);
+  const max = span * 2.5;
+  if (fling.length() > max) fling.setLength(max);
+  invalidate();
 }
 /** Right button: turn around the board and tilt. */
 function orbit(dx, dy) {
-  camTween = null;
-  rig.theta -= dx * Math.PI * 1.4;
-  rig.phi = clamp(rig.phi - dy * Math.PI * .8, PHI_MIN, PHI_MAX);
-  syncCamera();
+  takeControl();
+  goal.theta -= dx * Math.PI * 1.4;
+  goal.phi = clamp(goal.phi - dy * Math.PI * .8, PHI_MIN, PHI_MAX);
 }
-/** Two fingers: pinch to zoom (k > 1 = closer) and twist to turn. */
-function pinch(k, a) {
-  camTween = null;
-  rig.r = clamp(rig.r / k, R_MIN, rMax());
-  rig.theta -= a || 0;
+/** Two fingers or the wheel: zoom (k > 1 = closer) toward the point under (fx, fy) (fractions of
+    the view; the view's centre if absent) and twist to turn. */
+function pinch(k, a, fx, fy) {
+  takeControl();
+  fling.set(0, 0, 0);
+  const r0 = goal.r;
+  goal.r = clamp(goal.r / k, R_MIN, rMax());
+  goal.theta -= a || 0;
+  if (fx != null && fy != null) {
+    const p = groundAt(fx, fy);
+    if (p) {
+      const f = 1 - goal.r / r0;
+      goal.target.x += (p.x - goal.target.x) * f;
+      goal.target.z += (p.z - goal.target.z) * f;
+      clampTarget(goal.target);
+    }
+  }
+}
+const groundRay = new THREE.Raycaster(), groundPlane = new THREE.Plane(new V3(0, 1, 0), 0);
+function groundAt(fx, fy) {
+  groundRay.setFromCamera(new THREE.Vector2(fx * 2 - 1, 1 - fy * 2), camera);
+  return groundRay.ray.intersectPlane(groundPlane, new V3());
+}
+
+/** Moves the camera toward the goal; true while it's still moving. */
+function stepCamera(dt) {
+  if (camTween || !loaded) return false;
+  let moving = false;
+  if (fling.lengthSq() > 0) {
+    goal.target.addScaledVector(fling, dt);
+    clampTarget(goal.target);
+    fling.multiplyScalar(Math.exp(-dt * FLING_DRAG));
+    if (fling.length() < span * .004) fling.set(0, 0, 0);
+    moving = true;
+  }
+  const gap = goal.target.distanceTo(rig.target) / rig.r + Math.abs(Math.log(goal.r / rig.r)) +
+    Math.abs(goal.phi - rig.phi) + Math.abs(goal.theta - rig.theta);
+  if (gap === 0) return moving;
+  if (gap < 2e-4) {
+    rig.target.copy(goal.target); rig.r = goal.r; rig.phi = goal.phi; rig.theta = goal.theta;
+  } else {
+    const a = 1 - Math.exp(-dt / CAM_TAU);
+    rig.target.lerp(goal.target, a);
+    rig.r *= Math.pow(goal.r / rig.r, a); // zoom in log space: the same pace near and far
+    rig.phi += (goal.phi - rig.phi) * a;
+    rig.theta += (goal.theta - rig.theta) * a;
+  }
   syncCamera();
+  return true;
 }
 
 /** The whole board from the player's side, clear of the prompt bar on top and the hand below. */
@@ -431,8 +607,11 @@ function rigTo(target, r, phi, theta, ms) {
   if (d > Math.PI) d -= TAU;
   if (d < -Math.PI) d += TAU;
   const to = { target: target.clone(), r, phi, theta: rig.theta + d };
-  if (!ms) { rig.target.copy(to.target); rig.r = r; rig.phi = phi; rig.theta = to.theta; syncCamera(); return; }
+  clampTarget(to.target);
+  fling.set(0, 0, 0);
+  if (!ms) { rig.target.copy(to.target); rig.r = r; rig.phi = phi; rig.theta = to.theta; goalToRig(); syncCamera(); return; }
   camTween = { from: { target: rig.target.clone(), r: rig.r, phi: rig.phi, theta: rig.theta }, to, start: performance.now(), ms };
+  invalidate();
 }
 
 function tweenTo(pos, target, ms) {
@@ -440,10 +619,10 @@ function tweenTo(pos, target, ms) {
   rigTo(target, r, Math.acos(clamp(o.y / r, -1, 1)), Math.atan2(o.x, o.z), ms);
 }
 
-function zoom(k) { rigTo(rig.target, clamp(rig.r / k, R_MIN, rMax()), rig.phi, rig.theta, 220); }
-function turn(a) { rigTo(rig.target, rig.r, rig.phi, rig.theta + a, 380); }
+function zoom(k) { pinch(k, 0); }
+function turn(a) { takeControl(); rigTo(goal.target, goal.r, goal.phi, goal.theta + a, 420); }
 /** Toggles between the seated view and looking straight down. */
-function tilt() { rigTo(rig.target, rig.r, rig.phi > .3 ? PHI_MIN : .62, rig.theta, 380); }
+function tilt() { takeControl(); rigTo(goal.target, goal.r, goal.phi > .3 ? PHI_MIN : .62, goal.theta, 420); }
 
 /** The dramatic push-in: a low camera beside the two fighters, looking across the duel. */
 function pushIn(a, b, ms) {
@@ -528,10 +707,13 @@ function heartPath(g, x, y, s) {
     change, and once the portrait has loaded. */
 function drawLabel(p) {
   const c = p.label.material.map.image, g = c.getContext('2d'), W = c.width, H = c.height;
+  const k = W / LABEL_W; // canvas density: the layout below is in 320 x 400 units
   g.clearRect(0, 0, W, H);
-  const sx = W * .22, sy = 6, sw = W * .56, sh = H * .58;
+  g.imageSmoothingEnabled = true;
+  g.imageSmoothingQuality = 'high';
+  const sx = W * .22, sy = 6 * k, sw = W * .56, sh = H * .58;
   g.save();
-  g.shadowColor = 'rgba(0,0,0,.55)'; g.shadowBlur = 10; g.shadowOffsetY = 3;
+  g.shadowColor = 'rgba(0,0,0,.55)'; g.shadowBlur = 10 * k; g.shadowOffsetY = 3 * k;
   shieldPath(g, sx, sy, sw, sh); g.fillStyle = p.color; g.fill();
   g.restore();
   const ix = sx + sw * .07, iy = sy + sw * .07, iw = sw * .86, ih = sh - sw * .16;
@@ -546,10 +728,10 @@ function drawLabel(p) {
     g.drawImage(img, ix + (iw - dw) / 2, p.hero ? iy : iy + (ih - dh) / 2, dw, dh);
   }
   g.restore();
-  shieldPath(g, ix, iy, iw, ih); g.lineWidth = 3; g.strokeStyle = 'rgba(255,255,255,.75)'; g.stroke();
+  shieldPath(g, ix, iy, iw, ih); g.lineWidth = 3 * k; g.strokeStyle = 'rgba(255,255,255,.75)'; g.stroke();
 
   // name plate with the heart at its left end
-  const ph = H * .2, py = sh + 16;
+  const ph = H * .2, py = sh + 16 * k;
   g.font = `700 ${ph * .62}px ${fontFamily}`;
   const name = p.name.toUpperCase();
   const tw = Math.min(g.measureText(name).width, W - ph * 2.2);
@@ -572,7 +754,7 @@ function drawLabel(p) {
 
   // the hero's pieces under the plate: a card with its name, tokens one by one, or a counter
   const items = (p.items || []).slice(0, 2);
-  let ry = py + ph + 10;
+  let ry = py + ph + 10 * k;
   const rh = ph * .82;
   for (const it of items) {
     const color = it.c || '#ece6d8';
@@ -584,7 +766,7 @@ function drawLabel(p) {
     const x = (W - w) / 2;
     g.fillStyle = 'rgba(14,15,18,.9)';
     roundRect(g, x, ry, w, rh, rh * .2); g.fill();
-    g.lineWidth = 3; g.strokeStyle = color; g.stroke();
+    g.lineWidth = 3 * k; g.strokeStyle = color; g.stroke();
     g.font = `${rh * .62}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif`;
     g.textBaseline = 'middle'; g.textAlign = 'left';
     if (tokens) {
@@ -600,7 +782,7 @@ function drawLabel(p) {
       g.font = `700 ${rh * .56}px ${fontFamily}`; g.fillStyle = '#fff';
       g.fillText(text, x + rh * 1.1, ry + rh * .56, W - rh * 3);
     }
-    ry += rh + 6;
+    ry += rh + 6 * k;
   }
   p.label.material.map.needsUpdate = true;
 }
@@ -672,7 +854,7 @@ function boxBlur(src, w, h, r) {
 /** Relief in picture space: x 0..1 across, y 0..1 up, z about ±1. Group 0 is the front, 1 the back. */
 function reliefGeometry(img, coin) {
   // detail grid: enough for a figure's folds; a coin is a simple dome (keeps phones at 60 fps)
-  const s = Math.min(1, (coin ? 80 : 150) / Math.max(img.width, img.height));
+  const s = Math.min(1, (coin ? tier().coin : tier().grid) / Math.max(img.width, img.height));
   const w = Math.max(8, Math.round(img.width * s)), h = Math.max(8, Math.round(img.height * s));
   const c = document.createElement('canvas');
   c.width = w; c.height = h;
@@ -740,11 +922,75 @@ function reliefGeometry(img, coin) {
 
 function loadTex(url) {
   return texLoader.loadAsync(url).then(t => {
+    const sharp = sharpened(t.image, tier().figure);
+    if (sharp) { t.dispose(); t = new THREE.CanvasTexture(sharp); }
     t.colorSpace = THREE.SRGBColorSpace;
     t.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
     t.userData.shared = true; // cached across pieces: never disposed with one
     return t;
   });
+}
+
+/* The miniature renders are small (about 250-450 px), so up close the GPU stretches them into a
+   blur and their cut-out edge into stairs. On the higher tiers each one is upscaled once with the
+   browser's best resampling, then given a light unsharp mask on its colour (weighted by alpha,
+   so the transparent surround doesn't bleed a dark halo in). The smooth upscaled alpha also
+   gives the alpha test, and alpha-to-coverage, a clean outline to cut along. */
+function sharpened(img, target) {
+  const long = Math.max(img.width, img.height);
+  if (!target || !long || long * 1.15 >= target) return null;
+  const s = target / long, w = Math.round(img.width * s), h = Math.round(img.height * s);
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const g = c.getContext('2d', { willReadFrequently: true });
+  g.imageSmoothingEnabled = true;
+  g.imageSmoothingQuality = 'high';
+  g.drawImage(img, 0, 0, w, h);
+  const im = g.getImageData(0, 0, w, h), px = im.data, N = w * h;
+  const a = new Float32Array(N), ch = [new Float32Array(N), new Float32Array(N), new Float32Array(N)];
+  for (let i = 0; i < N; i++) {
+    const al = px[i * 4 + 3] / 255;
+    a[i] = al;
+    for (let k = 0; k < 3; k++) ch[k][i] = px[i * 4 + k] * al;
+  }
+  const r = Math.max(1, Math.round(s * .9)), amount = .55;
+  const ba = blurFast(a, w, h, r), bc = ch.map(x => blurFast(x, w, h, r));
+  for (let i = 0; i < N; i++) {
+    if (a[i] <= 0 || ba[i] <= 1e-3) continue;
+    for (let k = 0; k < 3; k++) {
+      const v = px[i * 4 + k], soft = bc[k][i] / ba[i];
+      px[i * 4 + k] = clamp(Math.round(v + (v - soft) * amount), 0, 255);
+    }
+  }
+  g.putImageData(im, 0, 0);
+  return c;
+}
+
+/** Two passes of a running-sum box blur (close to a Gaussian), O(pixels) whatever the radius. */
+function blurFast(src, w, h, r) {
+  let a = src, b = new Float32Array(w * h);
+  for (let pass = 0; pass < 2; pass++) {
+    for (let y = 0; y < h; y++) {
+      const o = y * w;
+      let sum = 0;
+      for (let x = -r; x <= r; x++) sum += a[o + clamp(x, 0, w - 1)];
+      for (let x = 0; x < w; x++) {
+        b[o + x] = sum / (2 * r + 1);
+        sum += a[o + Math.min(w - 1, x + r + 1)] - a[o + Math.max(0, x - r)];
+      }
+    }
+    const t = new Float32Array(w * h);
+    for (let x = 0; x < w; x++) {
+      let sum = 0;
+      for (let y = -r; y <= r; y++) sum += b[clamp(y, 0, h - 1) * w + x];
+      for (let y = 0; y < h; y++) {
+        t[y * w + x] = sum / (2 * r + 1);
+        sum += b[Math.min(h - 1, y + r + 1) * w + x] - b[Math.max(0, y - r) * w + x];
+      }
+    }
+    a = t;
+  }
+  return a;
 }
 
 function loadFigure(url, coin) {
@@ -793,7 +1039,8 @@ async function buildFigure(p, f) {
   const geo = fig.geo.clone();
   geo.scale(sw, sh, depth);
   geo.translate(-bx * sw, coin ? .004 : -.004, 0);
-  const body = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: fig.tex, alphaTest: .5, roughness: .62 }));
+  // alpha-to-coverage turns the cut-out's hard alpha-test edge into a multisampled, smooth one
+  const body = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: fig.tex, alphaTest: .5, alphaToCoverage: G.aa, roughness: .62 }));
   body.position.y = h;
   body.userData.casts = true;
   // turned toward the camera every frame (faceCamera)
@@ -861,8 +1108,11 @@ function makePiece(f) {
   reticle.scale.setScalar(rad * 4.2);
   reticle.renderOrder = 9;
   reticle.visible = false;
-  const lc = document.createElement('canvas'); lc.width = 320; lc.height = 400;
+  // the badge canvas is as dense as the tier and screen call for, so it stays crisp up close
+  const lk = clamp(tier().label * Math.min(DPR(), 2) / 2, 1, 2.5);
+  const lc = document.createElement('canvas'); lc.width = Math.round(LABEL_W * lk); lc.height = Math.round(LABEL_H * lk);
   const lt = new THREE.CanvasTexture(lc); lt.colorSpace = THREE.SRGBColorSpace;
+  lt.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
   const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: lt, depthTest: false, transparent: true, toneMapped: false }));
   label.userData.base = f.hero ? 1 : (f.small ? .62 : .8);
   label.center.set(.5, 0);
@@ -885,11 +1135,13 @@ function makePiece(f) {
   return p;
 }
 
+const LABEL_W = 320, LABEL_H = 400;
+
 /** Badge size and orb glow follow the graphics settings. */
 function sizePiece(p) {
   const ls = p.label.userData.base * G.labels * .8;
-  p.label.scale.set(ls, ls * 400 / 320, 1);
-  p.orb.material.emissiveIntensity = G.bloom ? 1.25 : .5;
+  p.label.scale.set(ls, ls * LABEL_H / LABEL_W, 1);
+  p.orb.material.emissiveIntensity = fxOn().bloom ? 1.25 : .5;
 }
 
 function disposePiece(p) {
@@ -1110,7 +1362,8 @@ function burst(id, text, color, sparks, ms) {
   const p = pieces.get(id);
   if (!p) return;
   const origin = p.group.position.clone().add(new V3(0, p.orb.position.y, 0));
-  const tex = canvasTex(256, 128, (g, w, h) => {
+  const tk = Math.round(clamp(tier().label * Math.min(DPR(), 2) / 2, 1, 2.5) * 2) / 2;
+  const tex = canvasTex(256 * tk, 128 * tk, (g, w, h) => {
     g.font = `800 ${h * .8}px ${fontFamily}`;
     g.textAlign = 'center'; g.textBaseline = 'middle';
     g.lineWidth = h * .1; g.strokeStyle = 'rgba(0,0,0,.85)'; g.strokeText(text, w / 2, h / 2);
@@ -1162,32 +1415,41 @@ function tap(cx, cy) {
 }
 
 /* ---------------------------------------------------------------- frame loop */
+const FRAME_MS = 1000 / 60;
+let nextFrame = 0, lastRender = 0, lastStep = 0, frameNo = 0;
+
 function loop(now) {
   requestAnimationFrame(loop);
-  let busy = false;
+  // Frame pacing: at most 60 frames a second (a 90/120/144 Hz screen would otherwise draw two or
+  // more frames per one that's needed, halving the headroom). Ultra is left uncapped.
+  if (G.tier < 3 && now < nextFrame - 2) return;
+  let busy = false, motion = dirty > 0, moving = false;
 
   if (camTween) {
     const t = clamp((now - camTween.start) / camTween.ms, 0, 1), k = ease(t), a = camTween.from, b = camTween.to;
     rig.target.lerpVectors(a.target, b.target, k);
-    rig.r = a.r + (b.r - a.r) * k;
+    rig.r = a.r * Math.pow(b.r / a.r, k); // log space: a push-in closes in at an even pace
     rig.phi = a.phi + (b.phi - a.phi) * k;
     rig.theta = a.theta + (b.theta - a.theta) * k;
     syncCamera();
+    goalToRig();
     if (t >= 1) camTween = null;
-    busy = true;
+    busy = motion = true;
   }
+  const dt = clamp((now - lastStep) / 1000, 0, .05);
+  lastStep = now;
+  if (stepCamera(dt)) busy = motion = true;
 
   for (const p of pieces.values()) {
     const a = p.anim;
     if (!a) continue;
-    busy = true;
+    busy = motion = moving = true;
     const segs = a.path.length - 1;
     const x = clamp((now - a.start) / a.ms, 0, 1) * segs;
     const i = Math.min(Math.floor(x), segs - 1), u = ease(x - i);
     const A = spaces.get(a.path[i]), B = spaces.get(a.path[i + 1]);
     p.group.position.set(A.x + (B.x - A.x) * u, A.top + (B.top - A.top) * u + Math.sin(Math.PI * u) * .28, A.z + (B.z - A.z) * u);
-    if (x >= segs) { p.anim = null; placePiece(p); }
-    renderer.shadowMap.needsUpdate = true;
+    if (x >= segs) { p.anim = null; placePiece(p); renderer.shadowMap.needsUpdate = true; }
   }
 
   if (pulsing) {
@@ -1207,7 +1469,7 @@ function loop(now) {
 
   for (let i = fxList.length - 1; i >= 0; i--) {
     const f = fxList[i], t = clamp((now - f.start) / f.ms, 0, 1);
-    busy = true;
+    busy = motion = true;
     const rise = (1 - Math.pow(1 - t, 3)) * .7;
     f.sprite.position.copy(f.origin).add(new V3(0, .35 + rise, 0));
     f.sprite.material.opacity = t < .7 ? 1 : (1 - t) / .3;
@@ -1229,17 +1491,28 @@ function loop(now) {
 
   let shake = null;
   if (now < shakeUntil) {
-    busy = true;
+    busy = motion = true;
     const k = (shakeUntil - now) / 320;
     shake = new V3(Math.sin(now * .09) * .06 * k, 0, Math.cos(now * .11) * .04 * k);
     camera.position.add(shake);
   }
 
-  if (busy || dirty > 0) {
+  // Only highlights breathing: on the lower tiers that's redrawn at a lower rate (it's a slow pulse),
+  // which leaves the GPU, and a phone's battery, room for the frames that matter.
+  const idleMs = 1000 / tier().idleFps;
+  const idle = busy && !motion && now - lastRender < idleMs - 2;
+  const draw = (busy || dirty > 0) && !idle;
+  govern(now, draw, motion || idleMs <= FRAME_MS + 1);
+  if (draw) {
     faceCamera();
-    govern(now);
+    // Pieces moving: their shadows follow every frame, or every other one once the governor is
+    // saving time.
+    if (moving && (!(G.auto && gov.level >= 3) || (frameNo & 1) === 0)) renderer.shadowMap.needsUpdate = true;
     if (composer) composer.render(); else renderer.render(scene, camera);
     fpsFrames++;
+    frameNo++;
+    lastRender = now;
+    nextFrame = now - nextFrame > FRAME_MS ? now + FRAME_MS : nextFrame + FRAME_MS;
     if (dirty > 0) dirty--;
     if (busy) dirty = Math.max(dirty, 1);
   }
@@ -1251,26 +1524,65 @@ function loop(now) {
 }
 let fpsFrames = 0, fpsStart = 0;
 
-/* Frame-time governor: while frames render back to back, lower the resolution when they run
-   long (slow phone, busy browser) and raise it again when there's headroom. */
-let govLast = 0, govSum = 0, govN = 0;
-function govern(now) {
-  const dt = now - govLast;
-  govLast = now;
-  if (!G.auto || dt <= 0 || dt > 100) return; // off, or the first frame after idle
-  govSum += dt; govN++;
-  if (govN < 45) return;
-  const avg = govSum / govN;
-  govSum = govN = 0;
-  let next = prNow;
-  if (avg > 26) next = Math.max(prMin, prNow * .9);
-  else if (avg < 15 && prNow < prMax) next = Math.min(prMax, prNow * 1.05);
-  if (Math.abs(next - prNow) > .01) {
-    prNow = next;
-    renderer.setPixelRatio(prNow);
-    renderer.setSize(innerWidth, innerHeight);
-    if (composer) { composer.setPixelRatio(prNow); composer.setSize(innerWidth, innerHeight); }
+/* Frame-time governor: holds 60 fps by stepping down a ladder while frames run long, cheapest
+   loss first, and climbing back once they've been on time for a while:
+     level 0 full resolution, 1 90%, 2 ambient occlusion off, 3 80% (moving shadows at half rate),
+     4 bloom off, 5 70%, 6 60%.
+   Steps that change nothing with the current settings are skipped. It measures only frames drawn
+   back to back (every animation tick drew one: a slow device's long frames count, an idle pause
+   doesn't), over half a second or 30 frames. If the whole ladder buys nothing (the screen or a
+   battery saver caps the rate, or the frame is CPU-bound) it goes back to full quality and
+   holds for a minute rather than blur the picture for no gain. A step back up that soon runs
+   slow again doubles the wait before the next try, so it settles instead of see-sawing. */
+const RES_STEP = [1, .9, .9, .8, .8, .7, .6];
+const GOV_NO_AO = 2, GOV_NO_BLOOM = 4, GOV_MAX = RES_STEP.length - 1;
+const SLOW_MS = 18.5, ON_TIME_MS = 17.6; // ~54 fps and ~57 fps
+const gov = { level: 0, last: 0, chain: false, sum: 0, n: 0, goodSince: 0, wait: 3000, fullAvg: 0, raisedAt: 0, holdUntil: 0 };
+const govRes = () => (G.auto ? gov.level : 0);
+const govConfig = l => `${RES_STEP[l]}|${G.ao && l < GOV_NO_AO}|${G.bloom && l < GOV_NO_BLOOM}`;
+
+/** Called on every animation tick: `drew` whether it rendered, `sample` whether it counts. */
+function govern(now, drew, sample) {
+  const dt = now - gov.last, chained = gov.chain;
+  gov.last = now;
+  gov.chain = drew && sample;
+  if (!G.auto || !drew || !sample || !chained || dt <= 0 || !loaded) return;
+  gov.sum += dt; gov.n++;
+  if (gov.n < 30 && !(gov.sum >= 500 && gov.n >= 3)) return;
+  const avg = gov.sum / gov.n;
+  gov.sum = gov.n = 0;
+  if (avg > SLOW_MS) {
+    gov.goodSince = 0;
+    if (gov.level === 0) gov.fullAvg = avg;
+    if (gov.level === GOV_MAX && avg > gov.fullAvg * .9) {
+      setGovLevel(0);
+      gov.holdUntil = now + 60000;
+    } else if (gov.level < GOV_MAX && now >= gov.holdUntil) {
+      if (now - gov.raisedAt < 4000) gov.wait = Math.min(60000, gov.wait * 2);
+      setGovLevel(nextGovLevel(1));
+    }
+  } else if (avg < ON_TIME_MS) {
+    if (!gov.goodSince) gov.goodSince = now;
+    else if (gov.level > 0 && now - gov.goodSince > gov.wait) {
+      setGovLevel(nextGovLevel(-1));
+      gov.raisedAt = now;
+      gov.goodSince = 0;
+    }
   }
+}
+
+function nextGovLevel(dir) {
+  const now = govConfig(gov.level);
+  let l = gov.level + dir;
+  while (l > 0 && l < GOV_MAX && govConfig(l) === now) l += dir;
+  return clamp(l, 0, GOV_MAX);
+}
+
+function setGovLevel(l) {
+  if (l === gov.level) return;
+  gov.level = l;
+  setPixelRatio(clamp(prMax * RES_STEP[govRes()], prMin, prMax));
+  buildComposer();
 }
 
 /* ---------------------------------------------------------------- messages */
@@ -1287,7 +1599,8 @@ function receive(raw) {
     case 'gfx': applyGfx(m.gfx); break;
     case 'drag': if (loaded) drag(m.dx, m.dy); break;
     case 'orbit': if (loaded) orbit(m.dx, m.dy); break;
-    case 'pinch': if (loaded) pinch(m.k || 1, m.a || 0); break;
+    case 'pinch': if (loaded) pinch(m.k || 1, m.a || 0, m.fx, m.fy); break;
+    case 'fling': if (loaded) flick(m.vx || 0, m.vy || 0); break;
     case 'pick': if (loaded) tap(m.x * innerWidth, m.y * innerHeight); break;
     case 'cam':
       if (!loaded) break;
@@ -1304,7 +1617,7 @@ function receive(raw) {
 const toScreen = v => { const p = v.clone().project(camera); return [(p.x + 1) / 2 * innerWidth, (1 - p.y) / 2 * innerHeight]; };
 window.board = {
   receive,
-  stats: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, pixelRatio: prNow, composer: !!composer }),
+  stats: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, pixelRatio: prNow, pixelRatioMax: prMax, composer: !!composer, governor: gov.level, ...fxOn() }),
   marked: () => ({
     spaces: (marks.spaces || []).filter(id => spaces.has(id)).map(id => toScreen(at(id))),
     fighters: [...(marks.select || []), ...(marks.targets || [])].map(id => pieces.get(id)).filter(Boolean)

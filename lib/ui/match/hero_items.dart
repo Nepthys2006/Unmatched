@@ -148,7 +148,7 @@ class HeroItemView extends StatelessWidget {
         ),
         child: Container(
           padding: const EdgeInsets.only(left: 4),
-          color: const Color(0xE60E0F12),
+          color: const Color(0xE60A0D13),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -164,7 +164,7 @@ class HeroItemView extends StatelessWidget {
         height: h,
         padding: const EdgeInsets.symmetric(horizontal: 5),
         decoration: ShapeDecoration(
-          color: const Color(0xE60E0F12),
+          color: const Color(0xE60A0D13),
           shape: ChamferBorder(cut: 4, side: BorderSide(color: i.color.withValues(alpha: 0.6))),
         ),
         child: Row(
@@ -187,7 +187,7 @@ class HeroItemView extends StatelessWidget {
         height: h,
         padding: const EdgeInsets.symmetric(horizontal: 6),
         decoration: ShapeDecoration(
-          color: const Color(0xE60E0F12),
+          color: const Color(0xE60A0D13),
           shape: ChamferBorder(cut: 4, side: BorderSide(color: i.color.withValues(alpha: 0.6))),
         ),
         child: Row(

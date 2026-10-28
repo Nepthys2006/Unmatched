@@ -131,10 +131,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: ChoiceTile(
                 label: q.label,
                 sub: switch (q) {
-                  Quality.low => 'Fastest',
-                  Quality.medium => 'Phones',
-                  Quality.high => 'Most PCs',
-                  Quality.ultra => 'Strong GPUs',
+                  Quality.low => 'Old devices',
+                  Quality.medium => 'Battery saver',
+                  Quality.high => 'Sharp, 60 fps',
+                  Quality.ultra => 'Sharpest',
                 },
                 selected: s.quality == q,
                 height: 62,
@@ -246,7 +246,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   );
 
   /// Fine control over the 3D map. The quality preset sets these; changes apply at once, even
-  /// mid-match (antialiasing restarts the 3D view).
+  /// mid-match.
   List<Widget> _graphics3d(Settings s) => [
     const SectionLabel('3D map graphics'),
     _SliderRow(
@@ -261,7 +261,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ),
     _SwitchRow(
       label: 'Keep it smooth',
-      sub: 'Lowers the resolution by itself if the frame rate drops',
+      sub: 'Holds 60 fps: eases resolution and effects down if frames run long, back up when they don\'t',
       value: s.autoResolution,
       onChanged: (v) => s.update((x) => x.autoResolution = v),
     ),

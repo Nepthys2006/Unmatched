@@ -32,16 +32,14 @@ enum Board3DStatus { loading, ready, failed }
 class Board3DController {
   Board3DController({
     required this.map,
-    required Map<String, Object> graphics,
+    required this._graphics,
     required this.homeSide,
-  }) : _graphics = graphics,
-       antialias = graphics['aa'] == true;
+  });
 
   final MapDef map;
 
-  /// Settings.graphics3d. Antialiasing is fixed when the page starts; the rest can change live.
+  /// Settings.graphics3d. Every setting applies to the running page.
   Map<String, Object> _graphics;
-  final bool antialias;
 
   /// +1 if the player's start is on the near (+y) half of the board, -1 if on the far half.
   final int homeSide;
@@ -74,8 +72,6 @@ class Board3DController {
       _lastState = json;
     }
     if (_open) _raw?.call(json);
-
-    //set function for reset when graphics is hard to load
   }
 
   /// Applies changed graphics settings to the running page.

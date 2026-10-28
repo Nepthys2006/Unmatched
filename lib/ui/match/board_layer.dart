@@ -81,6 +81,7 @@ class BoardLayerPainter extends CustomPainter {
     required this.marks,
     required this.colorOf,
     required this.quality,
+    required this.pxPerUnit,
     required this.move,
     required this.pulse,
     required this.fxT,
@@ -94,6 +95,9 @@ class BoardLayerPainter extends CustomPainter {
   final BoardMarks marks;
   final Color Function(Player p) colorOf;
   final Quality quality;
+
+  /// Device pixels per board unit (the camera's zoom), for choosing each figure's filter.
+  final ValueNotifier<double> pxPerUnit;
   final ValueNotifier<MoveAnim?> move;
   final Animation<double> pulse;
   final Animation<double> fxT;
@@ -463,7 +467,7 @@ class BoardLayerPainter extends CustomPainter {
     final left = art.token ? c.dx - w / 2 : c.dx - art.baseX * scale;
     final dst = Rect.fromLTWH(left, c.dy + rad * 0.12 - h, w, h);
     canvas.drawImageRect(img, Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()), dst,
-        Paint()..filterQuality = quality.filterQuality);
+        Paint()..filterQuality = quality.filterFor(h * pxPerUnit.value / img.height));
 
     // The hero's pieces (Alice's card, Hellfire...) float beside the main hero.
     if (f == f.owner.heroFighter) _items(canvas, f.owner, Offset(dst.left - r * 0.08, dst.top + r * 0.1), r);
@@ -482,7 +486,7 @@ class BoardLayerPainter extends CustomPainter {
       final w = icon.width + text.width + r * 0.22, h = math.max(icon.height, text.height) + r * 0.06;
       final box = Rect.fromLTWH(at.dx - w, y, w, h);
       final rr = RRect.fromRectAndRadius(box, Radius.circular(r * 0.08));
-      canvas.drawRRect(rr, Paint()..color = const Color(0xE60E0F12));
+      canvas.drawRRect(rr, Paint()..color = const Color(0xE60A0D13));
       canvas.drawRRect(rr, Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = r * 0.035
@@ -497,7 +501,7 @@ class BoardLayerPainter extends CustomPainter {
     // Name tag under the fighter.
     final name = _label(f.name.toUpperCase(), r * 0.34, Palette.bone);
     final tag = Rect.fromCenter(center: c + Offset(0, rad + r * 0.34), width: name.width + r * 0.24, height: name.height + r * 0.06);
-    canvas.drawRRect(RRect.fromRectAndRadius(tag, Radius.circular(r * 0.06)), Paint()..color = const Color(0xCC0E0F12));
+    canvas.drawRRect(RRect.fromRectAndRadius(tag, Radius.circular(r * 0.06)), Paint()..color = const Color(0xCC0A0D13));
     name.paint(canvas, tag.topLeft + Offset(r * 0.12, r * 0.03));
 
     // Health heart.

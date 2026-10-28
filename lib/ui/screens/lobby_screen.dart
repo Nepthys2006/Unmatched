@@ -191,7 +191,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: const ShapeDecoration(
-          color: Color(0xCC0E0F12),
+          color: Color(0xCC0A0D13),
           shape: ChamferBorder(cut: 6, side: BorderSide(color: Palette.line)),
         ),
         child: Row(
@@ -220,7 +220,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
     }
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 6, 16, 6),
-      decoration: const ShapeDecoration(color: Color(0xCC0E0F12), shape: ChamferBorder(cut: 6, side: BorderSide(color: Palette.line))),
+      decoration: const ShapeDecoration(color: Color(0xCC0A0D13), shape: ChamferBorder(cut: 6, side: BorderSide(color: Palette.line))),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -355,7 +355,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
                         gradient: LinearGradient(
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
-                          colors: [Colors.transparent, Color(0xDD0E0F12)],
+                          colors: [Colors.transparent, Color(0xDD0A0D13)],
                         ),
                       ),
                     ),
@@ -367,7 +367,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: const ShapeDecoration(
-                        color: Color(0xEB0E0F12),
+                        color: Color(0xEB0A0D13),
                         shape: ChamferBorder(cut: 4, side: BorderSide(color: Palette.line)),
                       ),
                       child: Row(
@@ -385,7 +385,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
                     top: 8,
                     right: 8,
                     child: Material(
-                      color: const Color(0xEB0E0F12),
+                      color: const Color(0xEB0A0D13),
                       shape: const ChamferBorder(cut: 4, side: BorderSide(color: Palette.line)),
                       child: InkWell(
                         customBorder: const ChamferBorder(cut: 4),
@@ -571,7 +571,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
     return Container(
       padding: const EdgeInsets.fromLTRB(24, 8, 24, 14),
       decoration: const ShapeDecoration(
-        color: Color(0xEB0E0F12),
+        color: Color(0xEB0A0D13),
         shape: Border(top: BorderSide(color: Palette.line, width: 1.5)),
       ),
       child: Center(

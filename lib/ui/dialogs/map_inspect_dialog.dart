@@ -17,7 +17,7 @@ Future<void> showMapInspectDialog(BuildContext context, MapDef map) async {
     context: context,
     barrierDismissible: true,
     barrierLabel: 'Close battlefield inspector',
-    barrierColor: const Color(0xD90E0F12),
+    barrierColor: const Color(0xD90A0D13),
     pageBuilder: (ctx, _, _) => _MapInspectView(map: map),
     transitionBuilder: (_, a, _, child) {
       final c = CurvedAnimation(parent: a, curve: Curves.easeOutCubic);
@@ -271,7 +271,7 @@ class _ZoomButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: const Color(0xCC0E0F12),
+      color: const Color(0xCC0A0D13),
       shape: const ChamferBorder(cut: 6, side: BorderSide(color: Palette.line)),
       child: InkWell(
         customBorder: const ChamferBorder(cut: 6),

@@ -200,7 +200,7 @@ class _HeroSelectScreenState extends State<HeroSelectScreen> {
                       child: Avatar(
                         h.avatar,
                         size: 58,
-                        ring: sel ? Palette.bone : Palette.bone.withValues(alpha: 0.25),
+                        ring: sel ? Palette.gold : Palette.bone.withValues(alpha: 0.25),
                         ringWidth: sel ? 2.5 : 1.2,
                       ),
                     ),
@@ -274,7 +274,7 @@ class _HeroDetail extends StatelessWidget {
                           bottom: 6,
                           child: Container(
                             padding: const EdgeInsets.all(4),
-                            decoration: const ShapeDecoration(color: Color(0xCC0E0F12), shape: HexBorder()),
+                            decoration: const ShapeDecoration(color: Color(0xCC0A0D13), shape: HexBorder()),
                             child: const Icon(Icons.zoom_in_rounded, color: Palette.bone, size: 18),
                           ),
                         ),

@@ -35,8 +35,15 @@ Last updated: 2026-10-24. For the full engine/API reference see `HANDOFF.md`.
 - Pentacle Ruins (5-player) has no model, so it stays 2D. If the 3D map can't load, the match
   falls back to the 2D board and says so.
 - Speed: ~190 meshes merged into a few draw calls per material, frames drawn only when something
-  moves, shadows redrawn only when pieces move, lower resolution on phones, and a governor that
-  lowers resolution further if frames run long. Low quality turns shadows off.
+  moves (at most 60 a second below Ultra; idle highlight pulses at 20-30 on Low/Medium), shadows
+  redrawn only when pieces move, and a pixel budget per quality preset. A governor holds 60 fps by
+  stepping down resolution (to 60%), ambient occlusion and bloom when frames run long, and climbs
+  back when they're on time; if nothing helps (a 30 Hz cap) it restores full quality and holds.
+  Low quality turns shadows off.
+- Sharpness: native resolution up to 3x on phones (within the budget), MSAA in the composer's
+  target (fewer samples as the resolution rises), full anisotropic filtering on the map art,
+  figure pictures upscaled and unsharp-masked once per tier (High: 900 px, Ultra: 1200 px) with
+  alpha-to-coverage edges, and badge/number canvases drawn at the screen's density.
 
 ## Done (2026-10-25, later): 3D board, figures, hero pieces, map fixes
 

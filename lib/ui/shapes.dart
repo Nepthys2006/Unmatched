@@ -3,6 +3,8 @@
 library;
 
 import 'dart:math' as math;
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
@@ -144,8 +146,10 @@ class ChamferBorder extends OutlinedBorder {
   ChamferBorder copyWith({BorderSide? side}) => ChamferBorder(side: side ?? this.side, cut: cut);
 }
 
-/// The graphite table behind every screen: a lit centre, a dark rim, and faint deco linework
-/// (concentric frames and long diagonals, as on the digital edition's table edge).
+/// The navy table behind every screen, as in the digital edition: a pool of warm lamplight in
+/// the middle falling off to a dark rim, a fine cloth grain, and gold deco inlay (stepped frames
+/// and long diagonals) at the table's edge. Painted once into its own layer (it only repaints on
+/// resize), so it costs nothing per frame.
 class TableBackground extends StatelessWidget {
   const TableBackground({super.key, this.child, this.tint, this.ornament = true});
   final Widget? child;
@@ -164,23 +168,82 @@ class TableBackground extends StatelessWidget {
   );
 }
 
+/// A small tile of cloth grain, made once and repeated across the table.
+abstract final class _Grain {
+  static const size = 128;
+  static ui.Image? image;
+  static final ValueNotifier<int> ready = ValueNotifier(0);
+  static bool _started = false;
+
+  static void ensure() {
+    if (_started) return;
+    _started = true;
+    final rnd = math.Random(7);
+    final px = Uint8List(size * size * 4);
+    for (var i = 0; i < size * size; i++) {
+      // speckles, light and dark, faint; alpha carries the strength (premultiplied: a white
+      // speck's colour equals its alpha)
+      final light = rnd.nextBool();
+      final a = (rnd.nextDouble() * rnd.nextDouble() * (light ? 22 : 34)).round();
+      final v = light ? a : 0;
+      px[i * 4] = v;
+      px[i * 4 + 1] = v;
+      px[i * 4 + 2] = v;
+      px[i * 4 + 3] = a;
+    }
+    ui.decodeImageFromPixels(px, size, size, ui.PixelFormat.rgba8888, (img) {
+      image = img;
+      ready.value++;
+    });
+  }
+}
+
 class _TablePainter extends CustomPainter {
-  _TablePainter(this.tint, this.ornament);
+  _TablePainter(this.tint, this.ornament) : super(repaint: _Grain.ready) {
+    _Grain.ensure();
+  }
   final Color? tint;
   final bool ornament;
 
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Offset.zero & size;
-    final light = tint == null ? const Color(0xFF34363C) : Color.lerp(const Color(0xFF34363C), tint, 0.22)!;
+    final light = tint == null ? Palette.bgLit : Color.lerp(Palette.bgLit, tint, 0.24)!;
     canvas.drawRect(
       rect,
       Paint()
         ..shader = RadialGradient(
-          center: const Alignment(0, -0.15),
-          radius: 1.05,
+          center: const Alignment(0, -0.2),
+          radius: 1.1,
           colors: [light, Palette.bg, Palette.bgDeep],
           stops: const [0, 0.55, 1],
+        ).createShader(rect),
+    );
+    // The lamp's warm core, high in the middle.
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..shader = RadialGradient(
+          center: const Alignment(0, -0.55),
+          radius: 0.7,
+          colors: [const Color(0xFFFFD9A0).withValues(alpha: 0.07), const Color(0x00FFD9A0)],
+        ).createShader(rect),
+    );
+    final grain = _Grain.image;
+    if (grain != null) {
+      canvas.drawRect(
+        rect,
+        Paint()..shader = ImageShader(grain, TileMode.repeated, TileMode.repeated, Matrix4.identity().storage, filterQuality: FilterQuality.none),
+      );
+    }
+    // A soft vignette pulls the eye to the middle.
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..shader = RadialGradient(
+          radius: 0.95,
+          colors: const [Color(0x00000000), Color(0x00000000), Color(0x8C000000)],
+          stops: const [0, 0.62, 1],
         ).createShader(rect),
     );
     if (!ornament) return;
@@ -188,7 +251,7 @@ class _TablePainter extends CustomPainter {
     final line = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1
-      ..color = Palette.bone.withValues(alpha: 0.06);
+      ..color = Palette.gold.withValues(alpha: 0.11);
     // Long diagonals from the corners toward the centre, stopping short of it.
     for (final corner in [rect.topLeft, rect.topRight, rect.bottomLeft, rect.bottomRight]) {
       for (final k in [0.0, 0.035]) {
@@ -201,7 +264,7 @@ class _TablePainter extends CustomPainter {
     // Two stepped frames: the table's inlay.
     final m = size.shortestSide * 0.035;
     _stepFrame(canvas, rect.deflate(m), m * 0.9, line);
-    _stepFrame(canvas, rect.deflate(m * 1.6), m * 0.9, line..color = Palette.bone.withValues(alpha: 0.035));
+    _stepFrame(canvas, rect.deflate(m * 1.6), m * 0.9, line..color = Palette.gold.withValues(alpha: 0.06));
   }
 
   void _stepFrame(Canvas canvas, Rect r, double step, Paint p) {
@@ -236,7 +299,7 @@ class _TablePainter extends CustomPainter {
 
 /// A thin double rule with a diamond in the middle: the deco divider under titles.
 class DecoRule extends StatelessWidget {
-  const DecoRule({super.key, this.width = 220, this.color = Palette.bone, this.opacity = 0.55});
+  const DecoRule({super.key, this.width = 220, this.color = Palette.gold, this.opacity = 0.7});
   final double width;
   final Color color;
   final double opacity;

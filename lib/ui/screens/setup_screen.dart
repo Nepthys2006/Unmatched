@@ -264,7 +264,7 @@ class _ModeTile extends StatelessWidget {
     final fg = selected ? Palette.bgDeep : Palette.bone;
     final shape = ChamferBorder(
       cut: 9,
-      side: BorderSide(color: selected ? Palette.bone : Palette.bone.withValues(alpha: 0.22), width: selected ? 1.6 : 1),
+      side: BorderSide(color: selected ? Palette.gold : Palette.bone.withValues(alpha: 0.2), width: selected ? 2 : 1),
     );
     return Semantics(
       button: true,

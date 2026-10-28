@@ -291,7 +291,7 @@ class _Tabs extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 alignment: Alignment.center,
                 decoration: ShapeDecoration(
-                  color: create == value ? Palette.bone : const Color(0xCC0E0F12),
+                  color: create == value ? Palette.bone : const Color(0xCC0A0D13),
                   shape: ChamferBorder(cut: 7, side: BorderSide(color: Palette.bone.withValues(alpha: create == value ? 1 : 0.35))),
                 ),
                 child: Text(label, style: titleStyle(15, color: create == value ? Palette.bgDeep : Palette.boneDim, spacing: 1.2)),

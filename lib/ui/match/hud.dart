@@ -56,7 +56,7 @@ class PlayerPlate extends StatelessWidget {
       decoration: ShapeDecoration(
         color: out ? Palette.panel : plateColor(hexColor(player.hero.color)),
         shape: PlateBorder(
-          side: BorderSide(color: active ? Palette.bone : Palette.bone.withValues(alpha: 0.35), width: active ? 1.8 : 1),
+          side: BorderSide(color: active ? Palette.gold : Palette.bone.withValues(alpha: 0.35), width: active ? 1.8 : 1),
         ),
         shadows: const [BoxShadow(color: Color(0x99000000), blurRadius: 8, offset: Offset(0, 3))],
       ),
@@ -168,7 +168,7 @@ class _Count extends StatelessWidget {
       height: small ? 20 : 24,
       padding: const EdgeInsets.symmetric(horizontal: 6),
       decoration: ShapeDecoration(
-        color: const Color(0xCC0E0F12),
+        color: const Color(0xCC0A0D13),
         shape: ChamferBorder(cut: 4, side: BorderSide(color: Palette.bone.withValues(alpha: 0.2))),
       ),
       child: Row(
@@ -217,7 +217,7 @@ class PromptBar extends StatelessWidget {
             constraints: const BoxConstraints(minHeight: 38),
             padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 6),
             decoration: ShapeDecoration(
-              color: mine ? const Color(0xF20E0F12) : const Color(0xCC0E0F12),
+              color: mine ? const Color(0xF20A0D13) : const Color(0xCC0A0D13),
               shape: _TrapezoidBorder(
                 side: BorderSide(
                   color: mine ? Palette.select.withValues(alpha: 0.8) : Palette.bone.withValues(alpha: 0.25),
@@ -514,7 +514,7 @@ class CombatView extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 3),
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
         decoration: ShapeDecoration(
-          color: now ? Palette.bone : const Color(0xCC0E0F12),
+          color: now ? Palette.bone : const Color(0xCC0A0D13),
           shape: ChamferBorder(
             cut: 4,
             side: BorderSide(color: Palette.bone.withValues(alpha: now ? 1 : 0.25)),
@@ -610,7 +610,7 @@ class CombatView extends StatelessWidget {
         width: w,
         height: h,
         decoration: ShapeDecoration(
-          color: const Color(0x660E0F12),
+          color: const Color(0x660A0D13),
           shape: ChamferBorder(cut: 8, side: BorderSide(color: Palette.bone.withValues(alpha: 0.3))),
         ),
         alignment: Alignment.center,
@@ -1179,8 +1179,8 @@ class _HeroTab extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.fromLTRB(4, 3, 12, 3),
         decoration: ShapeDecoration(
-          color: selected ? plateColor(hexColor(player.hero.color)) : const Color(0xCC0E0F12),
-          shape: ChamferBorder(cut: 6, side: BorderSide(color: selected ? Palette.bone : Palette.bone.withValues(alpha: 0.25))),
+          color: selected ? plateColor(hexColor(player.hero.color)) : const Color(0xCC0A0D13),
+          shape: ChamferBorder(cut: 6, side: BorderSide(color: selected ? Palette.gold : Palette.bone.withValues(alpha: 0.25))),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -1218,7 +1218,7 @@ class _InfoChip extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
     decoration: ShapeDecoration(
-      color: const Color(0xCC0E0F12),
+      color: const Color(0xCC0A0D13),
       shape: ChamferBorder(cut: 4, side: BorderSide(color: Palette.bone.withValues(alpha: 0.2))),
     ),
     child: Text(text, style: bodyStyle(13, color: dim ? Palette.muted : Palette.bone, weight: FontWeight.w600)),
@@ -1315,7 +1315,7 @@ class ResultView extends StatelessWidget {
       curve: Curves.easeOutCubic,
       builder: (_, t, child) => Opacity(opacity: t, child: child),
       child: Container(
-        color: const Color(0xE60E0F12),
+        color: const Color(0xE60A0D13),
         child: SafeArea(
           child: Row(
             children: [

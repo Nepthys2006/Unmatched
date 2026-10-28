@@ -8,6 +8,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter/material.dart' hide Card, Intent;
 
@@ -114,6 +115,12 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
   final ValueNotifier<int> _boardTick = ValueNotifier(0);
   final List<Fx> _fx = [];
   final TransformationController _cam = TransformationController();
+
+  /// Device pixels per board unit at the camera's zoom, in quarter-octave steps: it picks each
+  /// picture's filter (enlarged: bicubic, shrunk: mipmapped), and only changes, so repaints, when
+  /// the zoom crosses a step rather than on every frame of a pan or pinch.
+  final ValueNotifier<double> _pxPerUnit = ValueNotifier(1);
+  double _dpr = 1;
   Matrix4? _camHome;
   Size _viewport = Size.zero;
   Animation<Matrix4>? _camTween;
@@ -146,6 +153,14 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
     _camA.addListener(() {
       if (_camTween != null) _cam.value = _camTween!.value;
     });
+    _cam.addListener(_trackZoom);
+  }
+
+  void _trackZoom() {
+    final s = _cam.value.getMaxScaleOnAxis() * _dpr;
+    if (s <= 0 || !s.isFinite) return;
+    final step = math.pow(2, (math.log(s) / math.ln2 * 4).round() / 4).toDouble();
+    if (step != _pxPerUnit.value) _pxPerUnit.value = step;
   }
 
   @override
@@ -257,8 +272,8 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
     final settings = _s.settings;
     final want = settings.board3d && board3dSupported && hasModel(widget.config.map) && !_b3Failed;
     final graphics = settings.graphics3d;
-    if (want && _b3 != null && _b3!.antialias == settings.antialias) {
-      // Everything but antialiasing applies to the running view.
+    if (want && _b3 != null) {
+      // Every graphics setting applies to the running view.
       _b3!.setGraphics(graphics);
       return;
     }
@@ -421,7 +436,9 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
     }
     _move.dispose();
     _boardTick.dispose();
+    _cam.removeListener(_trackZoom);
     _cam.dispose();
+    _pxPerUnit.dispose();
     super.dispose();
   }
 
@@ -687,10 +704,33 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
       ..scaleByDouble(s, s, 1, 1);
   }
 
-  void _animateCam(Matrix4 to, {Duration? d}) {
-    _camTween = Matrix4Tween(begin: _cam.value.clone(), end: to).animate(CurvedAnimation(parent: _camA, curve: Curves.easeInOutCubic));
+  void _animateCam(Matrix4 to, {Duration? d, Curve curve = Curves.easeInOutCubic, Offset? anchor}) {
+    _camGoal = to;
+    final from = _cam.value.clone();
+    _camTween = _CamTween(from, to, anchor ?? _viewport.center(Offset.zero)).animate(CurvedAnimation(parent: _camA, curve: curve));
     _camA.duration = d ?? Duration(milliseconds: math.max(1, (650 * _s.settings.speed).round()));
     _camA.forward(from: 0);
+  }
+
+  /// Where a running camera move ends (wheel notches add up from there).
+  Matrix4? _camGoal;
+
+  /// Mouse wheel / trackpad scroll over the 2D board: a smooth zoom that keeps the point under the
+  /// pointer still. [scene] is that point in board coordinates.
+  void _wheel(PointerScrollEvent e, Offset scene) {
+    if (e.scrollDelta.dy == 0) return;
+    final factor = math.exp(-e.scrollDelta.dy.clamp(-300.0, 300.0) / 800);
+    final base = _camA.isAnimating && _camGoal != null ? _camGoal! : _cam.value;
+    final next = (base.getMaxScaleOnAxis() * factor).clamp(_minScale, _maxScale);
+    final screen = MatrixUtils.transformPoint(_cam.value, scene);
+    _animateCam(
+      Matrix4.identity()
+        ..translateByDouble(screen.dx - scene.dx * next, screen.dy - scene.dy * next, 0, 1)
+        ..scaleByDouble(next, next, 1, 1),
+      d: const Duration(milliseconds: 240),
+      curve: Curves.easeOutCubic,
+      anchor: screen,
+    );
   }
 
   void _fit() {
@@ -712,7 +752,7 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
       ..translateByDouble(scene.dx, scene.dy, 0, 1)
       ..scaleByDouble(k, k, 1, 1)
       ..translateByDouble(-scene.dx, -scene.dy, 0, 1);
-    _animateCam(to, d: const Duration(milliseconds: 220));
+    _animateCam(to, d: const Duration(milliseconds: 260), curve: Curves.easeOutCubic);
   }
 
   double get _minScale => (_camHome?.getMaxScaleOnAxis() ?? 0.3) * 0.7;
@@ -1250,6 +1290,11 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
                   child: LayoutBuilder(
                     builder: (context, c) {
                       final view = c.biggest;
+                      final dpr = MediaQuery.devicePixelRatioOf(context);
+                      if (dpr != _dpr) {
+                        _dpr = dpr;
+                        _trackZoom();
+                      }
                       if (view != _viewport) {
                         _viewport = view;
                         final first = _camHome == null;
@@ -1263,11 +1308,7 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
                           final dx = t == 0 || t == 1 ? 0.0 : math.sin(t * math.pi * 7) * 7 * (1 - t);
                           return Transform.translate(offset: Offset(dx, 0), child: child);
                         },
-                        child: Listener(
-                          onPointerSignal: (e) {
-                            if (e is PointerScrollEvent) _zoom(e.scrollDelta.dy > 0 ? 0.9 : 1.1);
-                          },
-                          child: InteractiveViewer(
+                        child: InteractiveViewer(
                             transformationController: _cam,
                             constrained: false,
                             minScale: _minScale,
@@ -1280,45 +1321,57 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
                             child: GestureDetector(
                               behavior: HitTestBehavior.opaque,
                               onTapUp: (d) => _onBoardTap(d.localPosition),
-                              child: SizedBox(
-                                width: geo.size.width,
-                                height: geo.size.height,
-                                child: Stack(
-                                  children: [
-                                    RepaintBoundary(
-                                      child: _boardImage == null
-                                          ? CustomPaint(size: geo.size, painter: BoardPainter(geo, showStarts: false, detailed: true))
-                                          : RawImage(
-                                              image: _boardImage,
-                                              width: geo.size.width,
-                                              height: geo.size.height,
-                                              fit: BoxFit.fill,
-                                              filterQuality: settings.quality.filterQuality,
-                                            ),
-                                    ),
-                                    RepaintBoundary(
-                                      child: CustomPaint(
-                                        size: geo.size,
-                                        painter: BoardLayerPainter(
-                                          game: game,
-                                          geo: geo,
-                                          marks: _marks,
-                                          colorOf: colorOf,
-                                          quality: settings.quality,
-                                          move: _move,
-                                          pulse: _pulse,
-                                          fxT: _fxA,
-                                          fx: _fx,
-                                          focus: focus,
-                                          repaint: Listenable.merge([_boardTick, _moveA, _pulse, _fxA, FigureArt.instance.loaded]),
+                              // The wheel zooms smoothly toward the pointer (claimed here, before
+                              // InteractiveViewer's own instant per-notch zoom).
+                              child: Listener(
+                                onPointerSignal: (e) {
+                                  if (e is! PointerScrollEvent) return;
+                                  final scene = e.localPosition;
+                                  GestureBinding.instance.pointerSignalResolver.register(e, (ev) => _wheel(ev as PointerScrollEvent, scene));
+                                },
+                                child: SizedBox(
+                                  width: geo.size.width,
+                                  height: geo.size.height,
+                                  child: Stack(
+                                    children: [
+                                      RepaintBoundary(
+                                        child: _boardImage == null
+                                            ? CustomPaint(size: geo.size, painter: BoardPainter(geo, showStarts: false, detailed: true))
+                                            : ValueListenableBuilder<double>(
+                                                valueListenable: _pxPerUnit,
+                                                builder: (_, px, _) => RawImage(
+                                                  image: _boardImage,
+                                                  width: geo.size.width,
+                                                  height: geo.size.height,
+                                                  fit: BoxFit.fill,
+                                                  filterQuality: settings.quality.filterFor(px * geo.size.width / _boardImage!.width),
+                                                ),
+                                              ),
+                                      ),
+                                      RepaintBoundary(
+                                        child: CustomPaint(
+                                          size: geo.size,
+                                          painter: BoardLayerPainter(
+                                            game: game,
+                                            geo: geo,
+                                            marks: _marks,
+                                            colorOf: colorOf,
+                                            quality: settings.quality,
+                                            pxPerUnit: _pxPerUnit,
+                                            move: _move,
+                                            pulse: _pulse,
+                                            fxT: _fxA,
+                                            fx: _fx,
+                                            focus: focus,
+                                            repaint: Listenable.merge([_boardTick, _moveA, _pulse, _fxA, _pxPerUnit, FigureArt.instance.loaded]),
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
                         ),
                       );
                     },
@@ -1649,7 +1702,7 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
               if (_error != null)
                 Positioned.fill(
                   child: Container(
-                    color: const Color(0xE60E0F12),
+                    color: const Color(0xE60A0D13),
                     alignment: Alignment.center,
                     child: Panel(
                       padding: const EdgeInsets.all(20),
@@ -1863,7 +1916,7 @@ class _MiniPlate extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.fromLTRB(4, 3, 14, 3),
           decoration: ShapeDecoration(
-            color: const Color(0xD90E0F12),
+            color: const Color(0xD90A0D13),
             shape: PlateBorder(
               slant: 0.3,
               side: BorderSide(color: active ? Palette.bone : color.withValues(alpha: 0.6), width: active ? 1.8 : 1.2),
@@ -1924,7 +1977,9 @@ class _Board3DCover extends StatelessWidget {
 
 /// Takes every touch and click on the 3D map and forwards it: the web view under it only draws,
 /// so HUD buttons on top always get their taps first. One finger or the left button slides the
-/// board, two fingers pinch to zoom and twist to turn, the right button orbits, the wheel zooms.
+/// board (and a flick lets it glide on), two fingers pinch to zoom toward their midpoint and twist
+/// to turn, the right button orbits, the wheel zooms toward the pointer. Moves are gathered and
+/// sent once per frame: a web view's bridge is slow, and the page smooths what it receives.
 class _Board3DInput extends StatefulWidget {
   const _Board3DInput({required this.controller});
   final Board3DController controller;
@@ -1939,7 +1994,40 @@ class _Board3DInputState extends State<_Board3DInput> {
   double _rotation = 0;
   Size _size = Size.zero;
 
+  // Gathered since the last frame.
+  Offset _drag = Offset.zero, _orbit = Offset.zero;
+  double _zoom = 1, _twist = 0;
+  Offset? _focal;
+  bool _flushQueued = false;
+
   Board3DController get c => widget.controller;
+
+  void _queue() {
+    if (_flushQueued) return;
+    _flushQueued = true;
+    SchedulerBinding.instance.scheduleFrameCallback((_) => _flush());
+    SchedulerBinding.instance.ensureVisualUpdate();
+  }
+
+  void _flush() {
+    _flushQueued = false;
+    if (!mounted || _size.isEmpty) return;
+    if (_drag != Offset.zero) c.send({'t': 'drag', 'dx': _drag.dx / _size.width, 'dy': _drag.dy / _size.height});
+    if (_orbit != Offset.zero) c.send({'t': 'orbit', 'dx': _orbit.dx / _size.width, 'dy': _orbit.dy / _size.height});
+    if ((_zoom - 1).abs() > 1e-4 || _twist.abs() > 1e-4) {
+      final f = _focal;
+      c.send({
+        't': 'pinch',
+        'k': _zoom,
+        'a': _twist,
+        if (f != null) 'fx': f.dx / _size.width,
+        if (f != null) 'fy': f.dy / _size.height,
+      });
+    }
+    _drag = _orbit = Offset.zero;
+    _zoom = 1;
+    _twist = 0;
+  }
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -1948,12 +2036,18 @@ class _Board3DInputState extends State<_Board3DInput> {
       return Listener(
         onPointerDown: (e) => _orbiting = e.kind == PointerDeviceKind.mouse && e.buttons & kSecondaryMouseButton != 0,
         onPointerMove: (e) {
-          if (_orbiting) c.send({'t': 'orbit', 'dx': e.delta.dx / _size.width, 'dy': e.delta.dy / _size.height});
+          if (!_orbiting) return;
+          _orbit += e.delta;
+          _queue();
         },
         onPointerUp: (_) => _orbiting = false,
         onPointerCancel: (_) => _orbiting = false,
         onPointerSignal: (e) {
-          if (e is PointerScrollEvent) c.send({'t': 'pinch', 'k': e.scrollDelta.dy > 0 ? 0.9 : 1.1});
+          if (e is! PointerScrollEvent || e.scrollDelta.dy == 0) return;
+          // A notch is ~100 px: about 12% per notch, finer for a trackpad's small steps.
+          _zoom *= math.exp(-e.scrollDelta.dy.clamp(-300.0, 300.0) / 800);
+          _focal = e.localPosition;
+          _queue();
         },
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
@@ -1964,17 +2058,56 @@ class _Board3DInputState extends State<_Board3DInput> {
           },
           onScaleUpdate: (d) {
             if (_orbiting) return;
-            final delta = d.focalPointDelta;
-            if (delta != Offset.zero) c.send({'t': 'drag', 'dx': delta.dx / _size.width, 'dy': delta.dy / _size.height});
+            _drag += d.focalPointDelta;
             if (d.pointerCount > 1) {
-              final k = d.scale / _scale, a = d.rotation - _rotation;
+              _zoom *= d.scale / _scale;
+              _twist += d.rotation - _rotation;
               _scale = d.scale;
               _rotation = d.rotation;
-              if ((k - 1).abs() > 0.001 || a.abs() > 0.001) c.send({'t': 'pinch', 'k': k, 'a': a});
+              _focal = d.localFocalPoint;
             }
+            _queue();
+          },
+          onScaleEnd: (d) {
+            // Only when the last finger lifts (going from two fingers to one isn't a flick).
+            if (_orbiting || d.pointerCount > 0) return;
+            _flush();
+            final v = d.velocity.pixelsPerSecond;
+            if (v.distance < 120) return;
+            c.send({'t': 'fling', 'vx': v.dx / _size.width, 'vy': v.dy / _size.height});
           },
         ),
       );
     },
   );
+}
+
+/// A 2D camera move that zooms at an even pace (log scale) while the board point at [anchor]
+/// travels in a straight line. A plain matrix tween lerps scale and offset separately, which
+/// swings the board sideways through a push-in; with the anchor on a fixed point (the pointer for
+/// the wheel) that point stays exactly put.
+class _CamTween extends Animatable<Matrix4> {
+  _CamTween(Matrix4 begin, Matrix4 end, this.anchor)
+    : _s0 = begin.getMaxScaleOnAxis(),
+      _s1 = end.getMaxScaleOnAxis(),
+      _c0 = _sceneAt(begin, anchor),
+      _c1 = _sceneAt(end, anchor);
+
+  final Offset anchor;
+  final double _s0, _s1;
+  final Offset _c0, _c1;
+
+  static Offset _sceneAt(Matrix4 m, Offset screen) {
+    final t = m.getTranslation(), s = m.getMaxScaleOnAxis();
+    return Offset((screen.dx - t.x) / s, (screen.dy - t.y) / s);
+  }
+
+  @override
+  Matrix4 transform(double t) {
+    final s = _s0 * math.pow(_s1 / _s0, t);
+    final c = Offset.lerp(_c0, _c1, t)!;
+    return Matrix4.identity()
+      ..translateByDouble(anchor.dx - c.dx * s, anchor.dy - c.dy * s, 0, 1)
+      ..scaleByDouble(s, s, 1, 1);
+  }
 }
