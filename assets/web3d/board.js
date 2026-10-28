@@ -24,6 +24,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 
 const V3 = THREE.Vector3;
 const TAU = Math.PI * 2;
@@ -56,11 +57,117 @@ const DPR = () => clamp(window.devicePixelRatio || 1, 1, 3);
    (longest side, 0 = as shipped), the relief's detail grid, badge/number canvas density, and how
    often idle highlights (pulses with nothing else moving) are redrawn. */
 const TIER = [
-  { budget: 2.0, figure: 0, grid: 110, coin: 64, label: 1, idleFps: 20 },
-  { budget: 3.7, figure: 640, grid: 140, coin: 72, label: 1.5, idleFps: 30 },
-  { budget: 8.3, figure: 900, grid: 160, coin: 80, label: 2, idleFps: 60 },
-  { budget: 12.5, figure: 1200, grid: 190, coin: 96, label: 2.5, idleFps: 60 },
+  { budget: 2.0, figure: 0, grid: 110, coin: 64, label: 1, idleFps: 20, maxAniso: 1, dprCap: 1.5 },
+  { budget: 3.7, figure: 640, grid: 140, coin: 72, label: 1.5, idleFps: 30, maxAniso: 4, dprCap: 1.5 },
+  { budget: 8.3, figure: 900, grid: 160, coin: 80, label: 2, idleFps: 60, maxAniso: 8, dprCap: 2.0 },
+  { budget: 12.5, figure: 1200, grid: 190, coin: 96, label: 2.5, idleFps: 60, maxAniso: 16, dprCap: 3.0 },
 ];
+
+function tierAniso(cap = 16) {
+  if (!renderer) return 1;
+  const devMax = renderer.capabilities.getMaxAnisotropy();
+  return Math.min(tier().maxAniso, cap, devMax);
+}
+
+/* ---------------------------------------------------------------- CAS Sharpening */
+const CASShader = {
+  name: 'CASShader',
+  uniforms: {
+    tDiffuse: { value: null },
+    resolution: { value: new THREE.Vector2(1, 1) },
+    sharpness: { value: 0.5 },
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform sampler2D tDiffuse;
+    uniform vec2 resolution;
+    uniform float sharpness;
+    varying vec2 vUv;
+
+    void main() {
+      vec2 step = 1.0 / resolution;
+      vec3 a = texture2D(tDiffuse, vUv + vec2(0.0, -step.y)).rgb;
+      vec3 b = texture2D(tDiffuse, vUv + vec2(-step.x, 0.0)).rgb;
+      vec3 c = texture2D(tDiffuse, vUv).rgb;
+      vec3 d = texture2D(tDiffuse, vUv + vec2(step.x, 0.0)).rgb;
+      vec3 e = texture2D(tDiffuse, vUv + vec2(0.0, step.y)).rgb;
+
+      vec3 min_rgb = min(min(min(a, b), min(d, e)), c);
+      vec3 max_rgb = max(max(max(a, b), max(d, e)), c);
+
+      vec3 w = sqrt(min(min_rgb, 2.0 - max_rgb) / max(max_rgb, 0.001));
+      vec3 peak = -1.0 / mix(8.0, 5.0, clamp(sharpness, 0.0, 1.0));
+      vec3 weight = w * peak;
+
+      vec3 color = (a + b + d + e) * weight + c;
+      gl_FragColor = vec4(clamp(color / (1.0 + 4.0 * weight), 0.0, 1.0), 1.0);
+    }
+  `,
+};
+
+/* ---------------------------------------------------------------- Hardware Starting Tier */
+function detectHardwareTier() {
+  try {
+    const saved = localStorage.getItem('unmatched_gpu_tier');
+    if (saved !== null) {
+      const v = parseInt(saved, 10);
+      if (!isNaN(v) && v >= 0 && v <= 3) return v;
+    }
+  } catch (_) {}
+
+  let str = '';
+  try {
+    const gl = renderer ? renderer.getContext() : null;
+    if (gl) {
+      const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+      if (dbg) str = (gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) || '').toLowerCase();
+    }
+  } catch (_) {}
+
+  let t = 2; // Default High
+  if (str) {
+    if (str.includes('rtx') || str.includes('radeon rx') || str.includes('apple m1 pro') ||
+        str.includes('apple m2') || str.includes('apple m3') || str.includes('apple m4') ||
+        str.includes('gtx 1080') || str.includes('gtx 1660') || str.includes('gtx 1070')) {
+      t = 3; // Ultra
+    } else if (str.includes('iris') || str.includes('adreno (tm) 6') || str.includes('adreno (tm) 7') ||
+               str.includes('mali-g7') || str.includes('apple a1') || str.includes('gtx 1050') ||
+               str.includes('gtx 1060')) {
+      t = 2; // High
+    } else if (str.includes('mali') || str.includes('adreno') || str.includes('intel hd') ||
+               str.includes('powervr') || str.includes('swiftshader') || str.includes('llvmpipe')) {
+      t = 0; // Low
+    }
+  } else if ((typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0) || innerWidth < 700) {
+    t = 1; // Medium for mobile
+  }
+  return t;
+}
+
+let warmupFrames = 0, warmupTotalMs = 0, warmupBenchDone = false;
+function stepWarmupBench(frameMs) {
+  if (warmupBenchDone || !loaded) return;
+  warmupFrames++;
+  warmupTotalMs += frameMs;
+  if (warmupFrames >= 75) {
+    warmupBenchDone = true;
+    const avg = warmupTotalMs / warmupFrames;
+    let rec = G.tier;
+    if (avg > 24) rec = Math.max(0, G.tier - 1);
+    else if (avg < 11 && G.tier < 3) rec = Math.min(3, G.tier + 1);
+    try { localStorage.setItem('unmatched_gpu_tier', String(rec)); } catch (_) {}
+    if (rec !== G.tier) {
+      applyGfx({ tier: rec });
+      post({ t: 'tierChanged', tier: rec });
+    }
+  }
+}
 const tier = () => TIER[clamp(G.tier | 0, 0, 3)];
 let prMax = 1, prNow = 1, prMin = .5;
 
@@ -72,7 +179,27 @@ let links = [];
 let homeSide = 1;
 let loaded = false, pendingState = null;
 let dirty = 2;
-const invalidate = (n = 2) => { dirty = Math.max(dirty, n); };
+let loopActive = false, loopId = null;
+
+function wakeLoop() {
+  if (loopActive || (typeof document !== 'undefined' && document.hidden)) return;
+  loopActive = true;
+  nextFrame = performance.now();
+  loopId = requestAnimationFrame(loop);
+}
+
+function pauseLoop() {
+  if (loopId != null) {
+    cancelAnimationFrame(loopId);
+    loopId = null;
+  }
+  loopActive = false;
+}
+
+const invalidate = (n = 2) => {
+  dirty = Math.max(dirty, n);
+  wakeLoop();
+};
 
 function setup() {
   try {
@@ -115,7 +242,17 @@ function setup() {
     buildComposer();
   });
   applyResolution();
-  requestAnimationFrame(loop);
+  wakeLoop();
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        pauseLoop();
+      } else {
+        invalidate(3);
+        wakeLoop();
+      }
+    });
+  }
   return true;
 }
 
@@ -125,7 +262,8 @@ function setup() {
 function applyResolution(keep) {
   const css = Math.max(1, innerWidth * innerHeight);
   const fit = Math.sqrt(tier().budget * 1e6 / css);
-  prMax = clamp(Math.min(DPR() * G.scale, fit, 3), .5, 3);
+  const targetDpr = Math.min(DPR(), tier().dprCap || 3.0);
+  prMax = clamp(Math.min(targetDpr * G.scale, fit, 3), .5, 3);
   prMin = Math.min(prMax, Math.max(.6, prMax * .6));
   if (!keep) gov.level = 0;
   setPixelRatio(G.auto ? clamp(prMax * RES_STEP[govRes()], prMin, prMax) : prMax);
@@ -147,14 +285,17 @@ let built = { bloom: null, ao: null, aa: null, samples: null };
     on, then tone mapping. With no antialiasing and no effects it renders straight out. MSAA
     samples follow the resolution: a 3x phone screen is already supersampled, so it skips them
     (and the memory they'd take); bloom and AO run at no more than the screen's CSS resolution. */
+let casPass = null;
+
 function buildComposer() {
   const fx = fxOn();
   const samples = !G.aa ? 0 : prMax >= 2.5 ? 0 : prMax >= 1.5 ? 2 : 4;
-  if (built.bloom === fx.bloom && built.ao === fx.ao && built.aa === G.aa && built.samples === samples) return;
-  built = { bloom: fx.bloom, ao: fx.ao, aa: G.aa, samples };
+  const needCas = G.auto && (gov.level > 0 || prNow < prMax * 0.98);
+  if (built.bloom === fx.bloom && built.ao === fx.ao && built.aa === G.aa && built.samples === samples && built.cas === needCas) return;
+  built = { bloom: fx.bloom, ao: fx.ao, aa: G.aa, samples, cas: needCas };
   disposeComposer();
   for (const p of pieces.values()) sizePiece(p);
-  if (!fx.bloom && !fx.ao && !G.aa) return;
+  if (!fx.bloom && !fx.ao && !G.aa && !needCas) return;
   const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples });
   composer = new EffectComposer(renderer, rt);
   composer.setPixelRatio(prNow);
@@ -189,6 +330,14 @@ function buildComposer() {
     const bloom = new UnrealBloomPass(new THREE.Vector2(Math.floor(innerWidth / 2), Math.floor(innerHeight / 2)), .32, .5, .88);
     capPassSize(bloom, G.tier >= 3 ? 1.5 : 1);
     composer.addPass(bloom);
+  }
+  if (needCas) {
+    casPass = new ShaderPass(CASShader);
+    casPass.uniforms.resolution.value.set(innerWidth * prNow, innerHeight * prNow);
+    casPass.uniforms.sharpness.value = clamp(0.35 + (1 - RES_STEP[govRes()]) * 0.8, 0.25, 0.8);
+    composer.addPass(casPass);
+  } else {
+    casPass = null;
   }
   composer.addPass(new OutputPass());
   invalidate();
@@ -228,6 +377,9 @@ function applyShadows() {
     o.receiveShadow = on && !o.userData.noShadow;
     for (const m of Array.isArray(o.material) ? o.material : [o.material]) if (m) m.needsUpdate = true;
   });
+  for (const p of pieces.values()) {
+    if (p.blobShadow) p.blobShadow.visible = G.shadows === 0;
+  }
   renderer.shadowMap.needsUpdate = true;
   invalidate();
 }
@@ -237,7 +389,17 @@ function applyGfx(g, first) {
   const old = { ...G };
   Object.assign(G, g || {});
   if (!renderer) return;
-  if (first || old.scale !== G.scale || old.tier !== G.tier || old.auto !== G.auto) applyResolution();
+  if (first || old.scale !== G.scale || old.tier !== G.tier || old.auto !== G.auto) {
+    applyResolution();
+    if (scene) {
+      scene.traverse(o => {
+        if (!o.isMesh || !o.material) return;
+        for (const m of [].concat(o.material)) {
+          if (m && m.map) { m.map.anisotropy = tierAniso(); m.map.needsUpdate = true; }
+        }
+      });
+    }
+  }
   if (first || old.shadows !== G.shadows) applyShadows();
   buildComposer();
   renderer.toneMappingExposure = G.brightness;
@@ -249,7 +411,10 @@ function applyGfx(g, first) {
 
 /* ---------------------------------------------------------------- loading */
 async function init(msg) {
-  Object.assign(G, msg.gfx || {});
+  const hardwareTier = detectHardwareTier();
+  const incomingGfx = { ...(msg.gfx || {}) };
+  if (incomingGfx.tier == null) incomingGfx.tier = hardwareTier;
+  Object.assign(G, incomingGfx);
   if (!setup()) return;
   homeSide = msg.home || 1;
   for (const s of msg.spaces) spaces.set(s.id, { x: s.x, z: s.y, top: .003 });
@@ -270,7 +435,7 @@ async function init(msg) {
     o.userData.casts = isUnder(o, 'Scenery');
     for (const m of [].concat(o.material || [])) {
       if (!m.map) continue;
-      m.map.anisotropy = Math.min(16, aniso);
+      m.map.anisotropy = tierAniso(16);
       m.map.minFilter = THREE.LinearMipmapLinearFilter;
       m.map.needsUpdate = true;
     }
@@ -381,7 +546,7 @@ function feltTexture() {
       }
       g.putImageData(img, 0, 0);
     });
-    feltTex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+    feltTex.anisotropy = tierAniso(8);
   }
   return feltTex;
 }
@@ -399,7 +564,7 @@ async function artBoard(art) {
   const tex = await new THREE.TextureLoader().loadAsync(art.file);
   post({ t: 'progress', p: 1 });
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = Math.min(16, renderer.capabilities.getMaxAnisotropy());
+  tex.anisotropy = tierAniso(16);
   const W = art.w / art.unitPx, D = art.h / art.unitPx, T = .14;
   const edge = new THREE.MeshStandardMaterial({ color: '#1d1c1a', roughness: .8 });
   const top = new THREE.MeshStandardMaterial({ map: tex, roughness: .82 });
@@ -710,6 +875,17 @@ const RETICLE = canvasTex(256, 256, (g, w) => {
   }
 });
 
+const BLOB_SHADOW_TEX = canvasTex(128, 128, (g, w) => {
+  const r = g.createRadialGradient(w / 2, w / 2, 0, w / 2, w / 2, w / 2);
+  r.addColorStop(0, 'rgba(0,0,0,0.68)');
+  r.addColorStop(0.4, 'rgba(0,0,0,0.36)');
+  r.addColorStop(0.8, 'rgba(0,0,0,0.08)');
+  r.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = r;
+  g.fillRect(0, 0, w, w);
+});
+const blobShadowGeo = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+
 let fontFamily = 'sans-serif';
 const fontReady = (async () => {
   try {
@@ -948,7 +1124,7 @@ function loadTex(url) {
     const sharp = sharpened(t.image, tier().figure);
     if (sharp) { t.dispose(); t = new THREE.CanvasTexture(sharp); }
     t.colorSpace = THREE.SRGBColorSpace;
-    t.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+    t.anisotropy = tierAniso(8);
     t.userData.shared = true; // cached across pieces: never disposed with one
     return t;
   });
@@ -1130,11 +1306,21 @@ function makePiece(f) {
   const base = new THREE.Mesh(baseGeo, basic(color, .9));
   base.scale.setScalar(rad * 1.45);
   base.position.y = .006;
+  const blobShadow = new THREE.Mesh(blobShadowGeo, new THREE.MeshBasicMaterial({ map: BLOB_SHADOW_TEX, transparent: true, opacity: .78, depthWrite: false, toneMapped: false }));
+  blobShadow.scale.setScalar(rad * 3.4);
+  blobShadow.position.y = .003;
+  blobShadow.renderOrder = 1;
+  blobShadow.visible = G.shadows === 0;
   const ring = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ map: RING, color: SELECT, transparent: true, depthWrite: false, toneMapped: false }));
   ring.scale.setScalar(rad * 1.9);
   ring.position.y = .068;
   ring.renderOrder = 3;
   ring.visible = false;
+  const fakeGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: SELECT, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: .65, toneMapped: false }));
+  fakeGlow.position.y = .069;
+  fakeGlow.scale.setScalar(rad * 3.4);
+  fakeGlow.renderOrder = 2;
+  fakeGlow.visible = false;
   const reticle = new THREE.Sprite(new THREE.SpriteMaterial({ map: RETICLE, depthTest: false, transparent: true, toneMapped: false }));
   reticle.position.y = orb.position.y;
   reticle.scale.setScalar(rad * 4.2);
@@ -1151,9 +1337,9 @@ function makePiece(f) {
   label.position.y = .02;
   label.renderOrder = 10;
   label.userData.fid = f.id;
-  group.add(base, ring, orb, glow, reticle, label);
+  group.add(base, blobShadow, ring, fakeGlow, orb, glow, reticle, label);
   scene.add(group);
-  const p = { id: f.id, group, orb, glow, base, ring, reticle, label, rad, hitR: rad * 1.5, color: f.color, name: f.name, hp: f.hp, hero: f.hero, ranged: !!f.ranged, space: f.space, anim: null, items: f.items || [], itemsKey: JSON.stringify(f.items || []) };
+  const p = { id: f.id, group, orb, glow, base, ring, fakeGlow, blobShadow, reticle, label, rad, hitR: rad * 1.5, color: f.color, name: f.name, hp: f.hp, hero: f.hero, ranged: !!f.ranged, space: f.space, anim: null, items: f.items || [], itemsKey: JSON.stringify(f.items || []) };
   // the tag hangs off the left of the base (the orb's ring until the figure's podium arrives)
   p.tagGap = rad * 1.5;
   sizePiece(p);
@@ -1389,6 +1575,10 @@ function applyState(s) {
     const pend = marks.pendingFighter === p.id, subj = marks.subject === p.id;
     p.ring.visible = sel.has(p.id) || pend || subj;
     p.ring.material.color.setHex(pend || subj ? BONE : SELECT);
+    if (p.fakeGlow) {
+      p.fakeGlow.visible = p.ring.visible && !fxOn().bloom;
+      p.fakeGlow.material.color.copy(p.ring.material.color);
+    }
     p.ring.userData.pulse = sel.has(p.id) && !pend;
     p.reticle.visible = tgt.has(p.id);
     p.glow.material.opacity = focus.has(p.id) ? .95 : .55;
@@ -1480,10 +1670,12 @@ const FRAME_MS = 1000 / 60;
 let nextFrame = 0, lastRender = 0, lastStep = 0, frameNo = 0;
 
 function loop(now) {
-  requestAnimationFrame(loop);
   // Frame pacing: at most 60 frames a second (a 90/120/144 Hz screen would otherwise draw two or
   // more frames per one that's needed, halving the headroom). Ultra is left uncapped.
-  if (G.tier < 3 && now < nextFrame - 2) return;
+  if (G.tier < 3 && now < nextFrame - 2) {
+    if (!document.hidden) loopId = requestAnimationFrame(loop);
+    return;
+  }
   let busy = false, motion = dirty > 0, moving = false;
 
   if (camTween) {
@@ -1518,7 +1710,11 @@ function loop(now) {
     const ph = .5 - .5 * Math.cos(now / 900 * TAU);
     for (const m of pulseMats) m.opacity = .22 + .3 * ph;
     for (const p of pieces.values()) {
-      if (p.ring.visible) p.ring.scale.setScalar(p.rad * (p.ring.userData.pulse ? 1.85 + .2 * ph : 1.9));
+      if (p.ring.visible) {
+        const s = p.rad * (p.ring.userData.pulse ? 1.85 + .2 * ph : 1.9);
+        p.ring.scale.setScalar(s);
+        if (p.fakeGlow) p.fakeGlow.scale.setScalar(s * 1.8);
+      }
       if (p.reticle.visible) p.reticle.scale.setScalar(p.rad * (4 + .5 * ph));
     }
   }
@@ -1581,6 +1777,16 @@ function loop(now) {
   if (G.fps && now - fpsStart >= 1000) {
     post({ t: 'fps', v: Math.round(fpsFrames * 1000 / (now - fpsStart)) });
     fpsFrames = 0; fpsStart = now;
+  }
+  if (draw) stepWarmupBench(now - (lastStep || now));
+
+  const anyMoving = Array.from(pieces.values()).some(p => p.anim != null);
+  const stillActive = (camTween != null) || fling.lengthSq() > 0 || fxList.length > 0 ||
+                      (now < shakeUntil) || (dirty > 0) || pulsing || anyMoving;
+  if (!document.hidden && stillActive) {
+    loopId = requestAnimationFrame(loop);
+  } else {
+    pauseLoop();
   }
 }
 let fpsFrames = 0, fpsStart = 0;

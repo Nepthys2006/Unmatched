@@ -109,7 +109,48 @@ const int = (a, b) => a + Math.floor(rnd() * (b - a + 1));
     const s = await p.evaluate(() => window.board.stats());
     memory.push(s);
   }
-  // The loop is still drawing: a change gets a new frame.
+
+  // --- Extended Checks ---
+
+  // 1. Check each quality tier (0..3)
+  for (let t = 0; t <= 3; t++) {
+    await send({ t: 'gfx', gfx: { tier: t, scale: t === 0 ? 0.75 : 1, auto: true } });
+    await p.waitForTimeout(150);
+    const st = await p.evaluate(() => window.board.stats());
+    if (st.governor == null) errors.push(`tier ${t} stats failed`);
+  }
+
+  // 2. Sharpening pass active on downscale
+  await send({ t: 'gfx', gfx: { scale: 0.6, auto: true, tier: 2 } });
+  await p.waitForTimeout(250);
+  const casStats = await p.evaluate(() => window.board.stats());
+  if (!casStats.cas) errors.push('CAS sharpening pass should be active when downscaled');
+
+  // 3. Render-on-demand: verify 0 frames drawn when stationary / idle
+  await p.waitForTimeout(800);
+  const idleFrames1 = (await p.evaluate(() => window.board.stats())).frames;
+  await p.waitForTimeout(600);
+  const idleFrames2 = (await p.evaluate(() => window.board.stats())).frames;
+  if (idleFrames2 > idleFrames1) {
+    errors.push(`Render-on-demand drew ${idleFrames2 - idleFrames1} frames while idle`);
+  }
+
+  // 4. Page visibility cycle: zero frames drawn when page is hidden
+  await p.evaluate(() => Object.defineProperty(document, 'hidden', { value: true, configurable: true }));
+  await p.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  await p.waitForTimeout(300);
+  const hiddenFrames1 = (await p.evaluate(() => window.board.stats())).frames;
+  await p.waitForTimeout(400);
+  const hiddenFrames2 = (await p.evaluate(() => window.board.stats())).frames;
+  if (hiddenFrames2 > hiddenFrames1) {
+    errors.push(`Render loop rendered ${hiddenFrames2 - hiddenFrames1} frames while document was hidden`);
+  }
+  // Resume visibility
+  await p.evaluate(() => Object.defineProperty(document, 'hidden', { value: false, configurable: true }));
+  await p.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  await p.waitForTimeout(300);
+
+  // 5. Active camera move wakes render loop
   const before = (await p.evaluate(() => window.board.stats())).frames;
   await send({ t: 'cam', op: 'turn', a: 0.5, ms: 300 });
   await p.waitForTimeout(1500);

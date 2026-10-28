@@ -125,6 +125,17 @@ class _WindowsHostState extends State<_WindowsHost> {
   final ww.WebviewController _wv = ww.WebviewController();
   StreamSubscription<dynamic>? _sub;
   bool _ready = false;
+  static bool _envInited = false;
+
+  static Future<void> _ensureEnv() async {
+    if (_envInited) return;
+    _envInited = true;
+    try {
+      await ww.WebviewController.initializeEnvironment(
+        additionalArguments: '--force-high-performance-gpu --enable-gpu-rasterization',
+      );
+    } catch (_) {}
+  }
 
   @override
   void initState() {
@@ -134,6 +145,7 @@ class _WindowsHostState extends State<_WindowsHost> {
 
   Future<void> _load() async {
     try {
+      await _ensureEnv();
       await _wv.initialize();
       await _wv.setBackgroundColor(Palette.bgDeep);
       _sub = _wv.webMessage.listen(widget.c.receive);
