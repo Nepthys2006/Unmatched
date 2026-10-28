@@ -1,13 +1,14 @@
 // The multiplayer chat: cleaning what people type, the message log (order, duplicates, unread,
-// lost messages), and whole lobbies over real sockets: messages relayed by the host to everyone
+// lost messages), and whole lobbies (over an in-memory network, so it never competes with the
+// socket tests for the LAN port): messages relayed by the host to everyone
 // with their seat and name, history for players who join later, a lost message fetched again,
 // the flood limit, the chat carried on into the match, and every message handed to the server
 // store (online) while the lobby lives.
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:unmatched_game/net/chat.dart';
-import 'package:unmatched_game/net/lan.dart';
 import 'package:unmatched_game/net/link.dart';
 import 'package:unmatched_game/net/session.dart';
 import 'package:unmatched_game/ui/match/match_config.dart';
@@ -17,53 +18,96 @@ import 'support.dart';
 
 ChatMessage msg(int id, {int seat = 1, String text = 'hi'}) => ChatMessage(id: id, seat: seat, name: 'P$seat', text: text, at: DateTime(2026));
 
-/// The host's link, keeping chat messages like the online host does.
-class KeepingHost implements HostLink, ChatKeeper {
-  KeepingHost(this.inner);
-  final LanHost inner;
+/// An in-memory network: the host's side. Every message goes through JSON and arrives a little
+/// later, as on a real connection. It keeps chat messages like the online host does.
+class MemoryHost implements HostLink, ChatKeeper {
   final kept = <Msg>[];
+  final _events = StreamController<LinkEvent>.broadcast();
+  final Map<String, MemoryClient> _peers = {};
+  var _n = 0;
+
+  /// A new player connecting; [lose] says which chat messages get lost on the way to them.
+  MemoryClient connect({bool Function(Msg m)? lose}) {
+    final c = MemoryClient(this, 'peer${++_n}', lose ?? (_) => false);
+    _peers[c.id] = c;
+    _deliver(() => _events.add(PeerJoined(c.id)));
+    return c;
+  }
+
+  static Msg wire(Msg m) => (jsonDecode(jsonEncode(m)) as Map).cast<String, Object?>();
+  static void _deliver(void Function() f) => Timer(const Duration(milliseconds: 2), f);
+
+  void _fromPeer(String id, Msg m) => _deliver(() => _events.add(PeerMessage(id, wire(m))));
 
   @override
   Future<void> keepChat(Msg m) async => kept.add(m);
   @override
-  Stream<LinkEvent> get events => inner.events;
+  Stream<LinkEvent> get events => _events.stream;
   @override
-  void send(String peer, Msg m) => inner.send(peer, m);
+  void send(String peer, Msg m) => _peers[peer]?._receive(wire(m));
   @override
-  void broadcast(Msg m) => inner.broadcast(m);
+  void broadcast(Msg m) {
+    for (final c in _peers.values) {
+      c._receive(wire(m));
+    }
+  }
+
   @override
-  void drop(String peer) => inner.drop(peer);
+  void drop(String peer) => _peers.remove(peer)?._end('dropped');
   @override
-  String get address => inner.address;
+  String get address => 'memory';
   @override
-  void lobbyChanged(LobbyInfo info) => inner.lobbyChanged(info);
+  void lobbyChanged(LobbyInfo info) {}
   @override
-  Future<void> finished({String? winner, required List<String> players}) => inner.finished(winner: winner, players: players);
+  Future<void> finished({String? winner, required List<String> players}) async {}
   @override
-  Future<void> close() => inner.close();
+  Future<void> close() async {
+    for (final c in _peers.values.toList()) {
+      c._end('The host left.');
+    }
+    _peers.clear();
+  }
 }
 
-/// A player's link that loses the chat messages [lose] says to (once each).
-class LossyClient implements ClientLink {
-  LossyClient(this.inner, this.lose);
-  final ClientLink inner;
+/// A player's side of the in-memory network.
+class MemoryClient implements ClientLink {
+  MemoryClient(this.host, this.id, this.lose);
+  final MemoryHost host;
+  final String id;
   final bool Function(Msg m) lose;
   final lost = <Msg>[];
+  final _messages = StreamController<Msg>.broadcast();
+  final _done = Completer<String?>();
 
-  @override
-  late final Stream<Msg> messages = inner.messages.where((m) {
+  void _receive(Msg m) {
     if (m['t'] == 'chat' && lose(m) && !lost.any((x) => (x['m'] as Map)['id'] == (m['m'] as Map)['id'])) {
       lost.add(m);
-      return false;
+      return;
     }
-    return true;
-  }).asBroadcastStream();
+    MemoryHost._deliver(() {
+      if (!_messages.isClosed) _messages.add(m);
+    });
+  }
+
+  void _end(String why) {
+    if (!_done.isCompleted) _done.complete(why);
+  }
+
   @override
-  Future<String?> get done => inner.done;
+  Stream<Msg> get messages => _messages.stream;
   @override
-  void send(Msg m) => inner.send(m);
+  Future<String?> get done => _done.future;
   @override
-  Future<void> close() => inner.close();
+  void send(Msg m) {
+    if (!_done.isCompleted) host._fromPeer(id, m);
+  }
+
+  @override
+  Future<void> close() async {
+    _end('');
+    host._peers.remove(id);
+    MemoryHost._deliver(() => host._events.add(PeerLeft(id)));
+  }
 }
 
 List<String> texts(LobbySession s) => [for (final m in s.chat.messages) m.text];
@@ -129,15 +173,15 @@ void main() {
   });
 
   group('in a lobby', () {
-    late KeepingHost link;
+    late MemoryHost link;
     late HostSession host;
     final clients = <ClientSession>[];
-    final links = <LossyClient>[];
+    final links = <MemoryClient>[];
     final data = loadData();
 
     Future<ClientSession> join(String name, {bool Function(Msg m)? lose}) async {
-      final l = LossyClient(await joinLan('127.0.0.1'), lose ?? (_) => false);
-      final c = ClientSession(l, data, name: name, dataVersion: 'test', address: '127.0.0.1');
+      final l = link.connect(lose: lose);
+      final c = ClientSession(l, data, name: name, dataVersion: 'test', address: 'memory');
       links.add(l);
       clients.add(c);
       await until(() => c.mySeat != null && c.lobby != null);
@@ -147,7 +191,7 @@ void main() {
     setUp(() async {
       clients.clear();
       links.clear();
-      link = KeepingHost(await LanHost.start(describe: () => {'name': 'Host'}));
+      link = MemoryHost();
       host = HostSession(link, data, name: 'Host', dataVersion: 'test');
       expect(host.setMode(GameMode.ffa, 4), isTrue);
     });
