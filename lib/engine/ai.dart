@@ -1,7 +1,10 @@
-/// A rules-following, tournament-grade computer opponent. It answers the same prompts a human
-/// does, judging each choice using strategic heuristics, rule-compliant card counting,
-/// probabilistic threat modeling, optimal positioning/kiting, and action economy (it never
-/// peeks at hidden cards it hasn't legitimately seen).
+/// A rules-following computer opponent. It answers the same prompts a human does, judging each
+/// choice with heuristics: card counting from public information (it never peeks at hidden
+/// cards it hasn't legitimately seen), the odds of the opponent's hand, where each enemy can
+/// strike next turn, and when a BOOST actually buys something.
+///
+/// Measure any change with `dart run tool/ai_arena.dart` (whole AI-vs-AI matches against a
+/// frozen copy of an older AI) and watch one match with `dart run tool/ai_watch.dart`.
 library;
 
 import 'dart:math';
@@ -12,6 +15,9 @@ import 'game.dart';
 import 'prompt.dart';
 import 'state.dart';
 
+/// Insane plays its best every time; the others also make careless choices (any legal one)
+/// 10% (Hard), 25% (Medium) or 55% (Easy) of the time. In the arena Insane beats Hard 59%,
+/// Medium 70% and Easy 87% of games.
 enum AiLevel { easy, medium, hard, insane }
 
 class AiAgent implements Agent {
@@ -34,6 +40,15 @@ class AiAgent implements Agent {
 
   double _jitter() => _noise == 0.0 ? 0.0 : (_rng.nextDouble() - 0.5) * _noise;
 
+  /// How often a choice is a careless one (any legal choice). Noise alone barely changed any
+  /// decision: every level won 50% against Insane in the arena (tool/ai_arena.dart).
+  double get _blunder => switch (level) {
+        AiLevel.easy => 0.55,
+        AiLevel.medium => 0.25,
+        AiLevel.hard => 0.10,
+        AiLevel.insane => 0.0,
+      };
+
   @override
   Future<List<int>> decide(Game g, Prompt p) async {
     return _decide(g, p);
@@ -42,6 +57,9 @@ class AiAgent implements Agent {
   List<int> _decide(Game g, Prompt p) {
     final n = p.choices.length;
     if (n == 0) return const [];
+    if (_blunder > 0 && const {Ask.action, Ask.card, Ask.space, Ask.fighter}.contains(p.ask) && _rng.nextDouble() < _blunder) {
+      return p.optional && _rng.nextInt(n + 1) == n ? const [] : [_rng.nextInt(n)];
+    }
     switch (p.ask) {
       case Ask.action:
         return [_best(n, (i) => _actionScore(g, p.player, p.choices[i].value as ActionChoice))];
@@ -201,44 +219,21 @@ class AiAgent implements Agent {
         .where((x) => x.def.canDefend && p.player.alive.any((f) => p.player.script.fighterMayUse(x, f)))
         .length;
 
+    final hasFeint = defHand > 0 && tracker.remainingFeints() > 0;
     return [
       _best(cards.length, (i) {
         final card = cards[i];
         final v = _estimatedValue(g, c, c.attacker, card);
         final cardWorth = worth(card, p.player);
 
-        // Case 1: Defender hand is empty - they CANNOT defend!
-        if (defHand == 0) {
-          if (v >= defFighter.hp) {
-            // Lethal blow! Pick lowest-worth card that still kills
-            return (defFighter.isHero ? 200.0 : 80.0) + (v - defFighter.hp) * 0.1 - cardWorth * 0.2;
-          }
-          return v * 3.5 + _effectBonus(card, attacking: true, me: p.player) - cardWorth * 0.15;
-        }
-
-        // Case 2: Defender has cards in hand.
-        final maxDef = tracker.maxDefense(defFighter);
-        final expDef = tracker.expectedDefense(defFighter);
-        final hasFeint = tracker.remainingFeints() > 0;
-
-        // Guaranteed lethal even against their maximum possible defense!
-        if (v - maxDef >= defFighter.hp && defFighter.isHero) {
-          return 150.0 - cardWorth * 0.1;
-        }
-
-        // Expected lethal damage
-        if (v - expDef >= defFighter.hp && defFighter.isHero) {
-          return 90.0 + (v - expDef) * 2.0 - cardWorth * 0.15;
-        }
-
-        final expectedDmg = max(0.0, v - expDef);
-        var score = expectedDmg * 2.8 + _effectBonus(card, attacking: true, me: p.player);
+        // The defender's best card is uncertain: weigh each outcome by its chance, from the
+        // cards they may hold and how many they hold.
+        var score = tracker.expectedDamage(defFighter, v) * 2.8 +
+            tracker.killChance(defFighter, v) * _killValue(defFighter) +
+            _effectBonus(card, attacking: true, me: p.player);
 
         // High printed values (>= 5) punch through Feint safely
         if (v >= 5 && hasFeint) score += 2.0;
-
-        // Bonus for targeting a hero
-        if (defFighter.isHero) score += 3.0;
 
         // Preserve versatile cards if we are low on defense
         if (card.def.type == CardType.versatile && currentDefCards <= 1) {
@@ -249,6 +244,22 @@ class AiAgent implements Agent {
         return score;
       })
     ];
+  }
+
+  /// What one damage to [f] is worth (1 = one damage to a healthy hero).
+  double _dmgWeight(Fighter f) {
+    if (!f.isHero) return 0.5;
+    return f.hp <= 6 ? 1.5 : 1.0;
+  }
+
+  /// What spending [c] on a BOOST costs, in damage. Cheap: in the arena, keeping cards back
+  /// (skipping defenses, saving boosts) lost more games than spending them.
+  double _boostCost(Card c, Player p) => worth(c, p) * 0.19;
+
+  /// What defeating [f] is worth: the game, if it's the last hero of its player.
+  double _killValue(Fighter f) {
+    if (f.isHero) return f.owner.fighters.where((x) => x.isHero && x.alive).length <= 1 ? 120.0 : 30.0;
+    return 6.0 + f.maxHp;
   }
 
   List<int> _pickDefenseCard(Game g, Prompt p, List<Card> cards) {
@@ -268,7 +279,7 @@ class AiAgent implements Agent {
       maxThreat = threat;
       threatKnown = true;
     } else {
-      threat = tracker.expectedAttack(attFighter).round();
+      threat = tracker.expectedAttack(attFighter, extra: 1).round();
       maxThreat = tracker.maxAttack(attFighter);
       // Account for modifiers like King Arthur's boost
       final extraBoost = c.attacker.ops.fold(0, (a, o) => a + (o.isSet ? 0 : o.amount));
@@ -362,14 +373,12 @@ class AiAgent implements Agent {
           if (p.optional) return const []; // Already lethal unblocked!
         }
 
-        // Boost if it achieves lethal or overcomes expected defense
-        return [
-          _best(cards.length, (i) {
-            final b = g.boostValueOf(cards[i]);
-            final w = worth(cards[i], me);
-            return b * 2.0 - w;
-          })
-        ];
+        // Worth it only if the extra damage (or chance to defeat) beats keeping the card.
+        final tracker = _tracker(g, me, target.owner);
+        double value(int v) => tracker.expectedDamage(target, v) * _dmgWeight(target) + tracker.killChance(target, v) * _killValue(target);
+        double gain(int i) => value(currentVal + g.boostValueOf(cards[i])) - value(currentVal) - _boostCost(cards[i], me);
+        final i = _best(cards.length, gain);
+        return gain(i) > 0 || !p.optional ? [i] : const [];
       } else {
         // Defense boost: boost to prevent lethal damage
         final currentDef = g.valueOf(s).total;
@@ -392,34 +401,31 @@ class AiAgent implements Agent {
       final hero = me.heroFighter;
       final foes = g.enemyFighters(me).where((e) => e.onBoard).toList();
 
-      // Check if boosting allows reaching an enemy to attack with an available attack card
+      // Boosting must buy something the normal move doesn't (boosting whenever the hand was big,
+      // or to "escape" without checking the extra spaces reach safety, wasted cards).
+      final most = cards.map(g.boostValueOf).fold(0, max);
+
+      // Reach a space to attack from, keeping an attack card to attack with.
       bool canReachAttack = false;
       if (g.actions > 0 && foes.isNotEmpty) {
         for (final f in me.onBoard) {
-          final hasAttack = me.hand.where((c) => c != cards.first && g.canAttackWith(c, f)).isNotEmpty;
-          if (!hasAttack) continue;
-          final baseMove = g.moveAllowance(f);
-          for (final c in cards) {
-            final boostedMove = baseMove + g.boostValueOf(c);
-            for (final foe in foes) {
-              final d = g.board.distance(f.space!, foe.space!);
-              final reachNeeded = f.isRanged ? 1 : 1;
-              if (d > baseMove && d <= boostedMove + reachNeeded) {
-                canReachAttack = true;
-                break;
-              }
-            }
-            if (canReachAttack) break;
+          final attacks = me.hand.where((c) => g.canAttackWith(c, f)).toList();
+          if (attacks.isEmpty || (attacks.length == 1 && cards.length == 1 && cards.single == attacks.single)) continue;
+          final spots = _strikeSpots(g, f, foes);
+          if (g.reachable(f, g.moveAllowance(f)).keys.any(spots.contains)) continue;
+          if (g.reachable(f, g.moveAllowance(f) + most).keys.any(spots.contains)) {
+            canReachAttack = true;
+            break;
           }
-          if (canReachAttack) break;
         }
       }
 
-      // Check if hero is at low health and needs extra movement to escape threat
+      // A hurt hero ending the turn: reach a space no enemy can strike next turn.
       bool needEscape = false;
-      if (hero.onBoard && hero.hp <= 5 && foes.isNotEmpty) {
-        final closestFoeDist = foes.map((e) => g.board.distance(hero.space!, e.space!)).fold(99, min);
-        if (closestFoeDist <= 3) needEscape = true;
+      if (g.actions == 0 && hero.onBoard && hero.hp <= 6 && foes.isNotEmpty) {
+        bool safe(int s) => foes.every((e) => !_strikeZones(g, e).$2.contains(s));
+        needEscape = !g.reachable(hero, g.moveAllowance(hero)).keys.any(safe) &&
+            g.reachable(hero, g.moveAllowance(hero) + most).keys.any(safe);
       }
 
       // Overfull hand: boost to cycle cards and avoid hand limit discard
@@ -428,7 +434,7 @@ class AiAgent implements Agent {
       // Has dead cards (sidekick dead)
       final hasDeadCard = cards.any((c) => !me.alive.any((f) => me.script.fighterMayUse(c, f)));
 
-      if (!canReachAttack && !needEscape && !overflow && !hasDeadCard && handLen <= 4) {
+      if (!canReachAttack && !needEscape && !overflow && !hasDeadCard) {
         return const []; // Conserve hand cards!
       }
     }
@@ -575,7 +581,7 @@ class AiAgent implements Agent {
     var score = 0.0;
 
     for (final e in foes) {
-      final d = g.board.distance(s, e.space!);
+      final d = _walk(g, s, e.space!);
       final adj = g.board.adjacent(s, e.space!);
       final sharesZone = g.board.sharesZone(s, e.space!);
       final canHit = adj || (f.isRanged && sharesZone);
@@ -645,7 +651,23 @@ class AiAgent implements Agent {
       }
     }
 
-    // 4. Sidekick Meat-Shielding
+    // 4. Ending the turn where an enemy can strike next turn: twice if they need not move.
+    // (The strongest single change in the arena: 50% -> 55% against the old AI.)
+    if (actionsLeft == 0) {
+      final w = f.isHero ? (f.hp <= 6 ? 2.0 : 1.0) : 0.4;
+      for (final e in foes) {
+        if (e.owner.hand.isEmpty && e.owner.deck.isEmpty) continue;
+        final (now, later) = _strikeZones(g, e);
+        final hit = _tracker(g, f.owner, e.owner).expectedAttack(e, extra: 1);
+        if (now.contains(s)) {
+          score -= 8 * w * hit;
+        } else if (later.contains(s)) {
+          score -= 4 * w * hit;
+        }
+      }
+    }
+
+    // 5. Sidekick Meat-Shielding
     if (f.isSidekick && myHero.onBoard && f != myHero) {
       final foeHero = foes.firstWhere((e) => e.isHero, orElse: () => foes.first);
       final heroDistToFoe = g.board.distance(myHero.space!, foeHero.space!);
@@ -662,13 +684,62 @@ class AiAgent implements Agent {
       }
     }
 
-    // 5. Zone Cover against Ranged Opponents
+    // 6. Zone Cover against Ranged Opponents
     if (foes.any((e) => e.isRanged)) {
       final zoneCount = g.board.zoneCount(s);
       score += (3 - zoneCount) * 0.6; // Single zone provides better cover than multi-zone
     }
 
     return score;
+  }
+
+  /// Spaces from which [f] could attack one of [foes].
+  Set<int> _strikeSpots(Game g, Fighter f, Iterable<Fighter> foes) => {
+        for (final foe in foes) ...{...g.board.neighbours(foe.space!), if (f.isRanged) ...g.board.zoneOf(foe.space!)},
+      };
+
+  static final _walks = Expando<Map<int, Map<int, int>>>();
+
+  /// Movement needed to walk from [a] to [b], ignoring fighters: arrows only go forwards and
+  /// "+1" paths cost 2.
+  int _walk(Game g, int a, int b) {
+    final byStart = _walks[g.board.def] ??= {};
+    final dist = byStart[a] ??= () {
+      final d = <int, int>{a: 0};
+      final todo = [a];
+      while (todo.isNotEmpty) {
+        todo.sort((x, y) => d[y]!.compareTo(d[x]!));
+        final s = todo.removeLast();
+        for (final n in g.board.stepsFrom(s)) {
+          final c = d[s]! + g.board.stepCost(s, n);
+          if (c < (d[n] ?? 1 << 20)) {
+            d[n] = c;
+            todo.add(n);
+          }
+        }
+      }
+      return d;
+    }();
+    return dist[b] ?? 1 << 20;
+  }
+
+  final Map<Fighter, (int, int?, Set<int>, Set<int>)> _zones = {};
+
+  /// Where [e] can attack from: now (without moving), and after one maneuver (its move
+  /// value plus a typical BOOST, following arrows and +1 paths and blocked by fighters).
+  (Set<int>, Set<int>) _strikeZones(Game g, Fighter e) {
+    final key = (g.log.length, e.space);
+    final cached = _zones[e];
+    if (cached != null && cached.$1 == key.$1 && cached.$2 == key.$2) return (cached.$3, cached.$4);
+    Set<int> from(int s) => {s, ...g.board.neighbours(s), if (e.isRanged) ...g.board.zoneOf(s)};
+    final now = from(e.space!);
+    final later = <int>{...now};
+    final boost = e.owner.hand.isEmpty ? 0 : 1;
+    for (final s in g.reachable(e, g.moveAllowance(e) + boost).keys) {
+      later.addAll(from(s));
+    }
+    _zones[e] = (key.$1, key.$2, now, later);
+    return (now, later);
   }
 
   /// How dangerous opposing fighter [f] would be to [me] in space [s].
@@ -709,10 +780,11 @@ class AiAgent implements Agent {
         if (cards.isEmpty) return -99.0;
 
         final tracker = _tracker(g, me, t.owner);
-        final defHand = t.owner.hand.length;
 
         // Target with 0 cards in hand is completely defenseless!
-        if (defHand == 0) {
+        // (Scoring with the exact odds of their best defense, as card choice does, lost games:
+        // the weights below are tuned to these rougher estimates.)
+        if (t.owner.hand.isEmpty) {
           var bestDmg = 0;
           for (final c in cards) {
             final v = _estimatedValue(g, null, Side(Combat(f, t), true, f), c);
@@ -723,8 +795,7 @@ class AiAgent implements Agent {
           }
           return bestDmg * 3.5 + 5.0 + (t.isHero ? 4.0 : 1.0);
         }
-
-        final expDef = tracker.expectedDefense(t);
+        final expDef = tracker.averageDefense(t);
         final maxDef = tracker.maxDefense(t);
 
         var bestScore = double.negativeInfinity;
@@ -829,13 +900,8 @@ class AiAgent implements Agent {
             bool canReach = false;
             for (final f in me.onBoard) {
               if (me.hand.where((c) => g.canAttackWith(c, f)).isEmpty) continue;
-              final move = g.moveAllowance(f) + 1;
-              for (final foe in foes) {
-                if (g.board.distance(f.space!, foe.space!) <= move) {
-                  canReach = true;
-                  break;
-                }
-              }
+              // Somewhere this fighter can actually move to (ranged: in a shared zone).
+              canReach = _strikeSpots(g, f, foes).any(g.reachable(f, g.moveAllowance(f)).containsKey);
               if (canReach) break;
             }
             if (canReach) s += 6.0; // Maneuver and Strike!
@@ -998,24 +1064,68 @@ class _OpponentTracker {
     }).toList();
   }
 
-  double expectedDefense(Fighter f) {
+  /// Cards that may be in the opponent's hand: their deck and hand, as far as [me] can tell.
+  int get _pool => _remaining.length;
+
+  /// Chance that [h] cards drawn from [n] hold none of [k] particular ones.
+  static double noneOf(int n, int k, int h) {
+    if (k <= 0 || h <= 0) return 1;
+    if (n - k < h) return 0;
+    var p = 1.0;
+    for (var i = 0; i < h; i++) {
+      p *= (n - k - i) / (n - i);
+    }
+    return p;
+  }
+
+  static bool _stopsAll(CardDef c) => c.text.values.any((t) => t.toLowerCase().contains('prevent all damage'));
+
+  /// Chance that [f]'s best defense (0 without one) is at most [x], from the opponent's hand.
+  double defenseAtMost(Fighter f, int x) {
+    if (x < 0) return 0;
+    final k = defenseOptionsFor(f).where((c) => (c.value ?? 0) > x || _stopsAll(c)).length;
+    return noneOf(_pool, k, min(opponent.hand.length, _pool));
+  }
+
+  /// Expected damage an attack worth [attack] deals to [f] if they defend with their best card.
+  double expectedDamage(Fighter f, int attack) {
+    var e = 0.0;
+    for (var d = 1; d <= attack; d++) {
+      e += defenseAtMost(f, attack - d);
+    }
+    return e;
+  }
+
+  /// Chance an attack worth [attack] defeats [f].
+  double killChance(Fighter f, int attack) => attack < f.hp ? 0 : defenseAtMost(f, attack - f.hp);
+
+  /// The average value of the defense cards [f] may still get (ignoring hand size).
+  double averageDefense(Fighter f) {
     final defs = defenseOptionsFor(f);
     if (defs.isEmpty) return 0.0;
-    final total = defs.fold<int>(0, (sum, c) => sum + (c.value ?? 0));
-    return total / defs.length;
+    return defs.fold<int>(0, (sum, c) => sum + (c.value ?? 0)) / defs.length;
   }
 
   int maxDefense(Fighter f) {
+    if (opponent.hand.isEmpty) return 0;
     final defs = defenseOptionsFor(f);
     if (defs.isEmpty) return 0;
     return defs.map((c) => c.value ?? 0).fold(0, max);
   }
 
-  double expectedAttack(Fighter f) {
+  /// The attack value [f] can expect: the best of [extra] more cards than the opponent holds
+  /// (1 for a card already played face down).
+  double expectedAttack(Fighter f, {int extra = 0}) {
     final atts = attackOptionsFor(f);
     if (atts.isEmpty) return 3.0;
-    final total = atts.fold<int>(0, (sum, c) => sum + (c.value ?? 0));
-    return total / atts.length;
+    final h = min(opponent.hand.length + extra, _pool);
+    if (h <= 0) return 0;
+    final top = atts.map((c) => c.value ?? 0).fold(0, max);
+    var e = 0.0;
+    for (var v = 1; v <= top; v++) {
+      e += 1 - noneOf(_pool, atts.where((c) => (c.value ?? 0) >= v).length, h);
+    }
+    return e;
   }
 
   int maxAttack(Fighter f) {

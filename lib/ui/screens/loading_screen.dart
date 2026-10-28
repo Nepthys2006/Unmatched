@@ -7,6 +7,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../net/account.dart';
+import '../dialogs/map_debug.dart';
 import '../services.dart';
 import '../shapes.dart';
 import '../theme.dart';
@@ -91,7 +92,9 @@ class _LoadingScreenState extends State<LoadingScreen> with SingleTickerProvider
         } catch (_) {}
       }
       if (!mounted) return;
-      final Widget next = _quickMatch.isNotEmpty ? _quick(s) : (account ? const MenuScreen() : const UsernameScreen());
+      // The map editor is offline work: no sign-in (a placeholder name, not saved).
+      if (mapDebug && !account && !s.settings.hasUsername) s.settings.username = 'MapDebug';
+      final Widget next = _quickMatch.isNotEmpty ? _quick(s) : (account || mapDebug ? const MenuScreen() : const UsernameScreen());
       unawaited(
         Navigator.of(context).pushReplacement(
           PageRouteBuilder<void>(

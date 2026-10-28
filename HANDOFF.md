@@ -11,7 +11,7 @@ A fan-made, personal-use digital version of the board game **Unmatched** (Restor
 | All 70 heroes scripted | **Done.** Every card checked against the printed card image. See `CARDS.md`. |
 | Tests (`test/`) | **110 passing.** ~18k simulated games, 12M invariant checks. |
 | Game modes in engine | **Done.** 1v1, 2v2, 3v3, free-for-all 3–5 players. |
-| AI (`lib/engine/ai.dart`) | **Done.** Easy / Medium / Hard / Insane. Answers the same prompts a human does. |
+| AI (`lib/engine/ai.dart`) | **Done.** Easy / Medium / Hard / Insane. Answers the same prompts a human does. Measure changes with `dart run tool/ai_arena.dart` (see TODO.md). |
 | Assets | **Done.** Card faces, backs, identity cards, avatars, minis, sidekick tokens, fonts, original synthesized music + SFX. |
 | Flutter UI (`lib/ui/`) | **Playable end to end**, every mode. See TODO.md for what's left. |
 | Maps (`assets/maps/`, `assets/data/maps.json`) | **Done.** 47 printed-style 2D boards (the 32 official maps + 15 own, 5 of them 3v3). Built by `tool/build_maps.py`. The 3D view (`lib/ui/board3d/`) is no longer used. |

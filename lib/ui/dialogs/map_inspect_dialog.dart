@@ -1,24 +1,29 @@
 /// Fullscreen interactive battlefield map inspection dialog.
 /// Allows players in the lobby (hosts and waiting guests) to inspect map art,
 /// spaces, starting positions, and zone topologies in high resolution.
+/// With `--dart-define=MAPDEBUG=true` it is also the map connection editor (map_debug.dart).
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../engine/defs.dart';
 import '../board/board_painter.dart';
 import '../shapes.dart';
 import '../theme.dart';
 import '../widgets.dart';
+import 'map_debug.dart';
 
-/// Opens an interactive high-resolution battlefield inspection dialog.
-Future<void> showMapInspectDialog(BuildContext context, MapDef map) async {
+/// Opens an interactive high-resolution battlefield inspection dialog. [debug] turns on the
+/// path editor (default: the MAPDEBUG define).
+Future<void> showMapInspectDialog(BuildContext context, MapDef map, {bool debug = mapDebug}) async {
   await showGeneralDialog<void>(
     context: context,
-    barrierDismissible: true,
+    // In the editor a stray tap outside the board must not throw the edits away.
+    barrierDismissible: !debug,
     barrierLabel: 'Close battlefield inspector',
     barrierColor: const Color(0xD90E0F12),
-    pageBuilder: (ctx, _, _) => _MapInspectView(map: map),
+    pageBuilder: (ctx, _, _) => _MapInspectView(map: map, debug: debug),
     transitionBuilder: (_, a, _, child) {
       final c = CurvedAnimation(parent: a, curve: Curves.easeOutCubic);
       return FadeTransition(
@@ -31,8 +36,9 @@ Future<void> showMapInspectDialog(BuildContext context, MapDef map) async {
 }
 
 class _MapInspectView extends StatefulWidget {
-  const _MapInspectView({required this.map});
+  const _MapInspectView({required this.map, this.debug = false});
   final MapDef map;
+  final bool debug;
 
   @override
   State<_MapInspectView> createState() => _MapInspectViewState();
@@ -40,17 +46,149 @@ class _MapInspectView extends StatefulWidget {
 
 class _MapInspectViewState extends State<_MapInspectView> {
   final TransformationController _controller = TransformationController();
+  late final BoardGeometry _geo = BoardGeometry(widget.map);
+
+  /// The path editor (debug only).
+  late final MapEdits? _edits = widget.debug ? (MapEdits(widget.map)..addListener(_changed)) : null;
+  int? _selected;
+  String _status = 'Tap a space, then another, to cycle the path between them.';
+
+  void _changed() => setState(() {});
 
   @override
   void dispose() {
     _controller.dispose();
+    _edits?.dispose();
     super.dispose();
+  }
+
+  String _describe(int a, int b, PathKind k) => switch (k) {
+        PathKind.none => '$a – $b: no path',
+        PathKind.path => '$a – $b: path',
+        PathKind.forward => '$a → $b: arrow (only from $a to $b)',
+        PathKind.backward => '$b → $a: arrow (only from $b to $a)',
+        PathKind.stairs => '$a – $b: +1 path (costs 2 movement)',
+      };
+
+  void _tapBoard(Offset p) {
+    final edits = _edits!;
+    final s = _geo.spaceAt(p);
+    setState(() {
+      if (s == null || s == _selected) {
+        _selected = null;
+        _status = 'Tap a space, then another, to cycle the path between them.';
+      } else if (_selected == null) {
+        _selected = s;
+        final n = edits.neighbours(s).toList()..sort();
+        _status = 'Space $s selected (paths to ${n.isEmpty ? 'nothing' : n.join(', ')}). Tap another space to cycle: '
+            'none → path → arrow → arrow back → +1. Tap $s again to deselect.';
+      } else {
+        final a = _selected!;
+        _status = _describe(a, s, edits.cycle(a, s));
+      }
+    });
+  }
+
+  Future<void> _copyPatch() async {
+    final edits = _edits!;
+    final patch = edits.patch();
+    debugPrint('MAP PATCH: $patch');
+    await Clipboard.setData(ClipboardData(text: patch));
+    if (!mounted) return;
+    setState(() => _status = 'Patch copied (${edits.changeCount} change${edits.changeCount == 1 ? '' : 's'}). '
+        'In the project folder run: dart tool/apply_map_patch.dart');
+  }
+
+  Widget _board(MapDef map, BoardGeometry geo) {
+    final board = map.art != null
+        ? Stack(
+            children: [
+              Positioned.fill(
+                child: Image.asset(
+                  map.art!.asset,
+                  fit: BoxFit.fill,
+                  filterQuality: FilterQuality.high,
+                ),
+              ),
+              Positioned.fill(
+                child: CustomPaint(
+                  painter: BoardPainter(geo, detailed: true, showStarts: true),
+                ),
+              ),
+            ],
+          )
+        : CustomPaint(
+            painter: BoardPainter(geo, detailed: true, showStarts: true),
+          );
+    final edits = _edits;
+    if (edits == null) return board;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapUp: (d) => _tapBoard(d.localPosition),
+      child: Stack(
+        children: [
+          Positioned.fill(child: board),
+          Positioned.fill(child: CustomPaint(painter: MapDebugPainter(geo, edits, selected: _selected))),
+        ],
+      ),
+    );
+  }
+
+  Widget _debugBar(bool isCompact) {
+    final edits = _edits!;
+    final problems = edits.problems();
+    final changes = edits.changeCount;
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: isCompact ? 12 : 20, vertical: 6),
+      decoration: const ShapeDecoration(
+        color: Color(0xFF2A2410),
+        shape: Border(bottom: BorderSide(color: Palette.brass, width: 1)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.build_rounded, color: Palette.brass, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(_status, style: bodyStyle(12.5, color: Palette.bone), maxLines: 2, overflow: TextOverflow.ellipsis),
+                Text(
+                  '$changes change${changes == 1 ? '' : 's'} · '
+                  '${problems.isEmpty ? 'no problems' : 'problems: ${[for (final e in problems.entries) '${e.key} ${e.value}'].join(', ')}'}',
+                  style: titleStyle(11, color: problems.isEmpty ? Palette.boneDim : MapDebugPainter.removedColor, spacing: 0.4),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          HexButton(icon: Icons.undo_rounded, size: 34, tooltip: 'Undo', onPressed: edits.canUndo ? edits.undo : null),
+          const SizedBox(width: 4),
+          HexButton(
+            icon: Icons.restart_alt_rounded,
+            size: 34,
+            tooltip: 'Reset to the map data',
+            onPressed: changes > 0
+                ? () {
+                    edits.reset();
+                    setState(() => _status = 'Back to the map data.');
+                  }
+                : null,
+          ),
+          const SizedBox(width: 4),
+          HexButton(icon: Icons.content_copy_rounded, size: 34, tooltip: 'Copy patch', onPressed: _copyPatch),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final map = widget.map;
-    final geo = BoardGeometry(map);
+    final geo = _geo;
     final starts = map.spaces.where((s) => s.start != null).length;
     final mq = MediaQuery.of(context);
     final isCompact = mq.size.width < 700 || mq.size.height < 520;
@@ -116,6 +254,7 @@ class _MapInspectViewState extends State<_MapInspectView> {
                       ],
                     ),
                   ),
+                  if (_edits != null) _debugBar(isCompact),
 
                   // Interactive Map Canvas
                   Expanded(
@@ -130,30 +269,15 @@ class _MapInspectViewState extends State<_MapInspectView> {
                                 maxScale: 4.0,
                                 clipBehavior: Clip.hardEdge,
                                 boundaryMargin: const EdgeInsets.all(300),
+                                // The board is laid out at its own size and scaled to fit, so the
+                                // art keeps its shape and the overlay and taps line up with it.
                                 child: Center(
-                                  child: SizedBox(
-                                    width: geo.size.width,
-                                    height: geo.size.height,
-                                    child: map.art != null
-                                        ? Stack(
-                                            children: [
-                                              Positioned.fill(
-                                                child: Image.asset(
-                                                  map.art!.asset,
-                                                  fit: BoxFit.fill,
-                                                  filterQuality: FilterQuality.high,
-                                                ),
-                                              ),
-                                              Positioned.fill(
-                                                child: CustomPaint(
-                                                  painter: BoardPainter(geo, detailed: true, showStarts: true),
-                                                ),
-                                              ),
-                                            ],
-                                          )
-                                        : CustomPaint(
-                                            painter: BoardPainter(geo, detailed: true, showStarts: true),
-                                          ),
+                                  child: FittedBox(
+                                    child: SizedBox(
+                                      width: geo.size.width,
+                                      height: geo.size.height,
+                                      child: _board(map, geo),
+                                    ),
                                   ),
                                 ),
                               ),
@@ -208,6 +332,10 @@ class _MapInspectViewState extends State<_MapInspectView> {
                       scrollDirection: Axis.horizontal,
                       child: Row(
                         children: [
+                          if (_edits != null) ...[
+                            const MapDebugLegend(),
+                            const SizedBox(width: 8),
+                          ],
                           Text('ZONES: ', style: titleStyle(12, color: Palette.boneDim, spacing: 1)),
                           const SizedBox(width: 8),
                           for (final z in map.zones.values) ...[
