@@ -697,9 +697,18 @@ class CombatView extends StatelessWidget {
           slant: 0.4,
           point: true,
           flip: !left,
-          side: BorderSide(color: Palette.bone.withValues(alpha: 0.6)),
+          side: BorderSide(
+            color: active ? Palette.bone : Palette.bone.withValues(alpha: 0.6),
+            width: active ? 2.2 : 1.0,
+          ),
         ),
-        shadows: const [BoxShadow(color: Colors.black54, blurRadius: 8, offset: Offset(0, 3))],
+        shadows: [
+          BoxShadow(
+            color: active ? Palette.bone.withValues(alpha: 0.5) : Colors.black54,
+            blurRadius: active ? 14 : 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: left ? CrossAxisAlignment.start : CrossAxisAlignment.end,

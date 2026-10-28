@@ -4,6 +4,7 @@ import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:unmatched_game/engine/ai.dart';
+import 'package:unmatched_game/engine/combat.dart';
 import 'package:unmatched_game/engine/defs.dart';
 import 'package:unmatched_game/engine/events.dart';
 import 'package:unmatched_game/engine/game.dart';
@@ -31,10 +32,55 @@ void main() {
   Future<Game> play(String a, String b, int seed, {required bool random, List<String>? more, List<int>? teams, MapDef? map}) async {
     late Game g;
     final totals = <int, int>{};
+    Combat? activeCombat;
+    const windowOrder = {'immediately': 1, 'during': 2, 'after': 3};
+    var currentWindowIdx = 0;
+    var currentWindowTiming = '';
+    var attackerResolvedInWindow = false;
+
     void check(GameEvent e) {
       if (e is TurnStarted && e.number > _maxTurns) throw StateError('Game did not end in $_maxTurns turns');
       if (e is EffectResolving) fired.add(e.side.card!.def.key);
       if (e is SchemePlayed) fired.add(e.card.def.key);
+
+      // Combat timing invariants:
+      if (e is CombatStarted) {
+        activeCombat = e.combat;
+        currentWindowIdx = 0;
+        currentWindowTiming = '';
+        attackerResolvedInWindow = false;
+      } else if (e is EffectResolving) {
+        expect(activeCombat, isNotNull, reason: 'EffectResolving outside of combat');
+        final wIdx = windowOrder[e.timing] ?? 0;
+        expect(wIdx, greaterThanOrEqualTo(currentWindowIdx),
+            reason: 'Combat windows out of order: ${e.timing} after $currentWindowTiming');
+        if (wIdx > currentWindowIdx) {
+          currentWindowIdx = wIdx;
+          currentWindowTiming = e.timing;
+          attackerResolvedInWindow = false;
+        }
+        if (e.side.isAttacker) {
+          attackerResolvedInWindow = true;
+        } else {
+          expect(attackerResolvedInWindow, isFalse,
+              reason: 'Defender must resolve before attacker in ${e.timing}');
+        }
+        if (e.side.canceled) {
+          expect(g.isUncancelable(e.side), isTrue,
+              reason: 'Effect resolved from canceled card that is not uncancelable');
+        }
+        if (e.timing == 'after' && e.side.afterCanceled) {
+          expect(g.isUncancelable(e.side), isTrue,
+              reason: 'After combat effect resolved from afterCanceled card');
+        }
+      } else if (e is CombatEnded) {
+        activeCombat = null;
+      } else if (e is GameOver) {
+        if (activeCombat != null) {
+          expect(currentWindowIdx, equals(3),
+              reason: 'Game over fired before AFTER COMBAT window in active combat');
+        }
+      }
       final seen = <int>{};
       final small = <int, int>{};
       for (final f in g.fighters) {

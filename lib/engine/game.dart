@@ -116,6 +116,18 @@ class Game {
   /// Set by "End the turn": stops every further effect this turn.
   bool get turnEnded => turn.flags['endTurn'] == true;
   Player get active => turn.player;
+  /// Combat mods in resolution priority: defender first, then attacker, then other players/mods.
+  Iterable<Mod> combatMods(Combat c) sync* {
+    yield c.defender.player.script;
+    yield c.attacker.player.script;
+    for (final p in players) {
+      if (p != c.defender.player && p != c.attacker.player) {
+        yield p.script;
+      }
+    }
+    yield* mods;
+  }
+
   Iterable<Mod> get allMods sync* {
     for (final p in players) {
       yield p.script;
@@ -564,12 +576,12 @@ class Game {
     await emit(CardsRevealed(c));
 
     await _phase(c, Phase.immediately, 'immediately');
-    for (final m in allMods.toList()) {
+    for (final m in combatMods(c).toList()) {
       if (turnEnded) break;
       await m.combatImmediately(this, c);
     }
     c.phase = Phase.during;
-    for (final m in allMods.toList()) {
+    for (final m in combatMods(c).toList()) {
       if (turnEnded) break;
       await m.duringCombat(this, c);
     }
@@ -595,7 +607,7 @@ class Game {
     await emit(CombatResolved(c));
 
     await _phase(c, Phase.after, 'after');
-    for (final m in allMods.toList()) {
+    for (final m in combatMods(c).toList()) {
       if (turnEnded) break;
       await m.afterCombat(this, c);
     }
@@ -624,6 +636,11 @@ class Game {
       final card = done = s.card!;
       if (s.canceled || (timing == 'after' && s.afterCanceled) || (timing == 'during' && s.duringCanceled)) return;
       final sc = scriptOf(card);
+      // Ruling: if a fighter was defeated in combat, their card's AFTER COMBAT effects do not resolve
+      // (unless the card explicitly resolves on defeat like Houdini's All Part of the Show).
+      if (timing == 'after' && !s.fighter.alive && !(sc?.resolvesOnDefeat ?? false)) return;
+      if (timing == 'during' && !s.fighter.alive) return;
+      if (timing == 'immediately' && !s.fighter.alive) return;
       final fn = switch (timing) { 'immediately' => sc?.immediately, 'during' => sc?.during, _ => sc?.after };
       if (fn == null) {
         if (timing != 'immediately') return;

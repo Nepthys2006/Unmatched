@@ -155,6 +155,7 @@ class CardScript {
     this.during,
     this.after,
     this.uncancelable = false,
+    this.resolvesOnDefeat = false,
     this.boosted,
     this.ongoing,
     this.canPlay,
@@ -174,6 +175,9 @@ class CardScript {
 
   /// "This card's effects cannot be canceled."
   final bool uncancelable;
+
+  /// Resolves even if the fighter was defeated in this combat (Houdini: All Part of the Show).
+  final bool resolvesOnDefeat;
 
   /// Houdini's "BOOSTED WITH" effect, when the card is discarded to boost.
   final Effect? boosted;

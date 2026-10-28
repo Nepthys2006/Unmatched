@@ -143,6 +143,7 @@ class Houdini extends HeroScript {
         }),
         'ALL PART OF THE SHOW': CardScript(
           uncancelable: true,
+          resolvesOnDefeat: true,
           boosted: (x) => x.heal(houdini, 2),
           after: (x) async {
             final f = x.fighter;

@@ -808,7 +808,7 @@ function turn(a) { takeControl(); rigTo(goal.target, goal.r, goal.phi, goal.thet
 /** Toggles between the seated view and looking straight down. */
 function tilt() { takeControl(); rigTo(goal.target, goal.r, goal.phi > .3 ? PHI_MIN : .62, goal.theta, 420); }
 
-/** The dramatic push-in: a low camera beside the two fighters, looking across the duel. */
+/** The dramatic push-in: camera faces from the attacker toward the defender. */
 function pushIn(a, b, ms) {
   const A = spaces.get(a), B = spaces.get(b);
   if (!A || !B) return;
@@ -816,17 +816,16 @@ function pushIn(a, b, ms) {
   const mid = new V3((A.x + B.x) / 2, (A.top + B.top) / 2 + .25, (A.z + B.z) / 2);
   const along = new V3(B.x - A.x, 0, B.z - A.z);
   const len = along.length();
-  // Look across the line between them, from whichever side the camera is already on.
-  let side = len > 1e-3 ? new V3(-along.z, 0, along.x).normalize() : new V3(0, 0, homeSide);
-  const cur = camera.position.clone().sub(mid).setY(0);
-  if (cur.dot(side) < 0) side.negate();
-  const polar = 1.02;
+  // Always face from attacker toward defender (looking along the attack direction).
+  const dir = len > 1e-3 ? along.clone().normalize() : new V3(0, 0, -homeSide);
+  // Camera sits behind the attacker looking toward the defender without 180 flips.
+  const viewVec = dir.clone().negate();
+  const polar = 1.05;
   const tanH = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
-  // The combat cards fill the top of the screen, so frame the duel in the lower part.
+  // Frame the duel in the lower part of the screen, beneath the combat cards.
   const dist = clamp((len + 2.4) / (.6 * 2 * tanH * camera.aspect), 6.5, span * .9);
-  const azim = Math.atan2(side.x, side.z);
-  // Aiming past the fighters (away from the camera) moves them down the screen.
-  const target = mid.clone().addScaledVector(side, -.5 * tanH * dist / Math.cos(polar));
+  const azim = Math.atan2(viewVec.x, viewVec.z);
+  const target = mid.clone().addScaledVector(viewVec, -.4 * tanH * dist / Math.cos(polar));
   tweenTo(spherical(target, dist, polar, azim), target, ms);
 }
 

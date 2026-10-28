@@ -666,7 +666,8 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
         await _waitCombat(1300);
       case EffectResolving(:final side, :final timing, :final text):
         _resolving = side;
-        _effectText = '${side.card?.title.toUpperCase() ?? ''} · ${timing.toUpperCase()}${timing == 'after' ? ' COMBAT' : ''}: $text';
+        final sideRole = side.isAttacker ? 'ATTACKER' : 'DEFENDER';
+        _effectText = '$sideRole · ${side.card?.title.toUpperCase() ?? ''} · ${timing.toUpperCase()}${timing == 'after' ? ' COMBAT' : ''}: $text';
         _refresh();
         await _waitCombat(1500);
         _resolving = null;
