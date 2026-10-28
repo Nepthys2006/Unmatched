@@ -105,6 +105,12 @@ class NetMatch {
   /// Set when the connection is lost mid-match (the reason to show).
   final ValueNotifier<String?> lost = ValueNotifier(null);
 
+  /// Subtle non-intrusive banner message shown during network delays or opponent absence.
+  final ValueNotifier<String?> waitingNotice = ValueNotifier(null);
+
+  /// Role-specific timeout redirect event when grace period expires.
+  final ValueNotifier<({String title, String message, String redirect})?> timeoutRedirect = ValueNotifier(null);
+
   /// The lobby's chat, carried on into the match.
   final ChatLog chat;
   final void Function(String text) _say;
@@ -223,6 +229,7 @@ class HostSession extends LobbySession {
   final HostLink link;
   final String dataVersion;
   late final StreamSubscription<LinkEvent> _sub;
+  final Map<int, ({Timer noticeTimer, Timer timeoutTimer})> _awayTimers = {};
 
   @override
   bool get isHost => true;
@@ -258,10 +265,23 @@ class HostSession extends LobbySession {
         final seat = _seatOf(peer);
         if (seat == null) return;
         if (match != null) {
-          // Mid-match: the AI plays on for them.
+          // Mid-match: peer disconnected or backgrounded. Start grace period instead of instant AI takeover.
           _l.seats[seat].peer = null;
-          match!._takeOver(seat, AiLevel.hard);
-          link.broadcast({'t': 'seatAi', 'seat': seat});
+          _awayTimers[seat]?.noticeTimer.cancel();
+          _awayTimers[seat]?.timeoutTimer.cancel();
+          final noticeTimer = Timer(const Duration(minutes: 2), () {
+            match?.waitingNotice.value = "It looks like your opponent stepped away—waiting for them to return...";
+          });
+          final timeoutTimer = Timer(const Duration(minutes: 5), () {
+            _awayTimers.remove(seat);
+            match?.waitingNotice.value = null;
+            match?.timeoutRedirect.value = (
+              title: 'Opponent Away',
+              message: "It seems your opponent has been away or unable to move for a while. Returning you to the main lobby.",
+              redirect: 'lobby',
+            );
+          });
+          _awayTimers[seat] = (noticeTimer: noticeTimer, timeoutTimer: timeoutTimer);
           return;
         }
         _l.seats[seat] = LobbySeat(SeatKind.open);
@@ -284,7 +304,16 @@ class HostSession extends LobbySession {
         if (m['v'] != netProtocol || m['data'] != dataVersion) {
           return _reject(peer, 'Different game version. Update both devices to the same build.');
         }
-        if (match != null) return _reject(peer, 'That match has already started.');
+        if (match != null) {
+          final name = '${m['name'] ?? ''}'.trim();
+          final awayIndex = _l.seats.indexWhere((s) => s.kind == SeatKind.human && s.peer == null && s.name == name);
+          final reconnectSeat = awayIndex >= 0 ? awayIndex : _l.seats.indexWhere((s) => s.kind == SeatKind.human && s.peer == null);
+          if (reconnectSeat >= 0) {
+            _reconnectSeat(reconnectSeat, peer);
+            return;
+          }
+          return _reject(peer, 'That match has already started.');
+        }
         final open = _l.seats.indexWhere((s) => s.kind == SeatKind.open);
         if (open < 0) return _reject(peer, 'The lobby is full.');
         final name = '${m['name'] ?? ''}'.trim();
@@ -498,15 +527,50 @@ class HostSession extends LobbySession {
     _changed();
   }
 
+  void _reconnectSeat(int seat, String peer) {
+    _awayTimers[seat]?.noticeTimer.cancel();
+    _awayTimers[seat]?.timeoutTimer.cancel();
+    _awayTimers.remove(seat);
+    if (_awayTimers.isEmpty) {
+      match?.waitingNotice.value = null;
+    }
+    _l.seats[seat].peer = peer;
+    link.send(peer, {'t': 'welcome', 'seat': seat});
+    final heroes = [for (final s in _l.seats) s.hero!];
+    link.send(peer, {'t': 'start', 'lobby': _l.toJson(), 'heroes': heroes, 'seed': match!.seed});
+    _sendChat(peer, 1);
+    final m = match;
+    if (m != null) {
+      for (final (seq, a) in m.ls.since(0)) {
+        link.send(peer, {'t': 'ans', 'seq': seq, 'seat': a.seat, 'picks': a.picks});
+      }
+    }
+  }
+
   bool _left = false;
 
   @override
   Future<void> leave() async {
     if (_left) return;
     _left = true;
+    for (final t in _awayTimers.values) {
+      t.noticeTimer.cancel();
+      t.timeoutTimer.cancel();
+    }
+    _awayTimers.clear();
     match?.ls.fail(StateError('Left the match'));
     await _sub.cancel();
     await link.close();
+  }
+
+  @override
+  void dispose() {
+    for (final t in _awayTimers.values) {
+      t.noticeTimer.cancel();
+      t.timeoutTimer.cancel();
+    }
+    _awayTimers.clear();
+    super.dispose();
   }
 }
 
@@ -523,6 +587,8 @@ class ClientSession extends LobbySession {
   final ClientLink link;
   late final StreamSubscription<Msg> _sub;
   late final Timer _repair;
+  Timer? _noticeTimer;
+  Timer? _timeoutTimer;
 
   /// Answers that came before the start message (messages can arrive out of order online).
   final List<Msg> _early = [];
@@ -552,6 +618,9 @@ class ClientSession extends LobbySession {
   bool get isHost => false;
 
   void _onMessage(Msg m) {
+    _noticeTimer?.cancel();
+    _timeoutTimer?.cancel();
+    match?.waitingNotice.value = null;
     switch (m['t']) {
       case 'welcome':
         mySeat = m['seat'] as int?;
@@ -608,6 +677,26 @@ class ClientSession extends LobbySession {
   }
 
   void _onDone(String? reason) {
+    if (match != null && !_left) {
+      _noticeTimer?.cancel();
+      _timeoutTimer?.cancel();
+      _noticeTimer = Timer(const Duration(minutes: 2), () {
+        match?.waitingNotice.value = 'Waiting for the host to return...';
+      });
+      _timeoutTimer = Timer(const Duration(minutes: 5), () {
+        match?.waitingNotice.value = null;
+        match?.timeoutRedirect.value = (
+          title: 'Host Away',
+          message: "It seems like the host has been away or unable to make a move for a while. We've returned you to the mode selection menu.",
+          redirect: 'mode',
+        );
+        final why = closed ?? reason ?? 'The host left the match.';
+        closed = why;
+        match?.ls.fail(StateError(why));
+        _changed();
+      });
+      return;
+    }
     final why = closed ?? reason ?? (match != null ? 'The host left the match.' : 'Lost the connection to the host.');
     closed = why;
     match?.ls.fail(StateError(why));
@@ -640,9 +729,19 @@ class ClientSession extends LobbySession {
   Future<void> leave() async {
     if (_left) return;
     _left = true;
+    _noticeTimer?.cancel();
+    _timeoutTimer?.cancel();
     _repair.cancel();
     match?.ls.fail(StateError('Left the match'));
     await _sub.cancel();
     await link.close();
+  }
+
+  @override
+  void dispose() {
+    _repair.cancel();
+    _noticeTimer?.cancel();
+    _timeoutTimer?.cancel();
+    super.dispose();
   }
 }

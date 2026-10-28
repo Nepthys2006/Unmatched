@@ -593,14 +593,14 @@ Future<bool> showConfirm(
   required String title,
   String? message,
   String confirm = 'Confirm',
-  String cancel = 'Cancel',
+  String? cancel = 'Cancel',
   String? cardAsset,
   bool danger = false,
 }) async {
   final r = await showGeneralDialog<bool>(
     context: context,
     barrierDismissible: true,
-    barrierLabel: cancel,
+    barrierLabel: cancel ?? confirm,
     barrierColor: const Color(0xB3000000),
     transitionDuration: const Duration(milliseconds: 160),
     pageBuilder: (ctx, _, _) {
@@ -637,13 +637,14 @@ Future<bool> showConfirm(
                               spacing: 12,
                               runSpacing: 10,
                               children: [
-                                PlateButton(
-                                  label: cancel,
-                                  style: PlateStyle.secondary,
-                                  height: 48,
-                                  fontSize: 17,
-                                  onPressed: () => Navigator.of(ctx).pop(false),
-                                ),
+                                if (cancel != null)
+                                  PlateButton(
+                                    label: cancel,
+                                    style: PlateStyle.secondary,
+                                    height: 48,
+                                    fontSize: 17,
+                                    onPressed: () => Navigator.of(ctx).pop(false),
+                                  ),
                                 PlateButton(
                                   label: confirm,
                                   style: danger ? PlateStyle.danger : PlateStyle.confirm,

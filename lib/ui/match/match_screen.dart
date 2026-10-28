@@ -29,6 +29,7 @@ import '../../net/chat.dart';
 import '../../net/session.dart';
 import '../chat_panel.dart';
 import '../screens/settings_screen.dart';
+import '../screens/setup_screen.dart';
 import '../settings.dart';
 import '../services.dart';
 import '../shapes.dart';
@@ -67,7 +68,7 @@ class MatchScreen extends StatefulWidget {
   State<MatchScreen> createState() => MatchScreenState();
 }
 
-class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin {
+class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin, WidgetsBindingObserver {
   late final Services _s = context.services;
   late Game game;
   late BoardGeometry geo;
@@ -207,6 +208,7 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _moveA.addListener(() {
       final m = _move.value;
       if (m != null) m.t = _moveA.value;
@@ -256,6 +258,7 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
       _applyNames();
       net.names.addListener(_applyNames);
       net.lost.addListener(_onLost);
+      net.timeoutRedirect.addListener(_onTimeoutRedirect);
       net.chat.addListener(_onChat);
       _chatSeen = net.chat.latestIncoming?.id ?? 0;
     }
@@ -322,10 +325,41 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
     if (!_showChat) FocusManager.instance.primaryFocus?.unfocus();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden || state == AppLifecycleState.inactive) {
+      _b3?.send(const {'t': 'hidden'});
+    } else if (state == AppLifecycleState.resumed) {
+      _b3?.send(const {'t': 'visible'});
+    }
+  }
+
+  Future<void> _onTimeoutRedirect() async {
+    final tr = widget.net?.timeoutRedirect.value;
+    if (tr == null || _disposed || !mounted) return;
+    await showConfirm(
+      context,
+      title: tr.title,
+      message: tr.message,
+      confirm: 'OK',
+      cancel: null,
+    );
+    if (!mounted) return;
+    if (tr.redirect == 'mode') {
+      widget.net?.leave();
+      _s.audio.music(Music.menu);
+      Navigator.of(context).popUntil((r) => r.isFirst);
+      Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const SetupScreen()));
+    } else {
+      _toMenu();
+    }
+  }
+
   /// Multiplayer: the connection is gone.
   Future<void> _onLost() async {
     final why = widget.net?.lost.value;
     if (why == null || _disposed || !mounted || _result != null) return;
+    if (widget.net?.timeoutRedirect.value != null) return;
     await showConfirm(context, title: 'Connection lost', message: why, confirm: 'Back to menu', cancel: 'Stay');
     if (mounted) _toMenu();
   }
@@ -522,8 +556,10 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
     _boardImage?.dispose();
     _disposed = true;
     _drop3d();
+    WidgetsBinding.instance.removeObserver(this);
     widget.net?.names.removeListener(_applyNames);
     widget.net?.lost.removeListener(_onLost);
+    widget.net?.timeoutRedirect.removeListener(_onTimeoutRedirect);
     widget.net?.chat.removeListener(_onChat);
     widget.net?.chat.open = false;
     _chatToastTimer?.cancel();
@@ -1905,6 +1941,51 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
                     ),
                   ),
               ],
+
+              if (widget.net case final net?)
+                ValueListenableBuilder<String?>(
+                  valueListenable: net.waitingNotice,
+                  builder: (context, notice, _) {
+                    if (notice == null) return const SizedBox.shrink();
+                    return Positioned(
+                      top: pad.top + 8,
+                      left: size.width * 0.15,
+                      right: size.width * 0.15,
+                      child: IgnorePointer(
+                        child: Center(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            decoration: const ShapeDecoration(
+                              color: Color(0xEB1A1A24),
+                              shape: PlateBorder(side: BorderSide(color: Palette.gold, width: 1.2)),
+                              shadows: [
+                                BoxShadow(color: Colors.black54, blurRadius: 10, offset: Offset(0, 3)),
+                              ],
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Palette.gold),
+                                ),
+                                const SizedBox(width: 10),
+                                Flexible(
+                                  child: Text(
+                                    notice,
+                                    textAlign: TextAlign.center,
+                                    style: bodyStyle(13, color: Palette.bone),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
 
               TurnBanner(animation: _banner, title: _bannerTitle, sub: _bannerSub, color: _bannerColor),
 

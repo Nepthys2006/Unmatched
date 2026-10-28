@@ -1873,6 +1873,8 @@ function handle(m) {
     case 'pinch': if (loaded) pinch(m.k || 1, m.a || 0, m.fx, m.fy); break;
     case 'fling': if (loaded) flick(m.vx || 0, m.vy || 0); break;
     case 'pick': if (loaded) tap(m.x * innerWidth, m.y * innerHeight); break;
+    case 'hidden': pauseLoop(); break;
+    case 'visible': invalidate(3); wakeLoop(); break;
     case 'cam':
       if (!loaded) break;
       if (m.op === 'fit') { const h = homeView(); tweenTo(h.pos, h.target, m.ms ?? 380); }
