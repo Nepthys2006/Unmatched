@@ -40,6 +40,13 @@ Last updated: 2026-10-24. For the full engine/API reference see `HANDOFF.md`.
   stepping down resolution (to 60%), ambient occlusion and bloom when frames run long, and climbs
   back when they're on time; if nothing helps (a 30 Hz cap) it restores full quality and holds.
   Low quality turns shadows off.
+- Camera: drags, pinches, the wheel and orbits move a goal the camera glides after (frame-rate
+  independent smoothing); a flick keeps the board sliding; zoom goes toward the pointer or the
+  pinch's midpoint; scripted moves (fit, the duel push-in, pull back, turn, tilt) zoom in log
+  space. The match screen batches gestures into one message per frame for the web view bridge.
+  The 2D board uses the same ideas (`_CamTween`, `_wheel` in match_screen.dart).
+- The web view is laid out at the screen's real pixel density (`_NativeScale` in board3d.dart):
+  under UiScale (tablets, desktops, the web) it used to render at up to 1/1.6 resolution.
 - Sharpness: native resolution up to 3x on phones (within the budget), MSAA in the composer's
   target (fewer samples as the resolution rises), full anisotropic filtering on the map art,
   figure pictures upscaled and unsharp-masked once per tier (High: 900 px, Ultra: 1200 px) with

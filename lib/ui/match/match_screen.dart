@@ -762,7 +762,7 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
   void _pushIn(Combat c) {
     final a = c.attacker.fighter.space, d = c.defender.fighter.space;
     if (a == null || d == null) return;
-    if (_in3d) return _b3!.send({'t': 'cam', 'op': 'push', 'a': a, 'b': d, 'ms': math.max(1, (650 * _s.settings.speed).round())});
+    if (_in3d) return _b3!.send({'t': 'cam', 'op': 'push', 'a': a, 'b': d, 'ms': _camMs(800)});
     if (_viewport == Size.zero) return;
     final pa = geo.of(a), pd = geo.of(d);
     final mid = Offset.lerp(pa, pd, 0.5)!;
@@ -776,12 +776,17 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
       Matrix4.identity()
         ..translateByDouble(target.dx - mid.dx * s, target.dy - mid.dy * s, 0, 1)
         ..scaleByDouble(s, s, 1, 1),
+      d: Duration(milliseconds: _camMs(800)),
     );
   }
 
+  /// A camera move's length at the animation speed setting. Duel moves are a touch longer than
+  /// the rest, so the swing round the fighters reads as one unhurried motion.
+  int _camMs(int ms) => math.max(1, (ms * _s.settings.speed).round());
+
   void _pullBack() {
-    if (_in3d) return _b3!.send({'t': 'cam', 'op': 'pull', 'ms': math.max(1, (650 * _s.settings.speed).round())});
-    if (_camHome != null) _animateCam(_camHome!);
+    if (_in3d) return _b3!.send({'t': 'cam', 'op': 'pull', 'ms': _camMs(720)});
+    if (_camHome != null) _animateCam(_camHome!, d: Duration(milliseconds: _camMs(720)));
   }
 
   // ======================================================================== prompts

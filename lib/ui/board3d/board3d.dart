@@ -159,5 +159,37 @@ class Board3DView extends StatelessWidget {
   final Board3DController controller;
 
   @override
-  Widget build(BuildContext context) => host.buildHost(controller);
+  Widget build(BuildContext context) => _NativeScale(child: host.buildHost(controller));
+}
+
+/// Lays [child] out at the screen's own pixel density. On tablets and desktops UiScale draws the
+/// app at phone density and enlarges it; a web view in that tree is sized before the enlargement
+/// (the iframe, Android's texture, Windows' WebView2 surface), so the 3D board rendered at as
+/// little as 1/1.6 of the screen's resolution and was stretched up, blurred. Here the view gets
+/// the enlarged size and is drawn shrunk by the same factor: the two cancel, pixel for pixel.
+class _NativeScale extends StatelessWidget {
+  const _NativeScale({required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final mq = MediaQuery.of(context);
+    final real = View.of(context).devicePixelRatio;
+    final k = real > 0 ? mq.devicePixelRatio / real : 1.0;
+    if ((k - 1).abs() < 1e-3) return child;
+    return LayoutBuilder(
+      builder: (context, box) => FittedBox(
+        fit: BoxFit.fill,
+        alignment: Alignment.topLeft,
+        child: SizedBox(
+          width: box.maxWidth * k,
+          height: box.maxHeight * k,
+          child: MediaQuery(
+            data: mq.copyWith(size: mq.size * k, devicePixelRatio: real),
+            child: child,
+          ),
+        ),
+      ),
+    );
+  }
 }

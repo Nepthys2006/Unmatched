@@ -1067,11 +1067,16 @@ async function buildFigure(p, f) {
   invalidate(3);
 }
 
-/** Figures turn about their own upright axis to face the camera (badges are sprites and already do). */
+/** Figures turn about their own upright axis to face the camera (badges are sprites and already do).
+    Badges grow as the camera comes closer, up to a cap: in a duel's close-up they'd otherwise
+    cover the fighters. */
 function faceCamera() {
+  const near = span * .9;
   for (const p of pieces.values()) {
-    if (!p.pivot) continue;
     const g = p.group.position;
+    const k = Math.min(1, camera.position.distanceTo(g) / near), ls = p.label.userData.ls * k;
+    p.label.scale.set(ls, ls * LABEL_H / LABEL_W, 1);
+    if (!p.pivot) continue;
     p.pivot.rotation.y = Math.atan2(camera.position.x - g.x, camera.position.z - g.z);
   }
 }
@@ -1139,7 +1144,7 @@ const LABEL_W = 320, LABEL_H = 400;
 
 /** Badge size and orb glow follow the graphics settings. */
 function sizePiece(p) {
-  const ls = p.label.userData.base * G.labels * .8;
+  const ls = p.label.userData.ls = p.label.userData.base * G.labels * .8;
   p.label.scale.set(ls, ls * LABEL_H / LABEL_W, 1);
   p.orb.material.emissiveIntensity = fxOn().bloom ? 1.25 : .5;
 }
