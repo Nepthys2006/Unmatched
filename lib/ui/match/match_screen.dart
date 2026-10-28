@@ -1881,8 +1881,8 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin 
                   duration: const Duration(milliseconds: 240),
                   curve: Curves.easeOutCubic,
                   left: _showChat ? pad.left + 10 : -400,
-                  top: MediaQuery.viewInsetsOf(context).bottom > 0 ? 4 : 60,
-                  bottom: 10 + MediaQuery.viewInsetsOf(context).bottom,
+                  top: (size.height < 450 || MediaQuery.viewInsetsOf(context).bottom > 0) ? 4 : 60,
+                  bottom: kIsWeb ? 10 : (10 + MediaQuery.viewInsetsOf(context).bottom),
                   width: math.min(340, size.width * 0.45),
                   child: Offstage(
                     offstage: !_showChat,

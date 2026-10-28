@@ -5,6 +5,7 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../net/lan.dart';
@@ -172,7 +173,7 @@ class _MultiplayerScreenState extends State<MultiplayerScreen> {
         title: Text('PASSWORD FOR ${lobby.toUpperCase()}', style: titleStyle(18)),
         content: TextField(
           controller: c,
-          autofocus: true,
+          autofocus: !kIsWeb,
           obscureText: true,
           style: titleStyle(20, weight: FontWeight.w700),
           decoration: const InputDecoration(hintText: 'Password'),

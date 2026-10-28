@@ -4,6 +4,7 @@ library;
 
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../net/account.dart';
@@ -166,7 +167,7 @@ class _UsernameScreenState extends State<UsernameScreen> {
                             const SizedBox(height: 14),
                             TextField(
                               controller: _user,
-                              autofocus: true,
+                              autofocus: !kIsWeb,
                               enabled: !_busy,
                               maxLength: maxNameLength,
                               autocorrect: false,

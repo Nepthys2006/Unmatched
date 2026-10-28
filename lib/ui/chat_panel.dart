@@ -112,7 +112,7 @@ class _ChatPanelState extends State<ChatPanel> {
                   textInputAction: TextInputAction.send,
                   inputFormatters: [FilteringTextInputFormatter.deny(RegExp(r'[\n\r]'))],
                   onSubmitted: (_) => _send(),
-                  style: bodyStyle(15),
+                  style: bodyStyle(16),
                   decoration: InputDecoration(
                     hintText: 'Message',
                     counterText: '',

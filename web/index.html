@@ -59,6 +59,10 @@
       position: absolute !important;
       inset: 0 !important;
     }
+    /* Prevent iOS/iPadOS Safari from zooming in on text inputs (font-size < 16px triggers auto-zoom which crashes CanvasKit/WebGL) */
+    input, textarea, select, .flt-text-editing {
+      font-size: 16px !important;
+    }
     #rotate {
       position: fixed;
       inset: 0;
@@ -97,22 +101,45 @@
     };
 
     (function() {
+      // Robust detection: iPad and tablets are NEVER phones, even when on-screen keyboard is open!
+      function isTablet() {
+        var ua = navigator.userAgent || '';
+        var isIpad = /iPad/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        var isAndroidTablet = /Android/i.test(ua) && !/Mobile/i.test(ua);
+        return isIpad || isAndroidTablet;
+      }
+
       function isPhone() {
+        if (isTablet()) return false;
         var isTouch = window.matchMedia('(pointer: coarse)').matches;
-        var shortest = Math.min(window.innerWidth, window.innerHeight);
-        return isTouch && shortest < 600;
+        // Check screen dimensions instead of window.innerHeight, because on-screen keyboards
+        // shrink window.innerHeight dramatically on tablets and cause false phone detection!
+        var screenMin = Math.min(window.screen.width || 9999, window.screen.height || 9999);
+        return isTouch && screenMin < 600;
       }
 
       function checkOrientation() {
         var overlay = document.getElementById('rotate');
         if (!overlay) return;
-        var isPortrait = window.innerHeight > window.innerWidth;
-        if (isPhone() && isPortrait) {
-          overlay.style.display = 'flex';
-        } else {
+        if (!isPhone()) {
           overlay.style.display = 'none';
+          return;
         }
+        var isPortrait = window.innerHeight > window.innerWidth;
+        overlay.style.display = isPortrait ? 'flex' : 'none';
       }
+
+      // Reset any Safari scroll shifts when keyboard closes so layout and tap coordinates remain 1:1
+      window.addEventListener('scroll', function() {
+        if (window.scrollX !== 0 || window.scrollY !== 0) {
+          window.scrollTo(0, 0);
+        }
+      });
+      document.addEventListener('focusout', function(e) {
+        if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) {
+          window.scrollTo(0, 0);
+        }
+      });
 
       window.addEventListener('resize', checkOrientation);
       window.addEventListener('orientationchange', checkOrientation);
