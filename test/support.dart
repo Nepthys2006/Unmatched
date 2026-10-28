@@ -104,12 +104,13 @@ CardAnswer card(String t) => CardAnswer(t);
 
 /// A game set up by hand: fighters placed where a test wants them, chosen hands and decks.
 class Scenario {
-  Scenario(String hero1, String hero2, {MapDef? map}) {
+  /// [hero3]: a third player, everyone for themselves (free-for-all), starting mid-line.
+  Scenario(String hero1, String hero2, {MapDef? map, String? hero3}) {
     game = Game(
       data: loadData(),
       map: map ?? lineMap(),
-      heroIds: [hero1, hero2],
-      agents: [a1, a2],
+      heroIds: [hero1, hero2, ?hero3],
+      agents: [a1, a2, if (hero3 != null) a3],
       seed: 1,
       presenter: (e) async => events.add(e),
       firstSeat: 0,
@@ -118,8 +119,9 @@ class Scenario {
     p2 = game.players[1];
     p1.startSpace = 0;
     p2.startSpace = 11;
+    if (hero3 != null) game.players[2].startSpace = 6;
     game.first = p1;
-    game.order.addAll([p1, p2]);
+    game.order.addAll(game.players);
     for (final p in game.players) {
       for (final f in p.fighters) {
         f.space = null;
@@ -136,10 +138,14 @@ class Scenario {
   late final Player p2;
   final a1 = ScriptedAgent();
   final a2 = ScriptedAgent();
+  final a3 = ScriptedAgent();
+
+  /// The third player (only with `hero3`).
+  Player get p3 => game.players[2];
   final List<GameEvent> events = [];
   int _uid = 10000;
 
-  ScriptedAgent agentOf(Player p) => p == p1 ? a1 : a2;
+  ScriptedAgent agentOf(Player p) => p == p1 ? a1 : (p == p2 ? a2 : a3);
   Fighter hero(Player p) => p.heroFighter;
   Fighter sidekick(Player p, [int n = 1]) => p.fighters.where((f) => f.isSidekick).elementAt(n - 1);
 

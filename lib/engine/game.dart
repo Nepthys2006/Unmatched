@@ -452,10 +452,12 @@ class Game {
     await emit(ActionTaken(p, 'Scheme', ': ${card.title}'));
     await emit(SchemePlayed(card, f!));
     final s = scriptOf(card);
-    // With several opponents, a scheme that refers to "your opponent" is aimed at one of them.
+    // With several opponents, a scheme that refers to "your opponent" is aimed at one of them
+    // (one that only says "each opponent" hits them all, so there is nothing to choose).
     Player? target;
     final foes = enemiesOf(p).toList();
-    if (foes.length > 1 && card.def.text.values.any((t) => t.toLowerCase().contains('opponent'))) {
+    bool aimed(String t) => t.toLowerCase().replaceAll(RegExp(r'each opponent|all opponents|opponents\b'), '').contains('opponent');
+    if (foes.length > 1 && card.def.text.values.any(aimed)) {
       target = await choose<Player>(p, Ask.option, '${card.title}: choose an opponent', [for (final o in foes) Choice(o.name, o)],
           intent: Intent.harm, source: card);
     }

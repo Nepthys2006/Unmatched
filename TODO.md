@@ -33,6 +33,12 @@ Last updated: 2026-10-28. For the full engine/API reference see `HANDOFF.md`.
   prompts, none unanswerable. Bugs fixed on the way: Bullseye's Master Strategist (exactly 4),
   Squirrel Girl / summon placement hooks, King Arthur's Prophecy, Black Widow's Madripoor
   Sanction, a 2D camera zoom jump on large boards.
+- **Your bug list (`bugs.md`):** #3 "against all enemy": with several opponents, schemes that hit
+  *each* opponent (Louisville Lip, The Budapest Gambit, Manipulation, Shell Insertion, Three
+  Wishes...) asked you to pick one first; now only cards aimed at one opponent ask
+  (`test/ffa_schemes_test.dart`). #5 "view and discard enemy card": checked end to end on the
+  match screen with Sherlock's Eliminate the Impossible (`test/hand_look_ui_test.dart`). Every
+  AFTER COMBAT / DURING COMBAT / IMMEDIATELY / effect text of all 70 heroes has its code (#1, #4).
 - **Chat** in multiplayer lobbies and matches (LAN and online): the chat button in the lobby
   header and the match's menu row, a toast and unread count for new messages, quick phrases.
   The host numbers and relays messages (lost ones are fetched again, 5 per 5 s per player).
