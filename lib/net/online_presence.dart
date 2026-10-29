@@ -16,6 +16,7 @@ class OnlineUser {
     required this.status,
     this.lobbyId,
     this.stats,
+    this.seenAt,
   });
 
   final String id;
@@ -24,6 +25,7 @@ class OnlineUser {
   final String status; // 'idle', 'matching', 'inGame'
   final String? lobbyId;
   final Map<String, Object?>? stats;
+  final DateTime? seenAt;
 
   String get statusLabel => switch (status) {
     'matching' => 'Matching',
@@ -32,12 +34,13 @@ class OnlineUser {
   };
 
   factory OnlineUser.fromJson(Map<String, Object?> json) => OnlineUser(
-    id: json['id'] as String? ?? '',
-    name: json['name'] as String? ?? 'Player',
+    id: (json['id'] ?? '').toString(),
+    name: (json['name'] ?? 'Player').toString(),
     avatar: json['avatar'] as String?,
-    status: json['status'] as String? ?? 'idle',
-    lobbyId: json['lobbyId'] as String?,
+    status: (json['status'] ?? 'idle').toString(),
+    lobbyId: (json['lobby_id'] ?? json['lobbyId']) as String?,
     stats: json['stats'] is Map ? (json['stats'] as Map).cast<String, Object?>() : null,
+    seenAt: json['seen_at'] != null ? DateTime.tryParse(json['seen_at'].toString()) : null,
   );
 }
 
@@ -65,8 +68,13 @@ class OnlinePresenceService extends ChangeNotifier {
   OnlinePresenceService._();
   static final OnlinePresenceService instance = OnlinePresenceService._();
 
+  SupabaseClient? _sbClient;
   RealtimeChannel? _channel;
+  Timer? _pingTimer;
+  Timer? _fetchTimer;
   bool _active = false;
+  bool _channelSubscribed = false;
+
   String _myId = '';
   String _myName = '';
   String _myStatus = 'idle';
@@ -89,16 +97,30 @@ class OnlinePresenceService extends ChangeNotifier {
     _myName = username;
     _myStatus = 'idle';
 
+    _sbClient = client ?? newSupabaseClient();
+    final sb = _sbClient!;
+    _active = true;
+
+    // 1. Immediate database ping & fetch
+    await _pingDatabase();
+    await refresh();
+
+    // 2. Start heartbeats: ping every 15 seconds, poll database every 10 seconds
+    _pingTimer?.cancel();
+    _pingTimer = Timer.periodic(const Duration(seconds: 15), (_) => _pingDatabase());
+
+    _fetchTimer?.cancel();
+    _fetchTimer = Timer.periodic(const Duration(seconds: 10), (_) => refresh());
+
+    // 3. Supabase Realtime channel for live invites and instant presence broadcast
     try {
-      final sb = client ?? newSupabaseClient();
       final ch = _channel = sb.channel(
         'unmatched-presence',
-        opts: const RealtimeChannelConfig(key: 'unmatched-global'),
+        opts: RealtimeChannelConfig(key: _myId),
       );
 
       ch.onPresenceSync((_) {
         final state = ch.presenceState();
-        _users.clear();
         for (final presence in state) {
           for (final raw in presence.presences) {
             final payload = raw.payload;
@@ -134,19 +156,59 @@ class OnlinePresenceService extends ChangeNotifier {
         },
       );
 
-      ch.subscribe();
-      _active = true;
-      await updateStatus(status: 'idle');
+      ch.subscribe((status, [error]) {
+        if (status == RealtimeSubscribeStatus.subscribed) {
+          _channelSubscribed = true;
+          _trackRealtime();
+        }
+      });
     } catch (_) {}
   }
 
-  Future<void> updateStatus({required String status, String? lobbyId}) async {
-    _myStatus = status;
-    _myLobbyId = lobbyId;
-    final ch = _channel;
-    if (ch == null || !_active) return;
+  /// Sends a presence heartbeat to the database active_players table.
+  Future<void> _pingDatabase() async {
+    final sb = _sbClient;
+    if (sb == null || !_active || _myId.isEmpty) return;
     try {
-      await ch.track({
+      await sb.rpc('ping_presence', params: {
+        'p_id': _myId,
+        'p_name': _myName,
+        'p_status': _myStatus,
+        if (_myLobbyId != null) 'p_lobby_id': _myLobbyId,
+        'p_stats': ProfileStats.instance.toSummaryPayload(),
+      }).timeout(const Duration(seconds: 6));
+    } catch (_) {}
+  }
+
+  /// Refreshes the active players list from the database.
+  Future<void> refresh() async {
+    final sb = _sbClient;
+    if (sb == null || !_active) return;
+    try {
+      final res = await sb.rpc('get_active_players').timeout(const Duration(seconds: 6));
+      if (res is List) {
+        final fetched = <String, OnlineUser>{};
+        for (final row in res) {
+          if (row is Map) {
+            final u = OnlineUser.fromJson(row.cast<String, Object?>());
+            if (u.id.isNotEmpty && u.id != _myId) {
+              fetched[u.id] = u;
+            }
+          }
+        }
+        _users.clear();
+        _users.addAll(fetched);
+        notifyListeners();
+      }
+    } catch (_) {}
+  }
+
+  /// Tracks state in the Realtime channel if subscribed.
+  void _trackRealtime() {
+    final ch = _channel;
+    if (ch == null || !_active || !_channelSubscribed) return;
+    try {
+      ch.track({
         'id': _myId,
         'name': _myName,
         'status': _myStatus,
@@ -154,6 +216,13 @@ class OnlinePresenceService extends ChangeNotifier {
         'stats': ProfileStats.instance.toSummaryPayload(),
       });
     } catch (_) {}
+  }
+
+  Future<void> updateStatus({required String status, String? lobbyId}) async {
+    _myStatus = status;
+    _myLobbyId = lobbyId;
+    await _pingDatabase();
+    _trackRealtime();
   }
 
   Future<void> sendInvite({
@@ -180,6 +249,20 @@ class OnlinePresenceService extends ChangeNotifier {
 
   Future<void> stop() async {
     _active = false;
+    _channelSubscribed = false;
+    _pingTimer?.cancel();
+    _pingTimer = null;
+    _fetchTimer?.cancel();
+    _fetchTimer = null;
+
+    final sb = _sbClient;
+    if (sb != null && _myId.isNotEmpty) {
+      try {
+        await sb.rpc('leave_presence', params: {'p_id': _myId}).timeout(const Duration(seconds: 4));
+      } catch (_) {}
+    }
+    _sbClient = null;
+
     final ch = _channel;
     _channel = null;
     if (ch != null) {
@@ -187,5 +270,7 @@ class OnlinePresenceService extends ChangeNotifier {
         await ch.unsubscribe();
       } catch (_) {}
     }
+    _users.clear();
+    notifyListeners();
   }
 }

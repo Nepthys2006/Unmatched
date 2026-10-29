@@ -22,6 +22,7 @@ class ActivePlayersDrawer extends StatelessWidget {
     BuildContext context, {
     required Future<void> Function(OnlineUser user) onInvite,
   }) {
+    OnlinePresenceService.instance.refresh();
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -66,9 +67,19 @@ class ActivePlayersDrawer extends StatelessWidget {
                           ),
                         ],
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.close_rounded, color: Palette.boneDim),
-                        onPressed: () => Navigator.of(context).pop(),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.refresh_rounded, color: Palette.boneDim),
+                            tooltip: 'Refresh',
+                            onPressed: () => OnlinePresenceService.instance.refresh(),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close_rounded, color: Palette.boneDim),
+                            onPressed: () => Navigator.of(context).pop(),
+                          ),
+                        ],
                       ),
                     ],
                   ),
