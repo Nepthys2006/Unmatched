@@ -130,6 +130,8 @@ let prMax = 1, prNow = 1, prMin = .5;
 
 /* ---------------------------------------------------------------- scene */
 let renderer, scene, camera, lamp, composer = null;
+let gtaoPass = null, bloomPass = null;
+let isInteracting = false;
 let boardRoot = null, span = 14, box = new THREE.Box3();
 const spaces = new Map();        // id -> {x, z, top}
 let links = [];
@@ -181,7 +183,22 @@ function setup() {
   scene.environment = pmrem.fromScene(new RoomEnvironment(), .04).texture;
   scene.environmentIntensity = .42;
 
-  camera = new THREE.PerspectiveCamera(34, innerWidth / innerHeight, .1, 260);
+  camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, .1, 260);
+  camera.up.set(0, 1, 0);
+
+  renderer.domElement.style.touchAction = 'none';
+  renderer.domElement.addEventListener('touchstart', () => {
+    isInteracting = true;
+    invalidate(2);
+  }, { passive: true });
+  renderer.domElement.addEventListener('touchend', () => {
+    isInteracting = false;
+    invalidate(3);
+  }, { passive: true });
+  renderer.domElement.addEventListener('touchcancel', () => {
+    isInteracting = false;
+    invalidate(3);
+  }, { passive: true });
 
   // A warm table lamp, a cool fill and a faint bounce, as on the 3D Map table.
   scene.add(new THREE.HemisphereLight('#dfe6ff', '#2b1d12', .3));
@@ -255,8 +272,10 @@ function buildComposer() {
   composer.setPixelRatio(prNow);
   composer.setSize(innerWidth, innerHeight);
   composer.addPass(new RenderPass(scene, camera));
+  gtaoPass = null;
+  bloomPass = null;
   if (fx.ao) {
-    const ao = new GTAOPass(scene, camera, innerWidth, innerHeight);
+    const ao = gtaoPass = new GTAOPass(scene, camera, innerWidth, innerHeight);
     ao.blendIntensity = .85;
     ao.updateGtaoMaterial({ radius: .32, distanceExponent: 1.4, thickness: 1, scale: 1.1, samples: G.tier >= 3 ? 12 : 8 });
     ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 4, rings: 2, samples: G.tier >= 3 ? 16 : 12 });
@@ -276,7 +295,7 @@ function buildComposer() {
     composer.addPass(ao);
   }
   if (fx.bloom) {
-    const bloom = new UnrealBloomPass(new THREE.Vector2(Math.floor(innerWidth / 2), Math.floor(innerHeight / 2)), .32, .5, .88);
+    const bloom = bloomPass = new UnrealBloomPass(new THREE.Vector2(Math.floor(innerWidth / 2), Math.floor(innerHeight / 2)), .32, .5, .88);
     capPassSize(bloom, G.tier >= 3 ? 1.5 : 1);
     composer.addPass(bloom);
   }
@@ -292,6 +311,8 @@ function disposeComposer() {
   for (const pass of composer.passes) if (pass.dispose) pass.dispose();
   composer.dispose();
   composer = null;
+  gtaoPass = null;
+  bloomPass = null;
 }
 
 /** Runs a soft, full-screen pass at no more than `k` times the CSS resolution (glow and shading
@@ -579,16 +600,16 @@ const goal = { target: new V3(), r: 20, phi: .62, theta: 0 };
 const fling = new V3();          // board slide after a flick, world units per second
 const CAM_TAU = .07;             // seconds for the camera to close ~63% of the gap to the goal
 const FLING_DRAG = 4.2;          // how fast a flick slows (per second)
-const PHI_MIN = .08, PHI_MAX = 1.3, R_MIN = 2.5;
-const rMax = () => span * 2.2;
+const PHI_MIN = 0.35, PHI_MAX = Math.PI / 2.35, R_MIN = 3.5;
+const rMax = () => span * 1.6;
 const spherical = (target, dist, polar, azim) =>
   target.clone().add(new V3(Math.sin(polar) * Math.sin(azim), Math.cos(polar), Math.sin(polar) * Math.cos(azim)).multiplyScalar(dist));
 
 function setRig(pos, target) {
   const o = pos.clone().sub(target);
   rig.target.copy(target);
-  rig.r = Math.max(1e-3, o.length());
-  rig.phi = Math.acos(clamp(o.y / rig.r, -1, 1));
+  rig.r = clamp(Math.max(1e-3, o.length()), R_MIN, rMax());
+  rig.phi = clamp(Math.acos(clamp(o.y / rig.r, -1, 1)), PHI_MIN, PHI_MAX);
   rig.theta = Math.atan2(o.x, o.z);
   goalToRig();
 }
@@ -599,8 +620,9 @@ function goalToRig() {
 
 function clampTarget(t) {
   if (box.isEmpty()) return;
-  t.x = clamp(t.x, box.min.x - 3, box.max.x + 3);
-  t.z = clamp(t.z, box.min.z - 3, box.max.z + 3);
+  t.x = clamp(t.x, box.min.x, box.max.x);
+  t.z = clamp(t.z, box.min.z, box.max.z);
+  t.y = 0;
 }
 
 /** Input takes over from a scripted move where the camera is now. */
@@ -611,6 +633,7 @@ function takeControl() {
 
 function syncCamera() {
   clampTarget(rig.target);
+  camera.up.set(0, 1, 0);
   camera.position.copy(spherical(rig.target, rig.r, rig.phi, rig.theta));
   camera.lookAt(rig.target);
   invalidate();
@@ -653,7 +676,9 @@ function pinch(k, a, fx, fy) {
   fling.set(0, 0, 0);
   const r0 = goal.r;
   goal.r = clamp(goal.r / k, R_MIN, rMax());
-  goal.theta -= a || 0;
+  if (a && Math.abs(a) > 0.04) {
+    goal.theta -= (a - Math.sign(a) * 0.04) * 0.75;
+  }
   if (fx != null && fy != null) {
     const p = groundAt(fx, fy);
     if (p) {
@@ -731,10 +756,12 @@ function rigTo(target, r, phi, theta, ms) {
   let d = (theta - rig.theta) % TAU;
   if (d > Math.PI) d -= TAU;
   if (d < -Math.PI) d += TAU;
-  const to = { target: target.clone(), r, phi, theta: rig.theta + d };
+  const clampedPhi = clamp(phi, PHI_MIN, PHI_MAX);
+  const clampedR = clamp(r, R_MIN, rMax());
+  const to = { target: target.clone(), r: clampedR, phi: clampedPhi, theta: rig.theta + d };
   clampTarget(to.target);
   fling.set(0, 0, 0);
-  if (!ms) { rig.target.copy(to.target); rig.r = r; rig.phi = phi; rig.theta = to.theta; goalToRig(); syncCamera(); return; }
+  if (!ms) { rig.target.copy(to.target); rig.r = clampedR; rig.phi = clampedPhi; rig.theta = to.theta; goalToRig(); syncCamera(); return; }
   camTween = { from: { target: rig.target.clone(), r: rig.r, phi: rig.phi, theta: rig.theta }, to, start: performance.now(), ms };
   invalidate();
 }
@@ -746,32 +773,58 @@ function tweenTo(pos, target, ms) {
 
 function zoom(k) { pinch(k, 0); }
 function turn(a) { takeControl(); rigTo(goal.target, goal.r, goal.phi, goal.theta + a, 420); }
-/** Toggles between the seated view and looking straight down. */
-function tilt() { takeControl(); rigTo(goal.target, goal.r, goal.phi > .3 ? PHI_MIN : .62, goal.theta, 420); }
+/** Toggles between the seated view and looking straight down (clamped above zenith). */
+function tilt() { takeControl(); rigTo(goal.target, goal.r, goal.phi > .55 ? PHI_MIN : .68, goal.theta, 420); }
 
-/** The dramatic push-in: camera faces from the attacker toward the defender. */
+/** Smoothly focuses and frames a fighter without distorting FOV or flipping player orientation. */
+function focusFighter(id, ms = 500) {
+  takeControl();
+  let pos = null;
+  const p = pieces.get(id);
+  if (p) {
+    pos = p.group.position.clone();
+  } else if (spaces.has(id)) {
+    const s = spaces.get(id);
+    pos = new V3(s.x, 0, s.z);
+  }
+  if (!pos) return;
+  clampTarget(pos);
+
+  // Preserve consistent natural FOV and current player orientation
+  const dist = clamp(span * 0.45, 4.5, 7.5);
+  const polar = clamp(rig.phi, 0.7, 1.15);
+  const azim = rig.theta; // strictly preserve orientation!
+
+  rigTo(pos, dist, polar, azim, ms);
+}
+
+/** The dramatic push-in: frames combat between attacker and defender without flipping player orientation. */
 function pushIn(a, b, ms) {
   const A = spaces.get(a), B = spaces.get(b);
   if (!A || !B) return;
-  preCombat = { pos: camera.position.clone(), target: rig.target.clone() };
-  const mid = new V3((A.x + B.x) / 2, (A.top + B.top) / 2 + .25, (A.z + B.z) / 2);
+  preCombat = { pos: camera.position.clone(), target: rig.target.clone(), r: rig.r, phi: rig.phi, theta: rig.theta };
+  const mid = new V3((A.x + B.x) / 2, 0, (A.z + B.z) / 2);
+  clampTarget(mid);
+
   const along = new V3(B.x - A.x, 0, B.z - A.z);
   const len = along.length();
-  // Always face from attacker toward defender (looking along the attack direction).
-  const dir = len > 1e-3 ? along.clone().normalize() : new V3(0, 0, -homeSide);
-  // Camera sits behind the attacker looking toward the defender without 180 flips.
-  const viewVec = dir.clone().negate();
-  const polar = 1.05;
-  const tanH = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
-  // Frame the duel in the lower part of the screen, beneath the combat cards.
-  const dist = clamp((len + 2.4) / (.6 * 2 * tanH * camera.aspect), 6.5, span * .9);
-  const azim = Math.atan2(viewVec.x, viewVec.z);
-  const target = mid.clone().addScaledVector(viewVec, -.4 * tanH * dist / Math.cos(polar));
-  tweenTo(spherical(target, dist, polar, azim), target, ms);
+  let azim = rig.theta;
+  if (len > 1e-3) {
+    const combatAzim = Math.atan2(along.x, along.z);
+    let diff = (combatAzim - rig.theta) % TAU;
+    if (diff > Math.PI) diff -= TAU;
+    if (diff < -Math.PI) diff += TAU;
+    azim = rig.theta + clamp(diff, -0.45, 0.45);
+  }
+  const polar = clamp(0.95, PHI_MIN, PHI_MAX);
+  const dist = clamp(len + 4.5, 6.0, span * 1.1);
+  rigTo(mid, dist, polar, azim, ms);
 }
 
 function pullBack(ms) {
-  if (preCombat) tweenTo(preCombat.pos, preCombat.target, ms);
+  if (preCombat) {
+    rigTo(preCombat.target, preCombat.r, preCombat.phi, preCombat.theta, ms);
+  }
   preCombat = null;
 }
 
@@ -1705,6 +1758,10 @@ function loop(now) {
   govern(now, draw, motion || idleMs <= FRAME_MS + 1);
   if (draw) {
     faceCamera();
+    const isMobile = (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0) || innerWidth < 700;
+    const suspendHeavyFx = (isInteracting || camTween != null) && (isMobile || G.tier < 3);
+    if (gtaoPass) gtaoPass.enabled = !suspendHeavyFx && fxOn().ao;
+    if (bloomPass) bloomPass.enabled = !suspendHeavyFx && fxOn().bloom;
     // Pieces moving: their shadows follow every frame, or every other one once the governor is
     // saving time.
     if (moving && (!(G.auto && gov.level >= 3) || (frameNo & 1) === 0)) renderer.shadowMap.needsUpdate = true;
@@ -1808,6 +1865,11 @@ function handle(m) {
     case 'pinch': if (loaded) pinch(m.k || 1, m.a || 0, m.fx, m.fy); break;
     case 'fling': if (loaded) flick(m.vx || 0, m.vy || 0); break;
     case 'pick': if (loaded) tap(m.x * innerWidth, m.y * innerHeight); break;
+    case 'interacting': isInteracting = !!m.v; invalidate(2); break;
+    case 'focus':
+    case 'focusFighter':
+      if (loaded) focusFighter(m.id, m.ms ?? 500);
+      break;
     case 'hidden': pauseLoop(); break;
     case 'visible': invalidate(3); wakeLoop(); break;
     case 'cam':
@@ -1818,6 +1880,7 @@ function handle(m) {
       else if (m.op === 'pull') pullBack(m.ms ?? 650);
       else if (m.op === 'turn') turn(m.a || Math.PI / 4);
       else if (m.op === 'tilt') tilt();
+      else if (m.op === 'focus') focusFighter(m.id, m.ms ?? 500);
       break;
   }
 }
@@ -1828,7 +1891,8 @@ window.board = {
   stats: () => ({
     calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, frames: renderer.info.render.frame,
     geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures,
-    pieces: pieces.size, pixelRatio: prNow, pixelRatioMax: prMax, composer: !!composer, governor: gov.level, ...fxOn(),
+    pieces: pieces.size, pixelRatio: prNow, pixelRatioMax: prMax, composer: !!composer, governor: gov.level,
+    cameraUp: [camera.up.x, camera.up.y, camera.up.z], phi: rig.phi, r: rig.r, ...fxOn(),
   }),
   marked: () => ({
     spaces: (marks.spaces || []).filter(id => spaces.has(id)).map(id => toScreen(at(id))),

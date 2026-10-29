@@ -15,6 +15,10 @@ import '../widgets.dart';
 import 'settings_screen.dart';
 import 'multiplayer_screen.dart';
 import 'setup_screen.dart';
+import '../dialogs/active_players_drawer.dart';
+import '../dialogs/player_profile_modal.dart';
+import '../../net/online_presence.dart';
+import '../../net/profile_stats.dart';
 
 class MenuScreen extends StatefulWidget {
   const MenuScreen({super.key});
@@ -150,11 +154,47 @@ class _MenuScreenState extends State<MenuScreen> with SingleTickerProviderStateM
                 top: 12,
                 child: FullscreenButton(size: 48),
               ),
+              Positioned(
+                right: 16,
+                top: 12,
+                child: HexButton(
+                  icon: Icons.people_alt_rounded,
+                  tooltip: 'Active Players',
+                  size: 48,
+                  onPressed: () {
+                    showModalBottomSheet<void>(
+                      context: context,
+                      backgroundColor: Colors.transparent,
+                      isScrollControlled: true,
+                      builder: (_) => ActivePlayersDrawer(
+                        onlineUsers: OnlinePresenceService.instance.users,
+                        onInvite: (user) async {
+                          Navigator.of(context).pop();
+                          await _open(const MultiplayerScreen(online: true));
+                        },
+                      ),
+                    );
+                  },
+                ),
+              ),
               // Bottom left: who is playing.
               Positioned(
                 left: 16,
                 bottom: 12,
-                child: _NamePlate(name: s.settings.username, onTap: () => _open(const SettingsScreen())),
+                child: _NamePlate(
+                  name: s.settings.username,
+                  onTap: () {
+                    showDialog<void>(
+                      context: context,
+                      builder: (_) => PlayerProfileModal(
+                        name: s.settings.username,
+                        status: 'Online - Idle',
+                        summary: ProfileStats.instance.toSummaryPayload(),
+                        isSelf: true,
+                      ),
+                    );
+                  },
+                ),
               ),
             ],
           ),

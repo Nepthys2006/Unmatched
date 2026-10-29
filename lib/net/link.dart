@@ -25,7 +25,7 @@ class PeerMessage extends LinkEvent {
 }
 
 /// What a lobby list shows about a lobby (online) or a beacon announces (LAN).
-typedef LobbyInfo = ({String mode, int players, int open, bool playing});
+typedef LobbyInfo = ({String mode, int players, int open, bool playing, String status});
 
 /// The host's side: many peers.
 abstract class HostLink {

@@ -20,7 +20,7 @@ String? get servedByLanHost => null;
 bool get canJoinLan => true;
 
 /// A game found on the network.
-typedef LanGame = ({String ip, String name, int players, int open});
+typedef LanGame = ({String ip, String name, int players, int open, String status});
 
 class LanHost implements HostLink {
   LanHost._(this._server, this._addresses);
@@ -245,6 +245,7 @@ class LanDiscovery {
             name: '${m['name'] ?? 'Host'}',
             players: (m['players'] as num?)?.toInt() ?? 2,
             open: (m['open'] as num?)?.toInt() ?? 0,
+            status: '${m['status'] ?? 'matching'}',
           );
           _seen[g.ip] = (g, DateTime.now());
           _emit();

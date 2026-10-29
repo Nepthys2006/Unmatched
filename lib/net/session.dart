@@ -26,10 +26,20 @@ import 'lockstep.dart';
 /// Bumped whenever the messages or the rules change in a way older copies can't follow.
 const netProtocol = 1;
 
-enum SeatKind { open, human, ai }
+enum SeatKind { open, human, ai, reservedDisconnected }
 
 class LobbySeat {
-  LobbySeat(this.kind, {this.name, this.hero, this.ready = false, this.peer});
+  LobbySeat(
+    this.kind, {
+    this.name,
+    this.hero,
+    this.ready = false,
+    this.peer,
+    this.playerId,
+    this.reconnectToken,
+    this.reservedUntil,
+  });
+
   SeatKind kind;
   String? name;
   String? hero;
@@ -38,7 +48,24 @@ class LobbySeat {
   /// Host only: the connection this seat belongs to (null for the host and AI).
   String? peer;
 
-  Msg toJson() => {'kind': kind.name, 'name': name, 'hero': hero, 'ready': ready};
+  /// Host and seat owner: identity and secret token for authenticated rejoin.
+  String? playerId;
+  String? reconnectToken;
+  DateTime? reservedUntil;
+
+  bool get isReserved =>
+      kind == SeatKind.reservedDisconnected &&
+      reservedUntil != null &&
+      DateTime.now().isBefore(reservedUntil!);
+
+  Msg toJson() => {
+    'kind': kind.name,
+    'name': name,
+    'hero': hero,
+    'ready': ready,
+    if (kind == SeatKind.reservedDisconnected) 'reserved': true,
+  };
+
   static LobbySeat fromJson(Msg m) => LobbySeat(
     SeatKind.values.byName(m['kind'] as String),
     name: m['name'] as String?,
@@ -213,14 +240,30 @@ abstract class LobbySession extends ChangeNotifier {
 // ============================================================================================ host
 
 class HostSession extends LobbySession {
-  HostSession(this.link, super.data, {required String name, required this.dataVersion}) {
+  HostSession(
+    this.link,
+    super.data, {
+    required String name,
+    required this.dataVersion,
+    String? playerId,
+    String? reconnectToken,
+  }) {
     final duel = data.mapsFor('1v1');
     lobby = Lobby(
       mode: GameMode.duel,
       players: 2,
       mapId: duel.first.id,
       ai: AiLevel.medium,
-      seats: [LobbySeat(SeatKind.human, name: name, ready: true), LobbySeat(SeatKind.open)],
+      seats: [
+        LobbySeat(
+          SeatKind.human,
+          name: name,
+          ready: true,
+          playerId: playerId,
+          reconnectToken: reconnectToken,
+        ),
+        LobbySeat(SeatKind.open),
+      ],
     );
     mySeat = 0;
     _sub = link.events.listen(_onEvent);
@@ -255,6 +298,7 @@ class HostSession extends LobbySession {
     players: _l.players,
     open: _l.seats.where((s) => s.kind == SeatKind.open).length,
     playing: match != null,
+    status: match != null ? 'inGame' : 'matching',
   );
 
   void _onEvent(LinkEvent e) {
@@ -264,27 +308,34 @@ class HostSession extends LobbySession {
       case PeerLeft(:final peer):
         final seat = _seatOf(peer);
         if (seat == null) return;
-        if (match != null) {
-          // Mid-match: peer disconnected or backgrounded. Start grace period instead of instant AI takeover.
-          _l.seats[seat].peer = null;
-          _awayTimers[seat]?.noticeTimer.cancel();
-          _awayTimers[seat]?.timeoutTimer.cancel();
-          final noticeTimer = Timer(const Duration(minutes: 2), () {
+        final s = _l.seats[seat];
+        s.peer = null;
+        s.kind = SeatKind.reservedDisconnected;
+        s.reservedUntil = DateTime.now().add(const Duration(minutes: 2));
+
+        _awayTimers[seat]?.noticeTimer.cancel();
+        _awayTimers[seat]?.timeoutTimer.cancel();
+
+        final noticeTimer = Timer(const Duration(minutes: 2), () {
+          if (match != null) {
             match?.waitingNotice.value = "It looks like your opponent stepped away—waiting for them to return...";
-          });
-          final timeoutTimer = Timer(const Duration(minutes: 5), () {
-            _awayTimers.remove(seat);
-            match?.waitingNotice.value = null;
-            match?.timeoutRedirect.value = (
-              title: 'Opponent Away',
-              message: "It seems your opponent has been away or unable to move for a while. Returning you to the main lobby.",
-              redirect: 'lobby',
-            );
-          });
-          _awayTimers[seat] = (noticeTimer: noticeTimer, timeoutTimer: timeoutTimer);
-          return;
-        }
-        _l.seats[seat] = LobbySeat(SeatKind.open);
+          } else {
+            if (_l.seats[seat].kind == SeatKind.reservedDisconnected) {
+              _l.seats[seat] = LobbySeat(SeatKind.open);
+              _sync();
+            }
+          }
+        });
+        final timeoutTimer = Timer(const Duration(minutes: 5), () {
+          _awayTimers.remove(seat);
+          match?.waitingNotice.value = null;
+          match?.timeoutRedirect.value = (
+            title: 'Opponent Away',
+            message: "It seems your opponent has been away or unable to move for a while. Returning you to the main lobby.",
+            redirect: 'lobby',
+          );
+        });
+        _awayTimers[seat] = (noticeTimer: noticeTimer, timeoutTimer: timeoutTimer);
         _sync();
       case PeerMessage(:final peer, :final msg):
         _onMessage(peer, msg);
@@ -304,20 +355,64 @@ class HostSession extends LobbySession {
         if (m['v'] != netProtocol || m['data'] != dataVersion) {
           return _reject(peer, 'Different game version. Update both devices to the same build.');
         }
-        if (match != null) {
-          final name = '${m['name'] ?? ''}'.trim();
-          final awayIndex = _l.seats.indexWhere((s) => s.kind == SeatKind.human && s.peer == null && s.name == name);
-          final reconnectSeat = awayIndex >= 0 ? awayIndex : _l.seats.indexWhere((s) => s.kind == SeatKind.human && s.peer == null);
-          if (reconnectSeat >= 0) {
-            _reconnectSeat(reconnectSeat, peer);
-            return;
+        final clientPlayerId = m['playerId'] as String?;
+        final clientToken = m['token'] as String?;
+        final name = '${m['name'] ?? ''}'.trim();
+
+        // 1. Authenticated Rejoin verification for reserved/disconnected seats
+        int reconnectSeat = -1;
+        for (var i = 0; i < _l.seats.length; i++) {
+          final s = _l.seats[i];
+          final isAway = s.kind == SeatKind.reservedDisconnected || (s.kind == SeatKind.human && s.peer == null);
+          if (isAway) {
+            final tokenMatch = clientToken != null && s.reconnectToken != null && clientToken == s.reconnectToken;
+            final idMatch = clientPlayerId != null && s.playerId != null && clientPlayerId == s.playerId;
+            final legacyMatch = s.reconnectToken == null && s.playerId == null && s.name != null && name.isNotEmpty && s.name == name;
+            if (tokenMatch || (s.reconnectToken == null && idMatch) || legacyMatch) {
+              reconnectSeat = i;
+              break;
+            }
           }
-          return _reject(peer, 'That match has already started.');
         }
+
+        if (reconnectSeat >= 0) {
+          final s = _l.seats[reconnectSeat];
+          s.kind = SeatKind.human;
+          s.peer = peer;
+          s.reservedUntil = null;
+          if (name.isNotEmpty) s.name = name;
+          _awayTimers[reconnectSeat]?.noticeTimer.cancel();
+          _awayTimers[reconnectSeat]?.timeoutTimer.cancel();
+          _awayTimers.remove(reconnectSeat);
+          if (_awayTimers.isEmpty) {
+            match?.waitingNotice.value = null;
+          }
+          if (match != null) {
+            _reconnectSeat(reconnectSeat, peer);
+          } else {
+            link.send(peer, {'t': 'welcome', 'seat': reconnectSeat});
+            _sendChat(peer, 1);
+            _sync();
+          }
+          return;
+        }
+
+        // 2. Reject strangers attempting to join active match or reserved seat
+        final anyReserved = _l.seats.any((s) => s.isReserved);
+        if (match != null || anyReserved) {
+          return _reject(peer, 'This match is already underway or holding a spot for a reconnecting player.');
+        }
+
+        // 3. Normal join for open seats
         final open = _l.seats.indexWhere((s) => s.kind == SeatKind.open);
         if (open < 0) return _reject(peer, 'The lobby is full.');
-        final name = '${m['name'] ?? ''}'.trim();
-        _l.seats[open] = LobbySeat(SeatKind.human, name: name.isEmpty ? 'Player ${open + 1}' : name, peer: peer);
+        _l.seats[open] = LobbySeat(
+          SeatKind.human,
+          name: name.isEmpty ? 'Player ${open + 1}' : name,
+          peer: peer,
+          playerId: clientPlayerId,
+          reconnectToken: clientToken,
+        );
         link.send(peer, {'t': 'welcome', 'seat': open});
         _sendChat(peer, 1);
         _sync();
@@ -527,7 +622,9 @@ class HostSession extends LobbySession {
     _changed();
   }
 
-  void _reconnectSeat(int seat, String peer) {
+    void takeOver(int seat, [AiLevel level = AiLevel.hard]) => match?._takeOver(seat, level);
+
+void _reconnectSeat(int seat, String peer) {
     _awayTimers[seat]?.noticeTimer.cancel();
     _awayTimers[seat]?.timeoutTimer.cancel();
     _awayTimers.remove(seat);
@@ -577,14 +674,31 @@ class HostSession extends LobbySession {
 // ========================================================================================== player
 
 class ClientSession extends LobbySession {
-  ClientSession(this.link, super.data, {required String name, required String dataVersion, required this.address}) {
+  ClientSession(
+    this.link,
+    super.data, {
+    required String name,
+    required String dataVersion,
+    required this.address,
+    this.playerId,
+    this.reconnectToken,
+  }) {
     _sub = link.messages.listen(_onMessage);
-    link.send({'t': 'hello', 'v': netProtocol, 'data': dataVersion, 'name': name});
+    link.send({
+      't': 'hello',
+      'v': netProtocol,
+      'data': dataVersion,
+      'name': name,
+      if (playerId != null) 'playerId': playerId,
+      if (reconnectToken != null) 'token': reconnectToken,
+    });
     unawaited(link.done.then(_onDone));
     _repair = Timer.periodic(const Duration(seconds: 2), (_) => _checkLost());
   }
 
   final ClientLink link;
+  final String? playerId;
+  final String? reconnectToken;
   late final StreamSubscription<Msg> _sub;
   late final Timer _repair;
   Timer? _noticeTimer;

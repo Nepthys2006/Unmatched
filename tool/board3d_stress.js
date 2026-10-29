@@ -120,12 +120,26 @@ const int = (a, b) => a + Math.floor(rnd() * (b - a + 1));
     if (st.governor == null) errors.push(`tier ${t} stats failed`);
   }
 
-  // 2. Sharpening pass active on downscale
-  await send({ t: 'gfx', gfx: { scale: 0.6, auto: true, tier: 2 } });
-  await p.waitForTimeout(250);
-  const casStats = await p.evaluate(() => window.board.stats());
-  if (!casStats.cas) errors.push('CAS sharpening pass should be active when downscaled');
-
+  // 2. Camera Orientation, Polar Bounds, and Close-Up Zoom Verification
+  const camStats = await p.evaluate(() => window.board.stats());
+  if (camStats.cameraUp[0] !== 0 || camStats.cameraUp[1] !== 1 || camStats.cameraUp[2] !== 0) {
+    errors.push(`camera.up deviated from (0, 1, 0): [${camStats.cameraUp.join(', ')}]`);
+  }
+  // Test vertical polar angle clamp (min: 0.35, max: Math.PI / 2.35)
+  await send({ t: 'orbit', dx: 0, dy: -5 });
+  await p.waitForTimeout(200);
+  let st = await p.evaluate(() => window.board.stats());
+  if (st.phi < 0.35 - 1e-3) errors.push(`Polar angle ${st.phi} violated minPolarAngle 0.35`);
+  await send({ t: 'orbit', dx: 0, dy: 5 });
+  await p.waitForTimeout(200);
+  st = await p.evaluate(() => window.board.stats());
+  if (st.phi > Math.PI / 2.35 + 1e-3) errors.push(`Polar angle ${st.phi} violated maxPolarAngle ${Math.PI / 2.35}`);
+  // Test character focus and close-up zoom bounds
+  await send({ t: 'cam', op: 'focus', id: 1, ms: 250 });
+  await p.waitForTimeout(350);
+  st = await p.evaluate(() => window.board.stats());
+  if (st.r < 3.5 - 1e-3) errors.push(`Close-up dolly distance ${st.r} fell below minDistance 3.5`);
+  if (st.cameraUp[1] !== 1) errors.push(`Camera flipped after character focus: up=[${st.cameraUp.join(', ')}]`);
   // 3. Render-on-demand: verify 0 frames drawn when stationary / idle
   await p.waitForTimeout(800);
   const idleFrames1 = (await p.evaluate(() => window.board.stats())).frames;

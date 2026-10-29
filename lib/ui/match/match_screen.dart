@@ -27,6 +27,8 @@ import '../board/board_painter.dart';
 import '../board3d/board3d.dart';
 import '../../net/chat.dart';
 import '../../net/session.dart';
+import '../../net/online_presence.dart';
+import '../../net/profile_stats.dart';
 import '../chat_panel.dart';
 import '../screens/settings_screen.dart';
 import '../screens/setup_screen.dart';
@@ -231,6 +233,7 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin,
     super.didChangeDependencies();
     if (_started) return;
     _started = true;
+    OnlinePresenceService.instance.updateStatus(status: 'inGame');
     final cfg = widget.config;
     geo = BoardGeometry(cfg.map);
     final level = cfg.ai;
@@ -574,6 +577,7 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin,
     _cam.removeListener(_trackZoom);
     _cam.dispose();
     _pxPerUnit.dispose();
+    OnlinePresenceService.instance.updateStatus(status: 'idle');
     super.dispose();
   }
 
@@ -779,6 +783,17 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin,
             net.reportResult(winner: winners.isEmpty ? null : winners.join(' & '), players: [for (final p in game.players) p.label]),
           );
         }
+        final opp = game.players.where((p) => p.team != me.team).firstOrNull;
+        ProfileStats.instance.recordMatch(
+          won: won,
+          heroId: me.hero.id,
+          opponentName: opp?.label ?? 'Opponent',
+          opponentHeroId: opp?.hero.id ?? '',
+          mapId: widget.config.map.id,
+          mode: net != null ? 'online' : 'local',
+        );
+        _s.settings.clearReconnect();
+        OnlinePresenceService.instance.updateStatus(status: 'idle');
         _s.audio.stopMusic();
         _s.audio.sfx(won ? Sfx.victory : Sfx.hit);
         _refresh();
@@ -1342,6 +1357,8 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin,
   }
 
   void _toMenu() {
+    _s.settings.clearReconnect();
+    OnlinePresenceService.instance.updateStatus(status: 'idle');
     widget.net?.leave();
     _s.audio.music(Music.menu);
     Navigator.of(context).popUntil((r) => r.isFirst);
@@ -2413,14 +2430,23 @@ class _Board3DInputState extends State<_Board3DInput> {
     builder: (context, box) {
       _size = box.biggest;
       return Listener(
-        onPointerDown: (e) => _orbiting = e.kind == PointerDeviceKind.mouse && e.buttons & kSecondaryMouseButton != 0,
+        onPointerDown: (e) {
+          _orbiting = e.kind == PointerDeviceKind.mouse && e.buttons & kSecondaryMouseButton != 0;
+          if (_orbiting) c.send(const {'t': 'interacting', 'v': true});
+        },
         onPointerMove: (e) {
           if (!_orbiting) return;
           _orbit += e.delta;
           _queue();
         },
-        onPointerUp: (_) => _orbiting = false,
-        onPointerCancel: (_) => _orbiting = false,
+        onPointerUp: (_) {
+          if (_orbiting) c.send(const {'t': 'interacting', 'v': false});
+          _orbiting = false;
+        },
+        onPointerCancel: (_) {
+          if (_orbiting) c.send(const {'t': 'interacting', 'v': false});
+          _orbiting = false;
+        },
         onPointerSignal: (e) {
           if (e is! PointerScrollEvent || e.scrollDelta.dy == 0) return;
           // A notch is ~100 px: about 12% per notch, finer for a trackpad's small steps.
@@ -2434,13 +2460,17 @@ class _Board3DInputState extends State<_Board3DInput> {
           onScaleStart: (_) {
             _scale = 1;
             _rotation = 0;
+            c.send(const {'t': 'interacting', 'v': true});
           },
           onScaleUpdate: (d) {
             if (_orbiting) return;
             _drag += d.focalPointDelta;
             if (d.pointerCount > 1) {
               _zoom *= d.scale / _scale;
-              _twist += d.rotation - _rotation;
+              final dRot = d.rotation - _rotation;
+              if (dRot.abs() > 0.04) {
+                _twist += dRot * 0.75;
+              }
               _scale = d.scale;
               _rotation = d.rotation;
               _focal = d.localFocalPoint;
@@ -2448,6 +2478,7 @@ class _Board3DInputState extends State<_Board3DInput> {
             _queue();
           },
           onScaleEnd: (d) {
+            c.send(const {'t': 'interacting', 'v': false});
             // Only when the last finger lifts (going from two fingers to one isn't a flick).
             if (_orbiting || d.pointerCount > 0) return;
             _flush();

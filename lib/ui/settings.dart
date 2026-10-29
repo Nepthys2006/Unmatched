@@ -1,8 +1,10 @@
 /// Player settings, persisted with shared_preferences.
 library;
 
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../net/profile_stats.dart';
 
 enum Quality { low, medium, high, ultra }
 
@@ -128,6 +130,7 @@ class Settings extends ChangeNotifier {
     }
     final s = Settings._(prefs);
     s._read();
+    await ProfileStats.load(prefs);
     return s;
   }
 
@@ -137,6 +140,63 @@ class Settings extends ChangeNotifier {
   final SharedPreferences? _prefs;
 
   String username = '';
+  String playerId = '';
+
+  /// Active reconnect session for 2-minute grace period rejoining.
+  String? reconnectLobbyId;
+  String? reconnectToken;
+  String? reconnectTopic;
+  int? reconnectSeat;
+  DateTime? reconnectExpiresAt;
+
+  bool get hasActiveReconnect =>
+      reconnectToken != null &&
+      reconnectExpiresAt != null &&
+      DateTime.now().isBefore(reconnectExpiresAt!);
+
+  void saveReconnect({
+    required String lobbyId,
+    required String token,
+    String? topic,
+    int? seat,
+    Duration duration = const Duration(minutes: 2),
+  }) {
+    reconnectLobbyId = lobbyId;
+    reconnectToken = token;
+    reconnectTopic = topic;
+    reconnectSeat = seat;
+    reconnectExpiresAt = DateTime.now().add(duration);
+    _saveReconnect();
+  }
+
+  void clearReconnect() {
+    reconnectLobbyId = null;
+    reconnectToken = null;
+    reconnectTopic = null;
+    reconnectSeat = null;
+    reconnectExpiresAt = null;
+    _saveReconnect();
+  }
+
+  void _saveReconnect() {
+    final p = _prefs;
+    if (p == null) return;
+    try {
+      if (reconnectToken == null) {
+        p.remove('reconnect_lobbyId');
+        p.remove('reconnect_token');
+        p.remove('reconnect_topic');
+        p.remove('reconnect_seat');
+        p.remove('reconnect_expires');
+      } else {
+        p.setString('reconnect_lobbyId', reconnectLobbyId ?? '');
+        p.setString('reconnect_token', reconnectToken ?? '');
+        p.setString('reconnect_topic', reconnectTopic ?? '');
+        if (reconnectSeat != null) p.setInt('reconnect_seat', reconnectSeat!);
+        if (reconnectExpiresAt != null) p.setString('reconnect_expires', reconnectExpiresAt!.toIso8601String());
+      }
+    } catch (_) {}
+  }
 
   /// The signed-in account's session token (empty: not signed in). The username above is then
   /// the account's name.
@@ -224,6 +284,18 @@ class Settings extends ChangeNotifier {
     final p = _prefs;
     if (p == null) return;
     username = p.getString('username') ?? '';
+    playerId = p.getString('playerId') ?? '';
+    if (playerId.isEmpty) {
+      final r = math.Random.secure();
+      playerId = List.generate(32, (_) => r.nextInt(16).toRadixString(16)).join();
+      p.setString('playerId', playerId);
+    }
+    reconnectLobbyId = p.getString('reconnect_lobbyId');
+    reconnectToken = p.getString('reconnect_token');
+    reconnectTopic = p.getString('reconnect_topic');
+    reconnectSeat = p.getInt('reconnect_seat');
+    final expStr = p.getString('reconnect_expires');
+    if (expStr != null) reconnectExpiresAt = DateTime.tryParse(expStr);
     accountToken = p.getString('accountToken') ?? '';
     applyPreset(_pick(Quality.values, p.getInt('quality')) ?? quality);
     animSpeed = _pick(AnimSpeed.values, p.getInt('animSpeed')) ?? animSpeed;
@@ -253,6 +325,7 @@ class Settings extends ChangeNotifier {
     if (p == null) return;
     try {
       await p.setString('username', username);
+      await p.setString('playerId', playerId);
       await p.setString('accountToken', accountToken);
       await p.setInt('quality', quality.index);
       await p.setInt('animSpeed', animSpeed.index);

@@ -16,8 +16,12 @@ import '../services.dart';
 import '../shapes.dart';
 import '../theme.dart';
 import '../widgets.dart';
+import 'dart:math' as math;
 import 'lobby_screen.dart';
 import 'menu_screen.dart' show gameSnack;
+import '../../net/online_presence.dart';
+import '../dialogs/active_players_drawer.dart';
+import '../dialogs/invite_banner_dialog.dart';
 
 class MultiplayerScreen extends StatefulWidget {
   const MultiplayerScreen({super.key, required this.online});
@@ -40,6 +44,12 @@ class _MultiplayerScreenState extends State<MultiplayerScreen> {
   List<OnlineLobby>? _lobbies;
   String? _listError;
   Timer? _refresh;
+  StreamSubscription<MatchInvite>? _inviteSub;
+
+  String _randomToken() {
+    final r = math.Random.secure();
+    return List.generate(32, (_) => r.nextInt(16).toRadixString(16)).join();
+  }
 
   bool get _online => widget.online;
 
@@ -57,6 +67,15 @@ class _MultiplayerScreenState extends State<MultiplayerScreen> {
     if (_online) {
       unawaited(_loadLobbies());
       _refresh = Timer.periodic(const Duration(seconds: 4), (_) => _loadLobbies());
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final s = context.services;
+        OnlinePresenceService.instance.start(
+          playerId: s.settings.playerId,
+          username: s.settings.username,
+        );
+        _inviteSub = OnlinePresenceService.instance.invites.listen(_onInviteReceived);
+      });
     }
   }
 
@@ -65,6 +84,7 @@ class _MultiplayerScreenState extends State<MultiplayerScreen> {
     _sub?.cancel();
     _discovery?.stop();
     _refresh?.cancel();
+    _inviteSub?.cancel();
     _address.dispose();
     _lobbyName.dispose();
     _password.dispose();
@@ -98,24 +118,37 @@ class _MultiplayerScreenState extends State<MultiplayerScreen> {
     setState(() => _busy = true);
     try {
       HostSession? session;
+      final token = _randomToken();
       final HostLink link = _online
           ? await OnlineHost.create(
               name: _lobbyName.text.trim().isEmpty ? '${s.settings.username}\'s lobby' : _lobbyName.text.trim(),
               hostName: s.settings.username,
               password: _password.text,
-              info: (mode: 'duel', players: 2, open: 1, playing: false),
+              info: (mode: 'duel', players: 2, open: 1, playing: false, status: 'matching'),
             )
           : await LanHost.start(
               describe: () {
                 final l = session?.lobby;
+                final isPlaying = session?.match != null;
                 return {
                   'name': s.settings.username,
                   'players': l?.players ?? 2,
                   'open': l?.seats.where((x) => x.kind == SeatKind.open).length ?? 1,
+                  'status': isPlaying ? 'inGame' : 'matching',
                 };
               },
             );
-      session = HostSession(link, s.data, name: s.settings.username, dataVersion: s.dataVersion);
+      final lobbyId = _online ? (link as OnlineHost).id : 'lan';
+      final topic = _online ? (link as OnlineHost).room : null;
+      s.settings.saveReconnect(lobbyId: lobbyId, token: token, topic: topic);
+      session = HostSession(
+        link,
+        s.data,
+        name: s.settings.username,
+        dataVersion: s.dataVersion,
+        playerId: s.settings.playerId,
+        reconnectToken: token,
+      );
       await _openLobby(session);
     } catch (e) {
       _error(_online ? e : 'Could not start hosting: $e');
@@ -133,8 +166,18 @@ class _MultiplayerScreenState extends State<MultiplayerScreen> {
     }
     setState(() => _busy = true);
     try {
+      final token = s.settings.reconnectToken ?? _randomToken();
+      s.settings.saveReconnect(lobbyId: target, token: token);
       final link = await joinLan(target);
-      final session = ClientSession(link, s.data, name: s.settings.username, dataVersion: s.dataVersion, address: target);
+      final session = ClientSession(
+        link,
+        s.data,
+        name: s.settings.username,
+        dataVersion: s.dataVersion,
+        address: target,
+        playerId: s.settings.playerId,
+        reconnectToken: token,
+      );
       await _openLobby(session);
     } catch (e) {
       _error('Could not reach $target. Are you on the same Wi-Fi or hotspot?');
@@ -153,8 +196,18 @@ class _MultiplayerScreenState extends State<MultiplayerScreen> {
     }
     setState(() => _busy = true);
     try {
+      final token = s.settings.reconnectToken ?? _randomToken();
+      s.settings.saveReconnect(lobbyId: l.id, token: token);
       final link = await OnlineClient.join(l.id, password: password);
-      final session = ClientSession(link, s.data, name: s.settings.username, dataVersion: s.dataVersion, address: l.name);
+      final session = ClientSession(
+        link,
+        s.data,
+        name: s.settings.username,
+        dataVersion: s.dataVersion,
+        address: l.name,
+        playerId: s.settings.playerId,
+        reconnectToken: token,
+      );
       await _openLobby(session);
     } catch (e) {
       _error(e);
@@ -162,6 +215,110 @@ class _MultiplayerScreenState extends State<MultiplayerScreen> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  Future<void> _rejoinActive() async {
+    final s = context.services;
+    final lobbyId = s.settings.reconnectLobbyId;
+    final token = s.settings.reconnectToken;
+    final topic = s.settings.reconnectTopic;
+    if (lobbyId == null || token == null) return;
+    setState(() => _busy = true);
+    try {
+      if (_online) {
+        final ClientLink link = (topic != null && topic.isNotEmpty)
+            ? await OnlineClient.reconnect(topic: topic)
+            : await OnlineClient.join(lobbyId);
+        final session = ClientSession(
+          link,
+          s.data,
+          name: s.settings.username,
+          dataVersion: s.dataVersion,
+          address: lobbyId,
+          playerId: s.settings.playerId,
+          reconnectToken: token,
+        );
+        await _openLobby(session);
+      } else {
+        await _joinLan(lobbyId);
+      }
+    } catch (e) {
+      _error(e);
+      s.settings.clearReconnect();
+      if (_online) unawaited(_loadLobbies());
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  void _onInviteReceived(MatchInvite inv) {
+    if (!mounted) return;
+    InviteBannerDialog.show(
+      context,
+      invite: inv,
+      onAccept: () async {
+        final s = context.services;
+        final token = s.settings.reconnectToken ?? _randomToken();
+        s.settings.saveReconnect(lobbyId: inv.lobbyId, token: token);
+        setState(() => _busy = true);
+        try {
+          final link = await OnlineClient.join(inv.lobbyId);
+          final session = ClientSession(
+            link,
+            s.data,
+            name: s.settings.username,
+            dataVersion: s.dataVersion,
+            address: inv.lobbyName,
+            playerId: s.settings.playerId,
+            reconnectToken: token,
+          );
+          await _openLobby(session);
+        } catch (e) {
+          _error(e);
+        } finally {
+          if (mounted) setState(() => _busy = false);
+        }
+      },
+      onDecline: () {},
+    );
+  }
+
+  void _openActivePlayers() {
+    ActivePlayersDrawer.show(
+      context,
+      onInvite: (user) async {
+        final s = context.services;
+        setState(() => _busy = true);
+        try {
+          final lobbyName = '${s.settings.username} vs ${user.name}';
+          final token = _randomToken();
+          final link = await OnlineHost.create(
+            name: lobbyName,
+            hostName: s.settings.username,
+            info: (mode: 'duel', players: 2, open: 1, playing: false, status: 'matching'),
+          );
+          s.settings.saveReconnect(lobbyId: link.id, token: token, topic: link.room);
+          await OnlinePresenceService.instance.sendInvite(
+            targetUserId: user.id,
+            lobbyId: link.id,
+            lobbyName: lobbyName,
+          );
+          final session = HostSession(
+            link,
+            s.data,
+            name: s.settings.username,
+            dataVersion: s.dataVersion,
+            playerId: s.settings.playerId,
+            reconnectToken: token,
+          );
+          await _openLobby(session);
+        } catch (e) {
+          _error(e);
+        } finally {
+          if (mounted) setState(() => _busy = false);
+        }
+      },
+    );
   }
 
   Future<String?> _askPassword(String lobby) async {
@@ -203,7 +360,18 @@ class _MultiplayerScreenState extends State<MultiplayerScreen> {
         child: SafeArea(
           child: Column(
             children: [
-              ScreenHeader(title: _online ? 'Online' : 'LAN'),
+              ScreenHeader(
+                title: _online ? 'Online' : 'LAN',
+                trailing: _online
+                    ? PlateButton(
+                        label: 'Active Players',
+                        icon: Icons.people_alt_rounded,
+                        height: 38,
+                        fontSize: 14,
+                        onPressed: _openActivePlayers,
+                      )
+                    : null,
+              ),
               Expanded(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
@@ -272,6 +440,65 @@ class _MultiplayerScreenState extends State<MultiplayerScreen> {
     ),
   );
 
+  Widget _statusBadge(String status) {
+    final isGame = status == 'inGame';
+    final color = isGame ? const Color(0xFF10B981) : Palette.gold;
+    final label = isGame ? 'IN GAME' : 'MATCHING';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: color.withValues(alpha: 0.65), width: 1.2),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (isGame) ...[
+            Container(width: 6, height: 6, decoration: const BoxDecoration(color: Color(0xFF10B981), shape: BoxShape.circle)),
+            const SizedBox(width: 4),
+          ],
+          Text(label, style: titleStyle(10.5, color: color, weight: FontWeight.w800, spacing: 0.6)),
+        ],
+      ),
+    );
+  }
+
+  Widget _rejoinBanner() {
+    final s = context.services;
+    if (!s.settings.hasActiveReconnect) return const SizedBox.shrink();
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Palette.gold.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Palette.gold, width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.sync_rounded, color: Palette.gold, size: 20),
+              const SizedBox(width: 8),
+              Text('ACTIVE SESSION IN PROGRESS', style: titleStyle(13, color: Palette.gold, weight: FontWeight.w800)),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text('You disconnected recently. Rejoin within the 2-minute grace window to keep your seat.', style: bodyStyle(12, color: Palette.boneDim)),
+          const SizedBox(height: 10),
+          PlateButton(
+            label: 'REJOIN MATCH',
+            icon: Icons.login_rounded,
+            height: 46,
+            fontSize: 15,
+            onPressed: _busy ? null : _rejoinActive,
+          ),
+        ],
+      ),
+    );
+  }
   Widget _joinPanel() => Panel(
     padding: const EdgeInsets.all(18),
     child: Column(
@@ -279,6 +506,7 @@ class _MultiplayerScreenState extends State<MultiplayerScreen> {
       children: [
         Text('JOIN A GAME', style: titleStyle(22, spacing: 1.2)),
         const SizedBox(height: 6),
+        _rejoinBanner(),
         if (_online) ..._lobbyList() else ..._lanJoin(),
       ],
     ),
@@ -315,14 +543,24 @@ class _MultiplayerScreenState extends State<MultiplayerScreen> {
       for (final g in _found)
         Padding(
           padding: const EdgeInsets.only(bottom: 8),
-          child: PlateButton(
-            label: '${g.name}\'s game',
-            subtitle: '${g.players} players · ${g.open} open · ${g.ip}',
-            icon: Icons.login_rounded,
-            style: PlateStyle.secondary,
-            height: 58,
-            fontSize: 17,
-            onPressed: _busy ? null : () => _joinLan(g.ip),
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              PlateButton(
+                label: '${g.name}\'s game',
+                subtitle: '${g.players} players · ${g.open} open · ${g.ip}',
+                icon: Icons.login_rounded,
+                style: PlateStyle.secondary,
+                height: 58,
+                fontSize: 17,
+                onPressed: _busy ? null : () => _joinLan(g.ip),
+              ),
+              Positioned(
+                top: -8,
+                right: 18,
+                child: _statusBadge(g.status),
+              ),
+            ],
           ),
         ),
       const SizedBox(height: 10),
@@ -373,14 +611,24 @@ class _MultiplayerScreenState extends State<MultiplayerScreen> {
       for (final g in l)
         Padding(
           padding: const EdgeInsets.only(bottom: 8),
-          child: PlateButton(
-            label: g.name,
-            subtitle: '${g.host} · ${_modeLabel(g.mode, g.players)} · ${g.open} open seat${g.open == 1 ? '' : 's'}',
-            icon: g.locked ? Icons.lock_rounded : Icons.login_rounded,
-            style: PlateStyle.secondary,
-            height: 58,
-            fontSize: 17,
-            onPressed: _busy || g.open < 1 ? null : () => _joinOnline(g),
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              PlateButton(
+                label: g.name,
+                subtitle: '${g.host} · ${_modeLabel(g.mode, g.players)} · ${g.open} open seat${g.open == 1 ? '' : 's'}',
+                icon: g.locked ? Icons.lock_rounded : Icons.login_rounded,
+                style: PlateStyle.secondary,
+                height: 58,
+                fontSize: 17,
+                onPressed: _busy || (g.open < 1 && context.services.settings.reconnectLobbyId != g.id) ? null : () => _joinOnline(g),
+              ),
+              Positioned(
+                top: -8,
+                right: 18,
+                child: _statusBadge(g.status),
+              ),
+            ],
           ),
         ),
     ];

@@ -37,7 +37,7 @@ void main() {
       name: tag,
       hostName: 'Host',
       password: 'sesame',
-      info: (mode: 'duel', players: 2, open: 1, playing: false),
+      info: (mode: 'duel', players: 2, open: 1, playing: false, status: 'matching'),
       client: targetClient,
     );
     final host = HostSession(hostLink, data, name: 'Host', dataVersion: 'test');

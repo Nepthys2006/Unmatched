@@ -727,6 +727,10 @@ class _LobbyScreenState extends State<LobbyScreen> {
         '${seat.name ?? 'Player'}${me ? ' (you)' : ''}',
         hero == null ? 'Choosing a hero…' : '${hero.name}${i == 0 || seat.ready ? ' · ready' : ' · not ready'}',
       ),
+      SeatKind.reservedDisconnected => (
+        '${seat.name ?? 'Player'} (Disconnected)',
+        'Reserved for reconnecting player…',
+      ),
     };
     final tap = switch (seat.kind) {
       SeatKind.open when host != null => () => host.toggleSeat(i),

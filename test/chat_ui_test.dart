@@ -135,6 +135,7 @@ void main() {
       expect([for (final c in host.chat.messages) (c.id, c.seat, c.name)], [(1, 1, 'Bob'), (2, 0, 'Host'), (3, 0, 'Host'), (4, 1, 'Bob')]);
       // Bob leaves; the AI plays on for him.
       link._events.add(const PeerLeft('bob'));
+      host.takeOver(1);
       await t.pump();
 
       // Let the AI play your side to the end: the host reports the result (online, that deletes

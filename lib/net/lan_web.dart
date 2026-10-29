@@ -17,7 +17,7 @@ String? get servedByLanHost => Uri.base.scheme == 'http' && Uri.base.port == lan
 /// Whether this page may open plain ws:// connections at all (browsers block them from https).
 bool get canJoinLan => Uri.base.scheme == 'http';
 
-typedef LanGame = ({String ip, String name, int players, int open});
+typedef LanGame = ({String ip, String name, int players, int open, String status});
 
 class LanHost implements HostLink {
   static Future<LanHost> start({required Map<String, Object?> Function() describe}) =>

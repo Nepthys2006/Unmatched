@@ -52,7 +52,7 @@ String _id(math.Random r) => List.generate(12, (_) => _alphabet[r.nextInt(_alpha
 String _channel(String topic) => 'unmatched-$topic';
 
 /// A lobby as listed for players looking for a game.
-typedef OnlineLobby = ({String id, String name, String host, String mode, int players, int open, bool locked});
+typedef OnlineLobby = ({String id, String name, String host, String mode, int players, int open, bool locked, String status});
 
 /// The lobbies waiting for players, newest first.
 Future<List<OnlineLobby>> listLobbies({SupabaseClient? client}) async {
@@ -70,6 +70,7 @@ Future<List<OnlineLobby>> listLobbies({SupabaseClient? client}) async {
         players: r['players'] as int,
         open: r['open_seats'] as int,
         locked: r['has_password'] == true,
+        status: (r['status'] as String?) == 'playing' ? 'inGame' : 'matching',
       ),
   ];
 }
@@ -151,6 +152,7 @@ class OnlineHost implements HostLink, ChatKeeper {
       'p_mode': info.mode,
       'p_players': info.players,
       'p_open': info.open,
+      'p_status': info.status == 'inGame' ? 'playing' : 'waiting',
     }) as List;
     final row = rows.first as Map;
     final h = OnlineHost._(name, sb, row['id'] as String, row['host_token'] as String, row['topic'] as String);
@@ -172,6 +174,9 @@ class OnlineHost implements HostLink, ChatKeeper {
   final SupabaseClient _sb;
   final String _id;
   final String _token;
+
+  String get id => _id;
+  String get room => _room;
 
   /// The lobby's secret channel topic: only its players know it. The chat is kept under it.
   final String _room;
@@ -217,7 +222,7 @@ class OnlineHost implements HostLink, ChatKeeper {
         'p_mode': _info.mode,
         'p_players': _info.players,
         'p_open': _info.open,
-        'p_status': _info.playing ? 'playing' : 'waiting',
+        'p_status': _info.status == 'inGame' || _info.playing ? 'playing' : 'waiting',
       });
     } catch (_) {
       // Next heartbeat tries again.
@@ -297,13 +302,32 @@ class OnlineHost implements HostLink, ChatKeeper {
 }
 
 class OnlineClient implements ClientLink {
-  OnlineClient._(this._me, this._sb);
+  OnlineClient._(this._me, this._sb, {this.topic});
+  final String? topic;
 
   /// Joins lobby [id]; the server checks [password] and that a seat is free.
+  /// Reconnects to an active lobby by topic during grace period.
+  static Future<OnlineClient> reconnect({required String topic, SupabaseClient? client}) async {
+    final sb = client ?? _client;
+    final c = OnlineClient._(_id(math.Random.secure()), sb, topic: topic);
+    final ch = c._ch = await _join(sb, _channel(topic), c._me, bind: c._bind);
+    await ch.track({'role': 'player'});
+    final end = DateTime.now().add(const Duration(seconds: 8));
+    while (!ch.presenceState().any((p) => p.key == 'host')) {
+      if (DateTime.now().isAfter(end)) {
+        await sb.removeChannel(ch);
+        throw StateError('The host isn\'t answering. The match may have ended.');
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    }
+    c._out = _Outbox(ch, 'c2h', (items) => {'from': c._me, 'items': items});
+    return c;
+  }
+
   static Future<OnlineClient> join(String id, {String password = '', SupabaseClient? client}) async {
     final sb = client ?? _client;
     final topic = await _rpc(sb, 'join_lobby', {'p_id': id, 'p_password': password}) as String;
-    final c = OnlineClient._(_id(math.Random.secure()), sb);
+    final c = OnlineClient._(_id(math.Random.secure()), sb, topic: topic);
     final ch = c._ch = await _join(sb, _channel(topic), c._me, bind: c._bind);
     await ch.track({'role': 'player'});
     // Wait for the host to show up in the channel's presence.
