@@ -22,6 +22,7 @@ import '../ui/match/match_config.dart';
 import 'chat.dart';
 import 'link.dart';
 import 'lockstep.dart';
+import 'profile_stats.dart';
 
 /// Bumped whenever the messages or the rules change in a way older copies can't follow.
 const netProtocol = 1;
@@ -38,6 +39,7 @@ class LobbySeat {
     this.playerId,
     this.reconnectToken,
     this.reservedUntil,
+    this.stats,
   });
 
   SeatKind kind;
@@ -53,6 +55,9 @@ class LobbySeat {
   String? reconnectToken;
   DateTime? reservedUntil;
 
+  /// Public player stats payload
+  Map<String, Object?>? stats;
+
   bool get isReserved =>
       kind == SeatKind.reservedDisconnected &&
       reservedUntil != null &&
@@ -63,6 +68,7 @@ class LobbySeat {
     'name': name,
     'hero': hero,
     'ready': ready,
+    if (stats != null) 'stats': stats,
     if (kind == SeatKind.reservedDisconnected) 'reserved': true,
   };
 
@@ -71,6 +77,7 @@ class LobbySeat {
     name: m['name'] as String?,
     hero: m['hero'] as String?,
     ready: m['ready'] == true,
+    stats: m['stats'] is Map ? (m['stats'] as Map).cast<String, Object?>() : null,
   );
 }
 
@@ -261,6 +268,7 @@ class HostSession extends LobbySession {
           ready: true,
           playerId: playerId,
           reconnectToken: reconnectToken,
+          stats: ProfileStats.instance.toSummaryPayload(),
         ),
         LobbySeat(SeatKind.open),
       ],
@@ -357,6 +365,7 @@ class HostSession extends LobbySession {
         }
         final clientPlayerId = m['playerId'] as String?;
         final clientToken = m['token'] as String?;
+        final clientStats = m['stats'] is Map ? (m['stats'] as Map).cast<String, Object?>() : null;
         final name = '${m['name'] ?? ''}'.trim();
 
         // 1. Authenticated Rejoin verification for reserved/disconnected seats
@@ -381,6 +390,7 @@ class HostSession extends LobbySession {
           s.peer = peer;
           s.reservedUntil = null;
           if (name.isNotEmpty) s.name = name;
+          if (clientStats != null) s.stats = clientStats;
           _awayTimers[reconnectSeat]?.noticeTimer.cancel();
           _awayTimers[reconnectSeat]?.timeoutTimer.cancel();
           _awayTimers.remove(reconnectSeat);
@@ -412,6 +422,7 @@ class HostSession extends LobbySession {
           peer: peer,
           playerId: clientPlayerId,
           reconnectToken: clientToken,
+          stats: clientStats,
         );
         link.send(peer, {'t': 'welcome', 'seat': open});
         _sendChat(peer, 1);
@@ -691,6 +702,7 @@ class ClientSession extends LobbySession {
       'name': name,
       if (playerId != null) 'playerId': playerId,
       if (reconnectToken != null) 'token': reconnectToken,
+      'stats': ProfileStats.instance.toSummaryPayload(),
     });
     unawaited(link.done.then(_onDone));
     _repair = Timer.periodic(const Duration(seconds: 2), (_) => _checkLost());

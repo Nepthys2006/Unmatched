@@ -187,6 +187,10 @@ function setup() {
   camera.up.set(0, 1, 0);
 
   renderer.domElement.style.touchAction = 'none';
+  renderer.domElement.addEventListener('webglcontextlost', (e) => {
+    e.preventDefault();
+    post({ t: 'error', fatal: true, msg: 'WebGL context lost' });
+  }, false);
   renderer.domElement.addEventListener('touchstart', () => {
     isInteracting = true;
     invalidate(2);
@@ -267,7 +271,12 @@ function buildComposer() {
   disposeComposer();
   for (const p of pieces.values()) sizePiece(p);
   if (!fx.bloom && !fx.ao && !G.aa) return;
-  const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples });
+  let rt;
+  try {
+    rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples });
+  } catch (e) {
+    rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.UnsignedByteType, samples: 0 });
+  }
   composer = new EffectComposer(renderer, rt);
   composer.setPixelRatio(prNow);
   composer.setSize(innerWidth, innerHeight);
@@ -632,6 +641,11 @@ function takeControl() {
 }
 
 function syncCamera() {
+  if (!Number.isFinite(rig.r) || rig.r <= 0) rig.r = 15;
+  if (!Number.isFinite(rig.phi)) rig.phi = 0.8;
+  if (!Number.isFinite(rig.theta)) rig.theta = 0;
+  if (!Number.isFinite(rig.target.x)) rig.target.x = 0;
+  if (!Number.isFinite(rig.target.z)) rig.target.z = 0;
   clampTarget(rig.target);
   camera.up.set(0, 1, 0);
   camera.position.copy(spherical(rig.target, rig.r, rig.phi, rig.theta));
@@ -706,15 +720,18 @@ function stepCamera(dt) {
     if (fling.length() < span * .004) fling.set(0, 0, 0);
     moving = true;
   }
-  const gap = goal.target.distanceTo(rig.target) / rig.r + Math.abs(Math.log(goal.r / rig.r)) +
+  const safeRigR = Math.max(1e-4, rig.r);
+  const safeGoalR = Math.max(1e-4, goal.r);
+  const rRatio = safeGoalR / safeRigR;
+  const gap = goal.target.distanceTo(rig.target) / safeRigR + Math.abs(Math.log(rRatio)) +
     Math.abs(goal.phi - rig.phi) + Math.abs(goal.theta - rig.theta);
   if (gap === 0) return moving;
-  if (gap < 2e-4) {
+  if (gap < 2e-4 || !Number.isFinite(gap)) {
     rig.target.copy(goal.target); rig.r = goal.r; rig.phi = goal.phi; rig.theta = goal.theta;
   } else {
     const a = 1 - Math.exp(-dt / CAM_TAU);
     rig.target.lerp(goal.target, a);
-    rig.r *= Math.pow(goal.r / rig.r, a); // zoom in log space: the same pace near and far
+    rig.r = Math.max(R_MIN, rig.r * Math.pow(rRatio, a));
     rig.phi += (goal.phi - rig.phi) * a;
     rig.theta += (goal.theta - rig.theta) * a;
   }
@@ -767,7 +784,7 @@ function rigTo(target, r, phi, theta, ms) {
 }
 
 function tweenTo(pos, target, ms) {
-  const o = pos.clone().sub(target), r = o.length();
+  const o = pos.clone().sub(target), r = Math.max(1e-3, o.length());
   rigTo(target, r, Math.acos(clamp(o.y / r, -1, 1)), Math.atan2(o.x, o.z), ms);
 }
 
@@ -1672,113 +1689,125 @@ function loop(now) {
   // Frame pacing: at most 60 frames a second (a 90/120/144 Hz screen would otherwise draw two or
   // more frames per one that's needed, halving the headroom). Ultra is left uncapped.
   if (G.tier < 3 && now < nextFrame - 2) return;
-  let busy = false, motion = dirty > 0, moving = false;
+  try {
+    let busy = false, motion = dirty > 0, moving = false;
 
-  if (camTween) {
-    const t = clamp((now - camTween.start) / camTween.ms, 0, 1), k = ease(t), a = camTween.from, b = camTween.to;
-    rig.target.lerpVectors(a.target, b.target, k);
-    rig.r = a.r * Math.pow(b.r / a.r, k); // log space: a push-in closes in at an even pace
-    rig.phi = a.phi + (b.phi - a.phi) * k;
-    rig.theta = a.theta + (b.theta - a.theta) * k;
-    syncCamera();
-    goalToRig();
-    if (t >= 1) camTween = null;
-    busy = motion = true;
-  }
-  const dt = clamp((now - lastStep) / 1000, 0, .05);
-  lastStep = now;
-  if (stepCamera(dt)) busy = motion = true;
+    if (camTween) {
+      const t = clamp((now - camTween.start) / Math.max(1, camTween.ms), 0, 1), k = ease(t), a = camTween.from, b = camTween.to;
+      rig.target.lerpVectors(a.target, b.target, k);
+      const rRatio = Math.max(1e-4, b.r) / Math.max(1e-4, a.r);
+      rig.r = Math.max(R_MIN, a.r * Math.pow(rRatio, k)); // log space: a push-in closes in at an even pace
+      rig.phi = a.phi + (b.phi - a.phi) * k;
+      rig.theta = a.theta + (b.theta - a.theta) * k;
+      syncCamera();
+      goalToRig();
+      if (t >= 1) camTween = null;
+      busy = motion = true;
+    }
+    const dt = clamp((now - lastStep) / 1000, 0, .05);
+    lastStep = now;
+    if (stepCamera(dt)) busy = motion = true;
 
-  for (const p of pieces.values()) {
-    const a = p.anim;
-    if (!a) continue;
-    busy = motion = moving = true;
-    const segs = a.path.length - 1;
-    const x = clamp((now - a.start) / a.ms, 0, 1) * segs;
-    const i = Math.min(Math.floor(x), segs - 1), u = ease(x - i);
-    const A = spaces.get(a.path[i]), B = spaces.get(a.path[i + 1]);
-    p.group.position.set(A.x + (B.x - A.x) * u, A.top + (B.top - A.top) * u + Math.sin(Math.PI * u) * .28, A.z + (B.z - A.z) * u);
-    if (x >= segs) { p.anim = null; placePiece(p); renderer.shadowMap.needsUpdate = true; }
-  }
-
-  if (pulsing) {
-    busy = true;
-    const ph = .5 - .5 * Math.cos(now / 900 * TAU);
-    for (const m of pulseMats) m.opacity = .22 + .3 * ph;
     for (const p of pieces.values()) {
-      if (p.ring.visible) {
-        const s = p.rad * (p.ring.userData.pulse ? 1.85 + .2 * ph : 1.9);
-        p.ring.scale.setScalar(s);
-        if (p.fakeGlow) p.fakeGlow.scale.setScalar(s * 1.8);
+      const a = p.anim;
+      if (!a) continue;
+      busy = motion = moving = true;
+      const segs = a.path.length - 1;
+      const x = clamp((now - a.start) / a.ms, 0, 1) * segs;
+      const i = Math.min(Math.floor(x), segs - 1), u = ease(x - i);
+      const A = spaces.get(a.path[i]), B = spaces.get(a.path[i + 1]);
+      p.group.position.set(A.x + (B.x - A.x) * u, A.top + (B.top - A.top) * u + Math.sin(Math.PI * u) * .28, A.z + (B.z - A.z) * u);
+      if (x >= segs) { p.anim = null; placePiece(p); renderer.shadowMap.needsUpdate = true; }
+    }
+
+    if (pulsing) {
+      busy = true;
+      const ph = .5 - .5 * Math.cos(now / 900 * TAU);
+      for (const m of pulseMats) m.opacity = .22 + .3 * ph;
+      for (const p of pieces.values()) {
+        if (p.ring.visible) {
+          const s = p.rad * (p.ring.userData.pulse ? 1.85 + .2 * ph : 1.9);
+          p.ring.scale.setScalar(s);
+          if (p.fakeGlow) p.fakeGlow.scale.setScalar(s * 1.8);
+        }
+        if (p.reticle.visible) p.reticle.scale.setScalar(p.rad * (4 + .5 * ph));
       }
-      if (p.reticle.visible) p.reticle.scale.setScalar(p.rad * (4 + .5 * ph));
     }
-  }
-  if (focus.size) {
-    busy = true;
-    const ph = .5 - .5 * Math.cos(now / 600 * TAU);
-    for (const id of focus) { const p = pieces.get(id); if (p) p.glow.material.opacity = .75 + .25 * ph; }
-  }
+    if (focus.size) {
+      busy = true;
+      const ph = .5 - .5 * Math.cos(now / 600 * TAU);
+      for (const id of focus) { const p = pieces.get(id); if (p) p.glow.material.opacity = .75 + .25 * ph; }
+    }
 
-  for (let i = fxList.length - 1; i >= 0; i--) {
-    const f = fxList[i], t = clamp((now - f.start) / f.ms, 0, 1);
-    busy = motion = true;
-    const rise = (1 - Math.pow(1 - t, 3)) * .7;
-    f.sprite.position.copy(f.origin).add(new V3(0, .35 + rise, 0));
-    f.sprite.material.opacity = t < .7 ? 1 : (1 - t) / .3;
-    if (f.points) {
-      const pos = f.points.geometry.attributes.position, dt = t * f.ms / 1000;
-      for (let j = 0; j < f.vel.length; j++) {
-        const v = f.vel[j];
-        pos.setXYZ(j, f.origin.x + v.x * dt * .6, f.origin.y + v.y * dt * .6 - 1.4 * dt * dt, f.origin.z + v.z * dt * .6);
+    for (let i = fxList.length - 1; i >= 0; i--) {
+      const f = fxList[i], t = clamp((now - f.start) / f.ms, 0, 1);
+      busy = motion = true;
+      const rise = (1 - Math.pow(1 - t, 3)) * .7;
+      f.sprite.position.copy(f.origin).add(new V3(0, .35 + rise, 0));
+      f.sprite.material.opacity = t < .7 ? 1 : (1 - t) / .3;
+      if (f.points) {
+        const pos = f.points.geometry.attributes.position, dt = t * f.ms / 1000;
+        for (let j = 0; j < f.vel.length; j++) {
+          const v = f.vel[j];
+          pos.setXYZ(j, f.origin.x + v.x * dt * .6, f.origin.y + v.y * dt * .6 - 1.4 * dt * dt, f.origin.z + v.z * dt * .6);
+        }
+        pos.needsUpdate = true;
+        f.points.material.opacity = 1 - t;
       }
-      pos.needsUpdate = true;
-      f.points.material.opacity = 1 - t;
+      if (t >= 1) {
+        scene.remove(f.sprite); f.sprite.material.map.dispose(); f.sprite.material.dispose();
+        if (f.points) { scene.remove(f.points); f.points.geometry.dispose(); f.points.material.dispose(); }
+        fxList.splice(i, 1);
+      }
     }
-    if (t >= 1) {
-      scene.remove(f.sprite); f.sprite.material.map.dispose(); f.sprite.material.dispose();
-      if (f.points) { scene.remove(f.points); f.points.geometry.dispose(); f.points.material.dispose(); }
-      fxList.splice(i, 1);
+
+    let shake = null;
+    if (now < shakeUntil) {
+      busy = motion = true;
+      const k = (shakeUntil - now) / 320;
+      shake = new V3(Math.sin(now * .09) * .06 * k, 0, Math.cos(now * .11) * .04 * k);
+      camera.position.add(shake);
     }
-  }
 
-  let shake = null;
-  if (now < shakeUntil) {
-    busy = motion = true;
-    const k = (shakeUntil - now) / 320;
-    shake = new V3(Math.sin(now * .09) * .06 * k, 0, Math.cos(now * .11) * .04 * k);
-    camera.position.add(shake);
+    // Only highlights breathing: on the lower tiers that's redrawn at a lower rate (it's a slow pulse),
+    // which leaves the GPU, and a phone's battery, room for the frames that matter.
+    const idleMs = 1000 / tier().idleFps;
+    const idle = busy && !motion && now - lastRender < idleMs - 2;
+    const draw = (busy || dirty > 0) && !idle;
+    govern(now, draw, motion || idleMs <= FRAME_MS + 1);
+    if (draw) {
+      faceCamera();
+      const isMobile = (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0) || innerWidth < 700;
+      const suspendHeavyFx = (isInteracting || camTween != null) && (isMobile || G.tier < 3);
+      if (gtaoPass) gtaoPass.enabled = !suspendHeavyFx && fxOn().ao;
+      if (bloomPass) bloomPass.enabled = !suspendHeavyFx && fxOn().bloom;
+      // Pieces moving: their shadows follow every frame, or every other one once the governor is
+      // saving time.
+      if (moving && (!(G.auto && gov.level >= 3) || (frameNo & 1) === 0)) renderer.shadowMap.needsUpdate = true;
+      try {
+        if (composer) composer.render(); else renderer.render(scene, camera);
+      } catch (err) {
+        console.warn('Composer render failed, falling back to direct render:', err);
+        disposeComposer();
+        try { renderer.render(scene, camera); } catch (_) {}
+      }
+      fpsFrames++;
+      frameNo++;
+      lastRender = now;
+      nextFrame = now - nextFrame > FRAME_MS ? now + FRAME_MS : nextFrame + FRAME_MS;
+      if (dirty > 0) dirty--;
+      if (busy) dirty = Math.max(dirty, 1);
+    }
+    if (shake) camera.position.sub(shake);
+    if (G.fps && now - fpsStart >= 1000) {
+      post({ t: 'fps', v: Math.round(fpsFrames * 1000 / (now - fpsStart)) });
+      fpsFrames = 0; fpsStart = now;
+    }
+    if (draw) stepWarmupBench(dt * 1000);
+  } catch (loopErr) {
+    console.error('Board render loop error:', loopErr);
+    post({ t: 'error', msg: String(loopErr && loopErr.message || loopErr) });
   }
-
-  // Only highlights breathing: on the lower tiers that's redrawn at a lower rate (it's a slow pulse),
-  // which leaves the GPU, and a phone's battery, room for the frames that matter.
-  const idleMs = 1000 / tier().idleFps;
-  const idle = busy && !motion && now - lastRender < idleMs - 2;
-  const draw = (busy || dirty > 0) && !idle;
-  govern(now, draw, motion || idleMs <= FRAME_MS + 1);
-  if (draw) {
-    faceCamera();
-    const isMobile = (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0) || innerWidth < 700;
-    const suspendHeavyFx = (isInteracting || camTween != null) && (isMobile || G.tier < 3);
-    if (gtaoPass) gtaoPass.enabled = !suspendHeavyFx && fxOn().ao;
-    if (bloomPass) bloomPass.enabled = !suspendHeavyFx && fxOn().bloom;
-    // Pieces moving: their shadows follow every frame, or every other one once the governor is
-    // saving time.
-    if (moving && (!(G.auto && gov.level >= 3) || (frameNo & 1) === 0)) renderer.shadowMap.needsUpdate = true;
-    if (composer) composer.render(); else renderer.render(scene, camera);
-    fpsFrames++;
-    frameNo++;
-    lastRender = now;
-    nextFrame = now - nextFrame > FRAME_MS ? now + FRAME_MS : nextFrame + FRAME_MS;
-    if (dirty > 0) dirty--;
-    if (busy) dirty = Math.max(dirty, 1);
-  }
-  if (shake) camera.position.sub(shake);
-  if (G.fps && now - fpsStart >= 1000) {
-    post({ t: 'fps', v: Math.round(fpsFrames * 1000 / (now - fpsStart)) });
-    fpsFrames = 0; fpsStart = now;
-  }
-  if (draw) stepWarmupBench(dt * 1000);
 }
 let fpsFrames = 0, fpsStart = 0;
 

@@ -107,9 +107,10 @@ class Board3DController {
       case 'ready':
         status.value = Board3DStatus.ready;
       case 'error':
-        debugPrint('3D board: ${m['msg']}');
-        if (m['fatal'] == true && status.value != Board3DStatus.ready) {
-          fail('${m['msg']}');
+        final msg = '${m['msg']}';
+        debugPrint('3D board: $msg');
+        if (m['fatal'] == true || msg.contains('context lost') || msg.contains('WebGL is not available')) {
+          fail(msg);
         }
       case 'fps':
         fps.value = (m['v'] as num?)?.round();

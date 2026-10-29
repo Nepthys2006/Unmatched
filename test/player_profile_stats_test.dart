@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:unmatched_game/net/profile_stats.dart';
+import 'package:unmatched_game/net/session.dart';
 
 void main() {
   group('ProfileStats', () {
@@ -100,5 +101,35 @@ void main() {
       expect(payload.containsKey('top5'), isTrue);
       expect(payload.containsKey('recent'), isTrue);
     });
+    test('LobbySeat stats serialize and deserialize accurately for peer inspection', () {
+      final dummyStats = {
+        'totalMatches': 42,
+        'wins': 28,
+        'losses': 14,
+        'overallWinRate': 67,
+        'top5': [
+          {'heroId': 'king-arthur', 'name': 'King Arthur', 'matches': 20, 'wins': 15, 'losses': 5, 'winRate': 75}
+        ],
+        'recent': [],
+      };
+
+      final seat = LobbySeat(
+        SeatKind.human,
+        name: 'PeerPlayer',
+        hero: 'king-arthur',
+        ready: true,
+        stats: dummyStats,
+      );
+
+      final json = seat.toJson();
+      expect(json['stats'], isNotNull);
+
+      final restored = LobbySeat.fromJson(json);
+      expect(restored.stats, isNotNull);
+      expect((restored.stats!['totalMatches'] as num).toInt(), 42);
+      expect((restored.stats!['overallWinRate'] as num).toInt(), 67);
+      expect(restored.name, 'PeerPlayer');
+    });
   });
 }
+

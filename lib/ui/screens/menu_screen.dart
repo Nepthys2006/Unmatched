@@ -17,6 +17,8 @@ import 'multiplayer_screen.dart';
 import 'setup_screen.dart';
 import '../dialogs/active_players_drawer.dart';
 import '../dialogs/player_profile_modal.dart';
+import '../dialogs/invite_banner_dialog.dart';
+import 'dart:async';
 import '../../net/online_presence.dart';
 import '../../net/profile_stats.dart';
 
@@ -29,6 +31,7 @@ class MenuScreen extends StatefulWidget {
 class _MenuScreenState extends State<MenuScreen> with SingleTickerProviderStateMixin {
   late final AnimationController _intro = AnimationController(vsync: this, duration: const Duration(milliseconds: 900))..forward();
   List<HeroDef> _trio = const [];
+  StreamSubscription<MatchInvite>? _inviteSub;
 
   @override
   void didChangeDependencies() {
@@ -39,10 +42,28 @@ class _MenuScreenState extends State<MenuScreen> with SingleTickerProviderStateM
       final all = s.data.heroes.values.toList()..shuffle(math.Random());
       _trio = all.take(3).toList();
     }
+    unawaited(
+      OnlinePresenceService.instance.start(
+        playerId: s.settings.playerId,
+        username: s.settings.username,
+      ),
+    );
+    _inviteSub ??= OnlinePresenceService.instance.invites.listen((inv) {
+      if (!mounted) return;
+      InviteBannerDialog.show(
+        context,
+        invite: inv,
+        onAccept: () async {
+          await _open(const MultiplayerScreen(online: true));
+        },
+        onDecline: () {},
+      );
+    });
   }
 
   @override
   void dispose() {
+    _inviteSub?.cancel();
     _intro.dispose();
     super.dispose();
   }

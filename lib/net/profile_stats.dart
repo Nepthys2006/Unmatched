@@ -200,3 +200,4 @@ class ProfileStats extends ChangeNotifier {
     } catch (_) {}
   }
 }
+

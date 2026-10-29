@@ -9,6 +9,8 @@ import '../../engine/ai.dart';
 import '../../engine/defs.dart';
 import '../../net/lan.dart';
 import '../../net/session.dart';
+import '../../net/profile_stats.dart';
+import '../dialogs/player_profile_modal.dart';
 import '../board/board_painter.dart';
 import '../chat_panel.dart';
 import '../dialogs/map_inspect_dialog.dart';
@@ -732,10 +734,22 @@ class _LobbyScreenState extends State<LobbyScreen> {
         'Reserved for reconnecting player…',
       ),
     };
+    void viewProfile() {
+      final payload = seat.stats ?? (me ? ProfileStats.instance.toSummaryPayload() : null);
+      PlayerProfileModal.show(
+        context,
+        name: seat.name ?? 'Player',
+        status: 'matching',
+        statsPayload: payload,
+        isSelf: me,
+      );
+    }
+
     final tap = switch (seat.kind) {
       SeatKind.open when host != null => () => host.toggleSeat(i),
       SeatKind.open => () => s.moveSeat(i),
       SeatKind.ai when host != null => () => host.toggleSeat(i),
+      SeatKind.human => viewProfile,
       _ => null,
     };
     return Material(
@@ -766,8 +780,15 @@ class _LobbyScreenState extends State<LobbyScreen> {
                   ],
                 ),
               ),
-              if (seat.kind == SeatKind.human && (i == 0 || seat.ready) && hero != null)
-                const Icon(Icons.check_circle_rounded, color: Palette.confirmHi, size: 22),
+              if (seat.kind == SeatKind.human) ...[
+                IconButton(
+                  tooltip: me ? 'My Profile' : 'View Profile',
+                  icon: const Icon(Icons.account_circle_outlined, color: Palette.gold, size: 22),
+                  onPressed: viewProfile,
+                ),
+                if ((i == 0 || seat.ready) && hero != null)
+                  const Icon(Icons.check_circle_rounded, color: Palette.confirmHi, size: 22),
+              ],
               if (host != null && seat.kind == SeatKind.human && !me)
                 IconButton(
                   tooltip: 'Remove from lobby',
