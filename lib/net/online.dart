@@ -152,7 +152,6 @@ class OnlineHost implements HostLink, ChatKeeper {
       'p_mode': info.mode,
       'p_players': info.players,
       'p_open': info.open,
-      'p_status': info.status == 'inGame' ? 'playing' : 'waiting',
     }) as List;
     final row = rows.first as Map;
     final h = OnlineHost._(name, sb, row['id'] as String, row['host_token'] as String, row['topic'] as String);
