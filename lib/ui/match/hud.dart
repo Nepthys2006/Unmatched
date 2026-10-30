@@ -15,6 +15,7 @@ import '../theme.dart';
 import '../widgets.dart';
 import 'dials.dart';
 import 'hero_items.dart';
+import 'open_zones.dart';
 import 'plate_parts.dart';
 
 // ------------------------------------------------------------------------------- name plates
@@ -35,9 +36,14 @@ class PlayerPlate extends StatelessWidget {
     this.actionsLeft,
     this.onTap,
     this.showHandBacks = false,
+    this.viewer,
   });
 
   final Player player;
+
+  /// Whose screen this is; defaults to [player] (your own plate). A card only its owner may look
+  /// at (Pandora's HOPE) stays hidden from everyone else.
+  final Player? viewer;
   final Color color;
   final String subtitle;
   final bool big;
@@ -67,6 +73,7 @@ class PlayerPlate extends StatelessWidget {
     final heroes = player.heroes.toList();
     final hero = heroes.length == 1 ? player.heroFighter : heroes.first;
     final status = player.script.status();
+    final zones = visibleZones(player);
     final e = _emblem(big);
     final h = _cell(big); // plate height = cell size
     final w = widthFor(big: big);
@@ -195,11 +202,21 @@ class PlayerPlate extends StatelessWidget {
               ],
               // The hero's pieces (Alice's size card, Hellfire, the cauldron...), for every
               // player: they are open information, like on the table.
-              if (status.isNotEmpty && !out) ...[
+              if ((status.isNotEmpty || zones.isNotEmpty) && !out) ...[
                 const SizedBox(height: 3),
                 Padding(
                   padding: EdgeInsets.only(left: e * 0.12),
-                  child: SizedBox(width: w - e * 0.12, child: HeroItemsRow(player: player, small: !big)),
+                  child: SizedBox(
+                    width: w - e * 0.12,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        HeroItemsRow(player: player, small: !big),
+                        if (zones.isNotEmpty) OpenZoneStrip(player: player, viewer: viewer ?? player, small: !big),
+                      ],
+                    ),
+                  ),
                 ),
               ],
             ],
@@ -803,12 +820,16 @@ class ChoicePanel extends StatelessWidget {
     this.onSource,
     this.skipLabel,
     this.onSkip,
+    this.aside,
   });
   final String title;
   final List<String> labels;
   final void Function(int i) onPick;
   final String? source;
   final VoidCallback? onSource;
+
+  /// Something to look at while deciding (Pandora's HOPE card), beside the question.
+  final Widget? aside;
   final String? skipLabel;
   final VoidCallback? onSkip;
 
@@ -830,6 +851,10 @@ class ChoicePanel extends StatelessWidget {
                   onTap: onSource,
                   child: CardImage(source!, width: math.min(130, size.height * 0.32)),
                 ),
+                const SizedBox(width: 16),
+              ],
+              if (aside != null) ...[
+                aside!,
                 const SizedBox(width: 16),
               ],
               Flexible(
@@ -1054,9 +1079,11 @@ class _HeroSheetState extends State<_HeroSheet> {
     final mine = p == widget.me;
     final idW = (size.height * 0.62 * cardAspect).clamp(110.0, 300.0);
     final cardW = (size.height * 0.26 * cardAspect).clamp(56.0, 110.0);
+    // Open cards (MISERIES, GLAMOURS, the line, the cauldron) get their own full-size section.
+    final zones = visibleZones(p);
     final groups = <(String, List<Card>)>[
-      (p.hero.id == 'shakespeare' ? 'His line (left to right)' : 'In play', p.inPlay),
-      (p.hero.id == 'the-wayward-sisters' ? 'Cauldron' : 'Set aside', p.script.aside),
+      if (!zones.any((z) => z.id == 'line')) ('In play', p.inPlay),
+      if (!zones.any((z) => z.id == 'cauldron')) ('Set aside', p.script.aside),
       ('Discard pile', p.discard.reversed.toList()),
       ('Removed from the game', p.removed),
     ];
@@ -1142,7 +1169,7 @@ class _HeroSheetState extends State<_HeroSheet> {
                                     ),
                                     const SizedBox(height: 2),
                                     Text(abilityText, style: bodyStyle(14.5, color: Palette.bone)),
-                                    if (status.isNotEmpty) ...[
+                                    if (status.isNotEmpty && zones.isEmpty) ...[
                                       const SizedBox(height: 8),
                                       Wrap(spacing: 4, runSpacing: 4, children: [for (final t in status) _Chip(t)]),
                                     ],
@@ -1169,6 +1196,10 @@ class _HeroSheetState extends State<_HeroSheet> {
                             ],
                           ),
                           const SizedBox(height: 12),
+                          for (final z in zones) ...[
+                            OpenZoneBody(zone: z, player: p, viewer: widget.me, cardWidth: cardW * 1.2),
+                            const SizedBox(height: 12),
+                          ],
                           for (final (title, cards) in groups)
                             if (cards.isNotEmpty) ...[
                               SectionLabel('$title · ${cards.length}'),

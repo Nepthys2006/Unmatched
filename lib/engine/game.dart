@@ -212,6 +212,12 @@ class Game {
       await m.startOfTurn(this, p);
     }
     await checkWinner();
+    await finishTurn(p);
+  }
+
+  /// The rest of [p]'s turn: remaining actions, end-of-turn effects and the hand limit.
+  /// Split out of [playTurn] so a search can resume a cloned game right after one action.
+  Future<void> finishTurn(Player p) async {
     while (actions > 0 && !turnEnded) {
       actions--;
       await emit(ActionsChanged(p, actions, 0));
@@ -354,7 +360,12 @@ class Game {
       ],
       autoSingle: false,
     );
-    switch (pick!.kind) {
+    await performAction(p, pick!);
+  }
+
+  /// Carries out an already chosen action (the action itself is already paid for).
+  Future<void> performAction(Player p, ActionChoice pick) async {
+    switch (pick.kind) {
       case ActionKind.maneuver:
         await maneuver(p);
       case ActionKind.scheme:

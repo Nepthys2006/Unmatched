@@ -121,10 +121,23 @@ class _WindowsHost extends StatefulWidget {
   State<_WindowsHost> createState() => _WindowsHostState();
 }
 
-class _WindowsHostState extends State<_WindowsHost> {
+/// Whether the Windows web view has an area worth capturing. A minimized window, or one dragged to a
+/// sliver, lays the view out at (almost) nothing; a texture can't follow that.
+@visibleForTesting
+bool webviewAreaUsable(Size size) => size.width >= 8 && size.height >= 8;
+
+class _WindowsHostState extends State<_WindowsHost> with WidgetsBindingObserver {
   final ww.WebviewController _wv = ww.WebviewController();
   StreamSubscription<dynamic>? _sub;
+  Timer? _settle;
   bool _ready = false;
+  bool _suspended = false;
+  bool _disposed = false;
+  bool _wasUsable = true;
+
+  /// Part of the Webview's key: bumping it re-mounts the widget, which reports its size to the
+  /// plugin again and so restarts the capture at the window's current size.
+  int _epoch = 0;
   static bool _envInited = false;
 
   static Future<void> _ensureEnv() async {
@@ -137,16 +150,76 @@ class _WindowsHostState extends State<_WindowsHost> {
     } catch (_) {}
   }
 
+  bool _wvDisposed = false;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     unawaited(_load());
+  }
+
+  Future<void> _disposeWebview() async {
+    if (_wvDisposed) return;
+    _wvDisposed = true;
+    await _sub?.cancel();
+    _sub = null;
+    try {
+      await _wv.dispose();
+    } catch (_) {}
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (!_ready || _disposed) return;
+    switch (state) {
+      // Minimized (or the app left the screen): stop capturing, so nothing is copied into a
+      // surface Flutter isn't showing.
+      case AppLifecycleState.hidden || AppLifecycleState.paused:
+        unawaited(_suspend());
+      case AppLifecycleState.resumed:
+        unawaited(_resume());
+      case AppLifecycleState.inactive || AppLifecycleState.detached:
+        break;
+    }
+  }
+
+  Future<void> _suspend() async {
+    if (_suspended) return;
+    _suspended = true;
+    _settle?.cancel();
+    try {
+      await _wv.suspend();
+    } catch (_) {}
+  }
+
+  Future<void> _resume() async {
+    if (!_suspended) return;
+    _suspended = false;
+    try {
+      await _wv.resume();
+    } catch (_) {}
+    _remount();
+    // The window may still be getting its size back; once more when it has settled.
+    _settle?.cancel();
+    _settle = Timer(const Duration(milliseconds: 500), () {
+      if (!_disposed && !_suspended) _remount();
+    });
+  }
+
+  void _remount() {
+    if (_disposed || !mounted) return;
+    setState(() => _epoch++);
   }
 
   Future<void> _load() async {
     try {
       await _ensureEnv();
       await _wv.initialize();
+      if (_disposed) {
+        await _disposeWebview();
+        return;
+      }
       await _wv.setBackgroundColor(Palette.bgDeep);
       _sub = _wv.webMessage.listen(widget.c.receive);
       widget.c.bind((json) => _wv.postWebMessage(json).catchError((_) {}));
@@ -161,11 +234,25 @@ class _WindowsHostState extends State<_WindowsHost> {
 
   @override
   void dispose() {
-    _sub?.cancel();
-    _wv.dispose();
+    _disposed = true;
+    WidgetsBinding.instance.removeObserver(this);
+    _settle?.cancel();
+    unawaited(_disposeWebview());
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) => _ready ? ww.Webview(_wv) : const SizedBox.expand();
+  Widget build(BuildContext context) {
+    if (!_ready) return const SizedBox.expand();
+    return LayoutBuilder(
+      builder: (context, box) {
+        final usable = webviewAreaUsable(box.biggest);
+        // Coming back from (almost) nothing: mount a fresh Webview so it reports the new size.
+        if (usable && !_wasUsable) _epoch++;
+        _wasUsable = usable;
+        if (!usable) return const SizedBox.expand();
+        return KeyedSubtree(key: ValueKey(_epoch), child: ww.Webview(_wv));
+      },
+    );
+  }
 }

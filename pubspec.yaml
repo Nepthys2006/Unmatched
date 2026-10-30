@@ -42,6 +42,13 @@ dependencies:
   web_socket_channel: ^3.0.3
   supabase: ^2.16.5
   qr_flutter: ^4.1.0
+
+# webview_windows 0.4.0 with a fix for the crash / black board when the window is minimized, shrunk
+# or enlarged (see third_party/webview_windows/LOCAL_CHANGES.md).
+dependency_overrides:
+  webview_windows:
+    path: third_party/webview_windows
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -61,6 +68,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/data/
+    - assets/ai/
     - assets/audio/
     - assets/maps/
     - assets/webapp/

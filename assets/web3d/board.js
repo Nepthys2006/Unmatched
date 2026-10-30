@@ -130,6 +130,7 @@ let prMax = 1, prNow = 1, prMin = .5;
 
 /* ---------------------------------------------------------------- scene */
 let renderer, scene, camera, lamp, composer = null;
+let rebuildEnvironment = () => {};
 let gtaoPass = null, bloomPass = null;
 let isInteracting = false;
 let boardRoot = null, span = 14, box = new THREE.Box3();
@@ -180,16 +181,44 @@ function setup() {
   scene.background = new THREE.Color('#0e0f12');
   scene.fog = new THREE.Fog('#0e0f12', 40, 90);
   const pmrem = new THREE.PMREMGenerator(renderer);
-  scene.environment = pmrem.fromScene(new RoomEnvironment(), .04).texture;
+  // Also run again after a lost WebGL context: the lighting texture is drawn, not loaded, so it
+  // comes back empty (the board black) unless it is redrawn.
+  rebuildEnvironment = () => {
+    const old = scene.environment;
+    scene.environment = pmrem.fromScene(new RoomEnvironment(), .04).texture;
+    if (old) old.dispose();
+  };
+  rebuildEnvironment();
   scene.environmentIntensity = .42;
 
   camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, .1, 260);
   camera.up.set(0, 1, 0);
 
   renderer.domElement.style.touchAction = 'none';
+  // The GPU often gives the context back (a minimized window, another app taking the GPU, a driver
+  // reset), so the board waits for it and redraws; only if it never returns does the game fall back
+  // to the 2D board.
+  let lostTimer = 0;
   renderer.domElement.addEventListener('webglcontextlost', (e) => {
     e.preventDefault();
-    post({ t: 'error', fatal: true, msg: 'WebGL context lost' });
+    pauseLoop();
+    clearTimeout(lostTimer);
+    lostTimer = setTimeout(() => post({ t: 'error', fatal: true, msg: 'WebGL context lost' }), 8000);
+  }, false);
+  renderer.domElement.addEventListener('webglcontextrestored', () => {
+    clearTimeout(lostTimer);
+    try {
+      rebuildEnvironment();
+      built = { bloom: null, ao: null, aa: null, samples: null };
+      applyResolution(true);
+      buildComposer();
+      renderer.shadowMap.needsUpdate = true;
+    } catch (err) {
+      post({ t: 'error', fatal: true, msg: 'WebGL context lost: ' + err });
+      return;
+    }
+    invalidate(3);
+    wakeLoop();
   }, false);
   renderer.domElement.addEventListener('touchstart', () => {
     isInteracting = true;
@@ -213,11 +242,25 @@ function setup() {
   scene.add(lamp, lamp.target, fill);
   scene.userData.fill = fill;
 
+  // One resize per frame. A minimized or sliver-sized window reports 0 x 0: sizing the canvas and
+  // the render targets to nothing (and the camera to an aspect of 0) leaves them broken, so that is
+  // skipped and the next real size redraws everything.
+  let resizeFrame = 0;
   addEventListener('resize', () => {
-    camera.aspect = innerWidth / Math.max(1, innerHeight);
-    camera.updateProjectionMatrix();
-    applyResolution(true); // the pixel budget depends on the window's size
-    buildComposer();
+    if (resizeFrame) return;
+    resizeFrame = requestAnimationFrame(() => {
+      resizeFrame = 0;
+      if (innerWidth < 8 || innerHeight < 8) return;
+      try {
+        camera.aspect = innerWidth / innerHeight;
+        camera.updateProjectionMatrix();
+        applyResolution(true); // the pixel budget depends on the window's size
+        buildComposer();
+      } catch (err) {
+        post({ t: 'error', fatal: false, msg: 'resize: ' + err });
+      }
+      invalidate(3);
+    });
   });
   applyResolution();
   wakeLoop();
@@ -1129,12 +1172,64 @@ function reliefGeometry(img, coin) {
   return geo;
 }
 
+/* The renders are cut out on a transparent ground whose colour is black (rgb 0,0,0 under alpha 0),
+   and a canvas can't hold a colour under zero alpha. Linear filtering and mip-mapping then blend
+   that black into every edge, so a hero shows a dark outline - worst on phones and tablets, whose
+   small screens sample the smaller mip levels. The edge pixels and the ground around them are
+   repainted with the nearest solid colour (alpha is untouched, so the outline stays the same) and
+   uploaded as raw bytes, which no canvas gets to premultiply. */
+function bleedTexture(img) {
+  const w = img.width, h = img.height, N = w * h;
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const g = c.getContext('2d', { willReadFrequently: true });
+  g.drawImage(img, 0, 0);
+  const px = g.getImageData(0, 0, w, h).data;
+  const SOLID = 200, REACH = 12;
+  const from = new Int32Array(N).fill(-1);
+  let front = [];
+  for (let i = 0; i < N; i++) if (px[i * 4 + 3] >= SOLID) { from[i] = i; front.push(i); }
+  for (let r = 0; r < REACH && front.length; r++) {
+    const next = [];
+    for (const i of front) {
+      const x = i % w, y = (i / w) | 0;
+      for (let dy = -1; dy <= 1; dy++) {
+        const yy = y + dy;
+        if (yy < 0 || yy >= h) continue;
+        for (let dx = -1; dx <= 1; dx++) {
+          const xx = x + dx;
+          if (xx < 0 || xx >= w) continue;
+          const j = yy * w + xx;
+          if (from[j] < 0) { from[j] = from[i]; next.push(j); }
+        }
+      }
+    }
+    front = next;
+  }
+  // rows bottom-up, as the image loader's flipY would have uploaded them
+  const out = new Uint8Array(N * 4);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x, o = ((h - 1 - y) * w + x) * 4, s = from[i] >= 0 ? from[i] : i;
+      out[o] = px[s * 4]; out[o + 1] = px[s * 4 + 1]; out[o + 2] = px[s * 4 + 2]; out[o + 3] = px[i * 4 + 3];
+    }
+  }
+  const t = new THREE.DataTexture(out, w, h, THREE.RGBAFormat, THREE.UnsignedByteType);
+  t.generateMipmaps = true;
+  t.minFilter = THREE.LinearMipmapLinearFilter;
+  t.magFilter = THREE.LinearFilter;
+  t.userData.source = img; // the relief is built from the picture itself
+  return t;
+}
+
 function loadTex(url) {
   return texLoader.loadAsync(url).then(t => {
-    const sharp = sharpened(t.image, tier().figure);
-    if (sharp) { t.dispose(); t = new THREE.CanvasTexture(sharp); }
+    const src = sharpened(t.image, tier().figure) || t.image;
+    t.dispose();
+    t = bleedTexture(src);
     t.colorSpace = THREE.SRGBColorSpace;
     t.anisotropy = tierAniso(8);
+    t.needsUpdate = true;
     t.userData.shared = true; // cached across pieces: never disposed with one
     return t;
   });
@@ -1203,7 +1298,7 @@ function blurFast(src, w, h, r) {
 }
 
 function loadFigure(url, coin) {
-  if (!figureCache.has(url)) figureCache.set(url, loadTex(url).then(tex => ({ tex, geo: reliefGeometry(tex.image, coin) })));
+  if (!figureCache.has(url)) figureCache.set(url, loadTex(url).then(tex => ({ tex, geo: reliefGeometry(tex.userData.source, coin) })));
   return figureCache.get(url);
 }
 

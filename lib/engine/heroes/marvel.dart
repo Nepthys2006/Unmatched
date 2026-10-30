@@ -8,6 +8,7 @@ import '../combat.dart';
 import '../events.dart';
 import '../game.dart';
 import '../hero_script.dart';
+import '../open_cards.dart';
 import '../prompt.dart';
 import '../state.dart';
 import 'common.dart';
@@ -198,6 +199,18 @@ class BlackPanther extends HeroScript {
 
   @override
   List<String> status() => [if (stored.isNotEmpty) 'Vibranium Suit: ${stored.length}'];
+
+  @override
+  List<OpenZone> openZones() => [
+    OpenZone(
+      id: 'suit',
+      label: 'VIBRANIUM SUIT',
+      short: 'SUIT',
+      cards: [for (final c in stored) OpenCard.of(c, tag: c.owner.name)],
+      note: stored.isEmpty ? '' : 'Face up: each can only be used to BOOST.',
+      alwaysShow: false,
+    ),
+  ];
 
   @override
   Future<void> afterBoost() async {

@@ -5,6 +5,7 @@ import '../combat.dart';
 import '../events.dart';
 import '../game.dart';
 import '../hero_script.dart';
+import '../open_cards.dart';
 import '../prompt.dart';
 import '../state.dart';
 import 'common.dart';
@@ -208,6 +209,29 @@ class Pandora extends HeroScript {
   @override
   List<String> status() => [
     if (revealed.isNotEmpty) 'Box: ${revealed.map((m) => m.name).join(', ')} (${'🪶' * feathers})',
+  ];
+
+  static OpenCard _face(Misery m) => OpenCard(
+    title: m.name,
+    text: m.text.isEmpty ? 'No effect: only feathers.' : m.text,
+    feathers: m.feathers,
+  );
+
+  /// The revealed MISERIES lie face up for everyone; the rest of the box is face down. With HOPE
+  /// revealed, Pandora (alone) may look at the top card before deciding to reveal it.
+  @override
+  List<OpenZone> openZones() => [
+    OpenZone(
+      id: 'miseries',
+      label: "PANDORA'S BOX",
+      short: 'MISERIES',
+      cards: [for (final m in revealed) _face(m)],
+      hidden: box.length,
+      hiddenLabel: 'in the box',
+      peek: revealed.any((m) => m.name == 'Hope') && box.isNotEmpty ? _face(box.first) : null,
+      peekLabel: 'Hope: the next MISERY',
+      note: revealed.isEmpty ? '' : '$feathers of 3 feathers, ${revealed.length} MISER${revealed.length == 1 ? 'Y' : 'IES'} revealed',
+    ),
   ];
 
   @override

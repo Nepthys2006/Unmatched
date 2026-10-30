@@ -167,6 +167,21 @@ def menu_theme():
     return buf[: int(total * SR)]
 
 
+def soft_click():
+    """A soft, rounded tap: low-mid pitch, a few ms of attack (no sharp edge), quick fade, and the
+    highs filtered off. The old click was an 880 Hz sine that started at once, which rang harshly."""
+    n = int(0.13 * SR)
+    t = np.arange(n) / SR
+    f = 330 + 90 * np.exp(-t / 0.012)  # a small downward glide gives it a "pop"
+    ph = 2 * np.pi * np.cumsum(f) / SR
+    body = np.sin(ph) + 0.22 * np.sin(2 * ph)
+    attack = np.minimum(1.0, t / 0.008)
+    attack = 0.5 - 0.5 * np.cos(np.pi * attack)  # raised cosine: no click at the start
+    x = body * attack * np.exp(-t / 0.028)
+    x *= np.minimum(1.0, (n - 1 - np.arange(n)) / (0.02 * SR))  # ends at exactly zero
+    return lowpass(lowpass(x, 0.3), 0.3)
+
+
 def sfx():
     out = {}
     e, t = env(0.12, 0.001, 0.08, 0.0, 0.03)
@@ -187,8 +202,7 @@ def sfx():
     for k, n in enumerate([62, 66, 69, 74]):
         add(win, tone(n, 0.9 - k * 0.1, "saw", 0.18, 0.01, 0.2, 0.6, 0.3), k * 0.15)
     out["victory"] = win
-    e, t = env(0.18, 0.001, 0.05, 0.4, 0.06)
-    out["click"] = np.sin(2 * np.pi * 880 * t) * e * 0.18
+    out["click"] = soft_click()
     heal = np.zeros(int(0.7 * SR))
     for k, n in enumerate([72, 76, 79, 84]):
         add(heal, tone(n, 0.35, "sine", 0.12), k * 0.08)
@@ -197,7 +211,7 @@ def sfx():
 
 
 def write(name, x):
-    x = x / max(1e-9, np.max(np.abs(x))) * 0.85
+    x = x / max(1e-9, np.max(np.abs(x))) * (0.45 if name == "click" else 0.85)  # the click stays gentle
     pcm = (x * 32767).astype(np.int16)
     path = os.path.join(OUT, name + ".wav")
     with wave.open(path, "wb") as w:

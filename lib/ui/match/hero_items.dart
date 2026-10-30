@@ -52,8 +52,12 @@ int? _num(String s) => int.tryParse(RegExp(r'\d+').firstMatch(s)?.group(0) ?? ''
 
 const _flame = Color(0xFFFF8A3D), _gold = Color(0xFFF2C14E), _violet = Color(0xFFB98BE8), _steel = Color(0xFF9FB4C8);
 
-/// The pieces [p]'s hero has out right now (empty for heroes without any).
-List<HeroItem> heroItems(Player p) {
+/// The pieces [p]'s hero has out right now (empty for heroes without any). Heroes whose pieces are
+/// open cards (Pandora's MISERIES, Titania's GLAMOURS) draw them as a card strip on the plate
+/// ([OpenZoneStrip]), so with [onPlate] they have no items; the board badge still gets one.
+List<HeroItem> heroItems(Player p, {bool onPlate = false}) {
+  final zones = p.script.openZones();
+  if (onPlate && zones.isNotEmpty) return const [];
   final s = p.script.status();
   final first = s.isEmpty ? '' : s.first;
   HeroItem card(IconData i, String e, [Color c = Palette.bone]) => HeroItem(HeroItemKind.card, first.toUpperCase(), icon: i, emoji: e, color: c);
@@ -73,9 +77,11 @@ List<HeroItem> heroItems(Player p) {
     case 'little-red':
       return [if (s.isNotEmpty) card(Icons.shopping_basket_rounded, '🧺', const Color(0xFFE0675F))];
     case 'titania':
-      return [if (s.isNotEmpty) card(Icons.auto_awesome_rounded, '✨', _violet)];
+      final glamour = zones.first.cards;
+      return [if (glamour.isNotEmpty) HeroItem(HeroItemKind.card, glamour.first.title.toUpperCase(), icon: Icons.auto_awesome_rounded, emoji: '✨', color: _violet)];
     case 'pandora':
-      return [if (s.isNotEmpty) card(Icons.inventory_2_rounded, '📦', _gold)];
+      final out = zones.first.cards.length;
+      return [if (out > 0) HeroItem(HeroItemKind.counter, 'MISERIES', count: out, icon: Icons.inventory_2_rounded, emoji: '📦', color: _gold)];
     case 'invisible-man':
       return [if (s.isNotEmpty) card(Icons.cloud_rounded, '☁️', const Color(0xFFD6DCE4))];
     case 'elektra':
@@ -122,7 +128,7 @@ class HeroItemsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final items = heroItems(player);
+    final items = heroItems(player, onPlate: true);
     if (items.isEmpty) return const SizedBox.shrink();
     return Wrap(spacing: 5, runSpacing: 4, children: [for (final i in items) HeroItemView(item: i, small: small)]);
   }

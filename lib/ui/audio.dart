@@ -8,12 +8,33 @@ import 'package:audioplayers/audioplayers.dart';
 
 import 'settings.dart';
 
-enum Music { menu, battle }
+/// A music track: the mp3 to play, the older synthesized wav to fall back on if the mp3 can't be
+/// played (a codec the device lacks, a failed download), whether it loops, and a level trim.
+///
+/// The trims keep the music well under the sound effects and the three tracks level with each
+/// other (measured RMS: menu -22 dB, battle -19 dB, victory -23 dB; the effects sit near -15 dB).
+/// The player's music slider scales on top of them.
+enum Music {
+  menu('menu_theme.mp3', 'menu.wav', gain: 0.7),
+  battle('battle_theme.mp3', 'battle.wav', gain: 0.55),
+  victory('victory_theme.mp3', 'victory.wav', loop: false, gain: 0.8);
+
+  const Music(this.file, this.fallback, {this.loop = true, required this.gain});
+  final String file;
+  final String fallback;
+  final bool loop;
+  final double gain;
+}
 
 enum Sfx { card, hit, whoosh, step, reveal, victory, click, heal }
 
 class Audio {
-  Audio(this.settings, {this.enabled = true}) {
+  Audio(
+    this.settings, {
+    this.enabled = true,
+    AudioPlayer Function(String playerId)? playerFactory,
+    this.fadeStep = const Duration(milliseconds: 50),
+  }) : _newPlayer = playerFactory ?? ((id) => AudioPlayer(playerId: id)) {
     settings.addListener(_onSettings);
   }
 
@@ -22,16 +43,32 @@ class Audio {
   /// False in tests: no platform channels are touched at all.
   final bool enabled;
 
+  /// Tests pass fakes here (and a short [fadeStep]) to exercise the switching logic.
+  final AudioPlayer Function(String playerId) _newPlayer;
+  final Duration fadeStep;
+
+  static const _fadeInSteps = 14;
+  static const _fadeOutSteps = 5;
+
   AudioPlayer? _music;
   Music? _current;
   bool _musicStarted = false;
+
+  /// The track loaded in the player (its trim applies to the volume), which may differ from
+  /// [_current] while a change is under way.
+  Music? _track;
+
+  double get _musicLevel => (settings.musicVolume * (_track?.gain ?? 1)).clamp(0.0, 1.0);
+
+  /// Bumped by every track change, so a slower earlier change notices it was overtaken and stops.
+  int _generation = 0;
   final List<AudioPlayer> _pool = [];
   int _next = 0;
   final Map<Sfx, DateTime> _last = {};
 
   void _onSettings() {
     if (!enabled) return;
-    _guard(() async => _music?.setVolume(settings.musicVolume));
+    _guard(() async => _music?.setVolume(_musicLevel));
   }
 
   void _guard(Future<void> Function() f) {
@@ -40,18 +77,50 @@ class Audio {
     } catch (_) {}
   }
 
-  /// Starts (or switches to) a looping track.
+  /// Starts (or switches to) a track: the old one fades out, the new one fades in.
   void music(Music m) {
     if (!enabled) return;
     if (_current == m && _musicStarted) return;
     _current = m;
+    final gen = ++_generation;
     _guard(() async {
-      final p = _music ??= AudioPlayer(playerId: 'music');
+      final p = _music ??= _newPlayer('music');
+      if (_musicStarted) await _fadeOut(p, gen);
+      if (gen != _generation) return;
       await p.stop();
-      await p.setReleaseMode(ReleaseMode.loop);
-      await p.play(AssetSource('audio/${m.name}.wav'), volume: settings.musicVolume);
+      if (gen != _generation) return;
+      _musicStarted = false;
+      await p.setReleaseMode(m.loop ? ReleaseMode.loop : ReleaseMode.stop);
+      if (gen != _generation) return;
+      _track = m;
+      try {
+        await p.play(AssetSource('audio/${m.file}'), volume: 0);
+      } catch (_) {
+        // The mp3 won't play here: use the plain wav. If that fails too (autoplay blocked), the
+        // error ends this call and the next tap retries from the top.
+        if (gen != _generation) return;
+        await p.play(AssetSource('audio/${m.fallback}'), volume: 0);
+      }
+      if (gen != _generation) return;
       _musicStarted = true;
+      await _fadeIn(p, gen);
     });
+  }
+
+  Future<void> _fadeIn(AudioPlayer p, int gen) async {
+    for (var i = 1; i <= _fadeInSteps; i++) {
+      await Future<void>.delayed(fadeStep);
+      if (gen != _generation) return;
+      await p.setVolume(_musicLevel * i / _fadeInSteps);
+    }
+  }
+
+  Future<void> _fadeOut(AudioPlayer p, int gen) async {
+    for (var i = _fadeOutSteps - 1; i >= 0; i--) {
+      if (gen != _generation) return;
+      await p.setVolume(_musicLevel * i / _fadeOutSteps);
+      await Future<void>.delayed(fadeStep);
+    }
   }
 
   /// Browsers only allow audio after a user gesture: retry the music on the first tap.
@@ -66,6 +135,7 @@ class Audio {
     if (!enabled) return;
     _current = null;
     _musicStarted = false;
+    _generation++;
     _guard(() async => _music?.stop());
   }
 
@@ -78,9 +148,10 @@ class Audio {
     _last[s] = now;
     _guard(() async {
       if (_pool.length < 6) {
-        final p = AudioPlayer(playerId: 'sfx${_pool.length}');
-        await p.setReleaseMode(ReleaseMode.stop);
+        // Added before the first await: overlapping calls must see the pool already grown.
+        final p = _newPlayer('sfx${_pool.length}');
         _pool.add(p);
+        await p.setReleaseMode(ReleaseMode.stop);
       }
       final p = _pool[_next++ % _pool.length];
       await p.stop();

@@ -26,12 +26,16 @@ class _SetupScreenState extends State<SetupScreen> {
   GameMode _mode = GameMode.duel;
   int _ffaPlayers = 3;
   AiLevel _ai = AiLevel.medium;
+  bool _umccc = false; // the UMCCC Model instead of _ai (1 v 1 only)
   MapDef? _map;
   final _mapScroll = ScrollController();
 
   int get _players => _mode == GameMode.ffa ? _ffaPlayers : _mode.fixedPlayers;
 
   List<MapDef> get _maps => mapsFor(context.services.data, _mode, _players);
+
+  /// A short landscape phone: the AI list needs to be tighter to fit five tiles.
+  bool get _tight => MediaQuery.sizeOf(context).height < 400;
 
   @override
   void dispose() {
@@ -50,7 +54,7 @@ class _SetupScreenState extends State<SetupScreen> {
     }
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => HeroSelectScreen(mode: _mode, players: _players, map: _map!, ai: _ai),
+        builder: (_) => HeroSelectScreen(mode: _mode, players: _players, map: _map!, ai: _ai, umccc: _umccc && _mode == GameMode.duel),
       ),
     );
   }
@@ -102,7 +106,7 @@ class _SetupScreenState extends State<SetupScreen> {
                       Expanded(
                         child: Text(
                           _step == 0
-                              ? '${_mode.label}${_mode == GameMode.ffa ? ' · $_players players' : ''} · AI ${_ai.label}'
+                              ? '${_mode.label}${_mode == GameMode.ffa ? ' · $_players players' : ''} · AI ${_umccc ? umcccLabel : _ai.label}'
                               : _map?.name ?? '',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -164,7 +168,10 @@ class _SetupScreenState extends State<SetupScreen> {
                         mode: m,
                         players: m == GameMode.ffa ? _ffaPlayers : m.fixedPlayers,
                         selected: _mode == m,
-                        onTap: () => setState(() => _mode = m),
+                        onTap: () => setState(() {
+                          _mode = m;
+                          if (m != GameMode.duel) _umccc = false;
+                        }),
                       ),
                   ],
                 ),
@@ -202,17 +209,30 @@ class _SetupScreenState extends State<SetupScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const SectionLabel('AI difficulty'),
+                // Five tiles don't fit a short landscape phone: shrink them and let only the chosen
+                // one show its description.
                 for (final l in AiLevel.values) ...[
                   ChoiceTile(
                     label: l.label,
-                    sub: l.blurb,
+                    sub: _tight && (_umccc || _ai != l) ? null : l.blurb,
                     accent: l.color,
-                    selected: _ai == l,
-                    height: 50,
-                    onTap: () => setState(() => _ai = l),
+                    selected: !_umccc && _ai == l,
+                    height: _tight ? 38 : 50,
+                    onTap: () => setState(() {
+                      _ai = l;
+                      _umccc = false;
+                    }),
                   ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: _tight ? 4 : 8),
                 ],
+                ChoiceTile(
+                  label: umcccLabel,
+                  sub: _mode != GameMode.duel ? 'Available in 1 v 1 only.' : (_tight && !_umccc ? null : umcccBlurb),
+                  accent: umcccColor,
+                  selected: _umccc,
+                  height: _tight ? 38 : 50,
+                  onTap: _mode == GameMode.duel ? () => setState(() => _umccc = true) : null,
+                ),
               ],
             ),
           ),

@@ -83,7 +83,7 @@ class _VsScreenState extends State<VsScreen> with SingleTickerProviderStateMixin
         if (!mine.contains(i)) i,
     ];
     final username = context.services.settings.username;
-    String who(int seat) => seat == me ? username : (widget.net?.names.value[seat] ?? 'AI ${c.ai.label}');
+    String who(int seat) => seat == me ? username : (widget.net?.names.value[seat] ?? 'AI ${c.aiLabel}');
 
     final inL = CurvedAnimation(
       parent: _a,
@@ -160,7 +160,7 @@ class _VsScreenState extends State<VsScreen> with SingleTickerProviderStateMixin
                         child: Column(
                           children: [
                             Text(c.map.name.toUpperCase(), style: titleStyle(18, spacing: 3)),
-                            Text('${c.mode.label} · AI ${c.ai.label}', style: bodyStyle(13, color: Palette.boneDim)),
+                            Text('${c.mode.label} · AI ${c.aiLabel}', style: bodyStyle(13, color: Palette.boneDim)),
                           ],
                         ),
                       ),

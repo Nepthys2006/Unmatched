@@ -12,6 +12,7 @@ import 'combat.dart';
 import 'defs.dart';
 import 'events.dart';
 import 'game.dart';
+import 'open_cards.dart';
 import 'prompt.dart';
 import 'state.dart';
 
@@ -433,6 +434,10 @@ abstract class HeroScript extends Mod {
 
   /// Status chips for the HUD (Alice is BIG, 2 Rage, coils charged...).
   List<String> status() => const [];
+
+  /// Cards this hero keeps on the table outside the hand (Pandora's MISERIES, Titania's
+  /// GLAMOURS...), open information drawn on the player's plate and in its card tray.
+  List<OpenZone> openZones() => const [];
 
   /// Rules a player needs beside the identity card (set rules, spells, the line so far), shown
   /// with the identity card during a match.

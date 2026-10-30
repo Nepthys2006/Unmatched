@@ -16,7 +16,7 @@ import '../widgets.dart';
 import 'vs_screen.dart';
 
 class HeroSelectScreen extends StatefulWidget {
-  const HeroSelectScreen({super.key, required this.mode, required this.players, required this.map, required this.ai})
+  const HeroSelectScreen({super.key, required this.mode, required this.players, required this.map, required this.ai, this.umccc = false})
     : pickOnly = false,
       initial = null,
       taken = const {};
@@ -27,12 +27,14 @@ class HeroSelectScreen extends StatefulWidget {
     : pickOnly = true,
       mode = GameMode.duel,
       players = 2,
-      ai = AiLevel.medium;
+      ai = AiLevel.medium,
+      umccc = false;
 
   final GameMode mode;
   final int players;
   final MapDef map;
   final AiLevel ai;
+  final bool umccc;
   final bool pickOnly;
   final String? initial;
   final Set<String> taken;
@@ -47,17 +49,54 @@ class _HeroSelectScreenState extends State<HeroSelectScreen> {
       : _free[math.Random().nextInt(_free.length)];
   List<HeroDef> get _free => _heroes.where((h) => !widget.taken.contains(h.id)).toList();
   final _grid = ScrollController();
+  final _search = TextEditingController();
+  final _searchFocus = FocusNode();
 
   @override
   void dispose() {
     _grid.dispose();
+    _search.dispose();
+    _searchFocus.dispose();
     super.dispose();
+  }
+
+  /// The heroes the search lets through: every word typed must appear in the hero's name, id or
+  /// set (so "bol 3", "sis" and "slings titania" all work).
+  List<HeroDef> get _shown {
+    final words = _search.text.toLowerCase().split(RegExp(r'\s+')).where((w) => w.isNotEmpty);
+    if (words.isEmpty) return _heroes;
+    return [
+      for (final h in _heroes)
+        if (words.every((w) => '${h.name} ${h.id.replaceAll('-', ' ')} ${h.set}'.toLowerCase().contains(w))) h,
+    ];
+  }
+
+  void _onSearch() {
+    setState(() {});
+    if (_grid.hasClients) _grid.jumpTo(0);
+  }
+
+  void _clearSearch() {
+    _search.clear();
+    _onSearch();
+  }
+
+  /// Enter picks the first hero found.
+  void _submitSearch(String _) {
+    final found = _shown;
+    if (found.isNotEmpty && !found.contains(_hero)) setState(() => _hero = found.first);
+    _searchFocus.unfocus();
   }
 
   void _random() {
     final others = _free.where((h) => h != _hero).toList();
-    setState(() => _hero = others[math.Random().nextInt(others.length)]);
-    final i = _heroes.indexOf(_hero);
+    if (others.isEmpty) return;
+    setState(() {
+      _hero = others[math.Random().nextInt(others.length)];
+      // A hero the search hides would be picked unseen: show everyone again.
+      if (!_shown.contains(_hero)) _search.clear();
+    });
+    final i = _shown.indexOf(_hero);
     if (_grid.hasClients) {
       final perRow = _perRow;
       final row = i ~/ perRow;
@@ -82,6 +121,7 @@ class _HeroSelectScreenState extends State<HeroSelectScreen> {
       players: widget.players,
       map: widget.map,
       ai: widget.ai,
+      umccc: widget.umccc,
       heroIds: MatchConfig.randomLineup(data, _hero.id, widget.players),
     );
     Navigator.of(context).push(
@@ -97,6 +137,8 @@ class _HeroSelectScreenState extends State<HeroSelectScreen> {
   Widget build(BuildContext context) {
     final color = hexColor(_hero.color);
     return Scaffold(
+      // The phone's keyboard may cover the heroes while typing; it must not squash the layout.
+      resizeToAvoidBottomInset: false,
       body: TableBackground(
         tint: color,
         child: SafeArea(
@@ -134,7 +176,7 @@ class _HeroSelectScreenState extends State<HeroSelectScreen> {
                       child: Text(
                         widget.pickOnly
                             ? (widget.taken.contains(_hero.id) ? '${_hero.name} is already taken in this lobby' : 'Choose your hero · ${widget.map.name}')
-                            : '${widget.players - 1} AI ${widget.players == 2 ? 'opponent is' : 'heroes are'} picked at random · ${widget.map.name} · AI ${widget.ai.label}',
+                            : '${widget.players - 1} AI ${widget.players == 2 ? 'opponent is' : 'heroes are'} picked at random · ${widget.map.name} · AI ${widget.umccc ? umcccLabel : widget.ai.label}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: bodyStyle(14, color: Palette.muted),
@@ -169,19 +211,42 @@ class _HeroSelectScreenState extends State<HeroSelectScreen> {
     );
   }
 
-  Widget _gridView() => LayoutBuilder(
+  Widget _gridView() => Column(
+    children: [
+      _SearchField(controller: _search, focus: _searchFocus, onChanged: _onSearch, onClear: _clearSearch, onSubmit: _submitSearch, found: _shown.length, total: _heroes.length),
+      const SizedBox(height: 6),
+      Expanded(child: _gridList()),
+    ],
+  );
+
+  Widget _gridList() => LayoutBuilder(
     builder: (context, c) {
       const tile = 84.0;
       _perRow = math.max(3, (c.maxWidth / tile).floor());
+      final shown = _shown;
+      if (shown.isEmpty) {
+        return Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.search_off_rounded, color: Palette.muted, size: 32),
+              const SizedBox(height: 6),
+              Text('No hero matches "${_search.text.trim()}"', textAlign: TextAlign.center, style: bodyStyle(15, color: Palette.boneDim)),
+              const SizedBox(height: 10),
+              PlateButton(label: 'Show all heroes', style: PlateStyle.secondary, height: 44, fontSize: 15, onPressed: _clearSearch),
+            ],
+          ),
+        );
+      }
       return Scrollbar(
         controller: _grid,
         child: GridView.builder(
           controller: _grid,
           padding: const EdgeInsets.only(right: 10, bottom: 8, top: 4),
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: _perRow, mainAxisExtent: 92, crossAxisSpacing: 4),
-          itemCount: _heroes.length,
+          itemCount: shown.length,
           itemBuilder: (_, i) {
-            final h = _heroes[i];
+            final h = shown[i];
             final sel = h == _hero;
             return Semantics(
               button: true,
@@ -221,6 +286,74 @@ class _HeroSelectScreenState extends State<HeroSelectScreen> {
       );
     },
   );
+}
+
+/// The hero search: a chamfered field on the table's dark, with the count of heroes it leaves.
+class _SearchField extends StatelessWidget {
+  const _SearchField({
+    required this.controller,
+    required this.focus,
+    required this.onChanged,
+    required this.onClear,
+    required this.onSubmit,
+    required this.found,
+    required this.total,
+  });
+  final TextEditingController controller;
+  final FocusNode focus;
+  final VoidCallback onChanged;
+  final VoidCallback onClear;
+  final ValueChanged<String> onSubmit;
+  final int found;
+  final int total;
+
+  @override
+  Widget build(BuildContext context) {
+    final filtering = controller.text.trim().isNotEmpty;
+    return Container(
+      height: 44,
+      padding: const EdgeInsets.only(left: 12),
+      decoration: ShapeDecoration(
+        color: Palette.bgDeep.withValues(alpha: 0.85),
+        shape: ChamferBorder(cut: 8, side: BorderSide(color: Palette.gold.withValues(alpha: filtering ? 0.8 : 0.3), width: filtering ? 1.4 : 1)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.search_rounded, color: Palette.boneDim, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: TextField(
+              key: const ValueKey('hero-search'),
+              controller: controller,
+              focusNode: focus,
+              onChanged: (_) => onChanged(),
+              onSubmitted: onSubmit,
+              textInputAction: TextInputAction.search,
+              autocorrect: false,
+              enableSuggestions: false,
+              cursorColor: Palette.bone,
+              style: bodyStyle(16, weight: FontWeight.w600),
+              decoration: InputDecoration.collapsed(hintText: 'Search heroes or sets', hintStyle: bodyStyle(16, color: Palette.muted)),
+            ),
+          ),
+          if (filtering) ...[
+            Text('$found/$total', key: const ValueKey('hero-search-count'), style: titleStyle(13, color: found == 0 ? Palette.danger : Palette.boneDim, spacing: 0.4)),
+            Semantics(
+              button: true,
+              label: 'Clear search',
+              child: InkResponse(
+                key: const ValueKey('hero-search-clear'),
+                onTap: onClear,
+                radius: 22,
+                child: const SizedBox(width: 44, height: 44, child: Icon(Icons.close_rounded, color: Palette.bone, size: 20)),
+              ),
+            ),
+          ] else
+            const SizedBox(width: 12),
+        ],
+      ),
+    );
+  }
 }
 
 class _HeroDetail extends StatelessWidget {

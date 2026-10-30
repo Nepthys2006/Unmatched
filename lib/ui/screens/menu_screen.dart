@@ -30,12 +30,19 @@ class MenuScreen extends StatefulWidget {
 class _MenuScreenState extends State<MenuScreen> with SingleTickerProviderStateMixin {
   late final AnimationController _intro = AnimationController(vsync: this, duration: const Duration(milliseconds: 900))..forward();
   List<HeroDef> _trio = const [];
+  bool _musicAsked = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final s = context.services;
-    s.audio.music(Music.menu);
+    // Once, when the menu opens. This runs again on every resize or minimize (build reads
+    // MediaQuery), and the menu stays mounted under a match: asking again would put the menu
+    // theme over the battle music. Coming back from another screen is handled in _open.
+    if (!_musicAsked) {
+      _musicAsked = true;
+      s.audio.music(Music.menu);
+    }
     if (_trio.isEmpty && s.loaded) {
       final all = s.data.heroes.values.toList()..shuffle(math.Random());
       _trio = all.take(3).toList();

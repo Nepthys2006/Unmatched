@@ -8,6 +8,7 @@ import 'package:flutter/widgets.dart';
 
 import '../engine/defs.dart';
 import '../engine/heroes/registry.dart';
+import '../engine/ismcts/evaluator.dart';
 import 'audio.dart';
 import 'settings.dart';
 
@@ -20,6 +21,23 @@ class Services {
   /// Off in widget tests, where image decoding never finishes inside fake time.
   final bool preloadImages;
   GameData? _data;
+  Evaluator? _umccc;
+
+  /// The UMCCC Model's trained evaluator (the hand-tuned one if the file could not be loaded).
+  Evaluator get umcccEvaluator => _umccc ?? HeuristicEvaluator();
+  bool get umcccLoaded => _umccc != null;
+
+  /// Loads assets/ai/umccc_model.json. A failure is logged and leaves the fallback in place.
+  Future<void> loadUmcccModel([AssetBundle? bundle]) async {
+    if (_umccc != null) return;
+    try {
+      final bytes = await (bundle ?? rootBundle).load('assets/ai/umccc_model.json');
+      final text = utf8.decode(bytes.buffer.asUint8List(bytes.offsetInBytes, bytes.lengthInBytes));
+      _umccc = LearnedEvaluator.fromJson(jsonDecode(text) as Map<String, dynamic>);
+    } catch (e) {
+      debugPrint('UMCCC Model could not be loaded: $e');
+    }
+  }
 
   GameData get data => _data ?? (throw StateError('Game data not loaded yet'));
 

@@ -22,6 +22,53 @@ Last updated: 2026-10-28. For the full engine/API reference see `HANDOFF.md`.
 | Checked in a browser | ✅ Chrome (desktop and phone-sized): 1v1, 2v2, 3v3 on the 3D maps |
 | Android / iOS / Windows app | ⚠️ Not run on a device yet (no phone or Visual Studio on this PC) |
 
+## Done (2026-10-30, later): black outline on heroes, new soundtrack, softer click
+
+- **Black outline round heroes** (web on phones, iPhone, iPad, tablets; any non-premultiplied filtering):
+  80 of the 194 cut-out sprites (miniatures, figures, sidekick tokens) had black colour under their
+  transparent edge. `tool/sprite_edges.py` repainted that edge with the figure's own colour (alpha
+  untouched, saved with `exact=True` so the encoder keeps it); `make_figures.py` and `build_assets.py`
+  now do it on every export (`python tool/sprite_edges.py --check` reports). The 3D page also
+  does it at run time (`bleedTexture` in `assets/web3d/board.js`). The one file still flagged is
+  Elektra's all-black Hand token, whose true edge colour is black. Needs a new web/app build to ship.
+- **Soundtrack** (`lib/ui/audio.dart`): `assets/audio/menu_theme.mp3` (loading + menu),
+  `battle_theme.mp3` (match), `victory_theme.mp3` (plays once on a win). Renamed from the files with
+  spaces and brackets, which break asset URLs on the web. Tracks fade in and out, a slower track change
+  never overrides a newer one, and if an mp3 can't play the old synthesized wav is used; every call
+  swallows its errors. `test/audio_assets_test.dart` checks the files exist.
+- **Minimize / resize no longer restarts the menu theme**: `MenuScreen.didChangeDependencies` asked for
+  the menu music on every resize (it stays mounted under a match, so it played over the battle music);
+  it now asks once. `test/music_resize_test.dart` is the regression test. Coming back from another
+  screen still restarts it (`_open`).
+- **Music level**: each track has a trim (`Music.gain`: menu 0.7, battle 0.55, victory 0.8) so the music
+  sits about 15 dB under the effects at the default slider and the three tracks are level with each
+  other. Measured RMS before trims: menu -22 dB, battle -19, victory -23, effects about -15.
+  `test/audio_switching_test.dart` stress-tests switching with fake players; it found and fixed a
+  sound-effect pool that could outgrow its 6 players.
+- **Click** (`tool/make_audio.py` `soft_click`): a soft low tap (centroid 930 → 440 Hz, half the
+  peak level, 8 ms raised-cosine attack, highs filtered) instead of an 880 Hz sine that started at once.
+
+## Done (2026-10-30): open cards on the table, hand-count cards, hero search
+
+- **Open cards** (`lib/engine/open_cards.dart`, `HeroScript.openZones()`): the cards a hero keeps
+  outside the hand are now structured data, not a status string. Pandora (MISERIES face up with
+  feathers and text, the rest of the box face down, HOPE's peek card), Titania (face-up glamour,
+  glamour deck, discarded glamours), Wayward Sisters (cauldron), Shakespeare (the line), Black
+  Panther (suit), Donatello (inventions), Dr. Jill Trent (active gadget). Rules are unchanged.
+- **UI** (`lib/ui/match/open_zones.dart`): a strip of chips under every plate (zone name + how many
+  face down, a chip per face-up card with its feathers; phones get it on the compact plate too);
+  tap it for the tray, which lays the cards out full size (tap one to read it large). Cards with no
+  scan (MISERIES, GLAMOURS, gadgets) are drawn in code in the HUD style. HOPE's next card shows
+  only to Pandora's owner, beside her "Reveal another MISERY?" question and in her tray; the enemy
+  sees that HOPE is up and that Pandora may look. The hero sheet (tap a plate) has the same cards.
+- **Hand count**: every compact plate (phones, team games) shows a fan of the player's own card
+  backs with the number (`HandCell`); full plates keep the fan above them (`HandBacks`).
+- **Hero search** on hero select: every word typed must be in the hero's name or set; count,
+  clear button, "no hero matches" state, Enter picks the first hit; the keyboard overlays the
+  heroes (`resizeToAvoidBottomInset: false`) instead of squeezing the layout.
+- Tests: `test/open_zones_ui_test.dart` (engine data, plates, tray, a real Pandora vs Titania match
+  at 3 sizes with HOPE forced first, hero search with a keyboard inset).
+
 ## Done (2026-10-28): Invisible Man's fog, every hero through the UI, multiplayer chat
 
 - **Invisible Man:** the fog can be moved by tapping the board for him and for his opponent

@@ -16,6 +16,7 @@ analyzer:
     - ios/**
     - web/**
     - windows/**
+    - third_party/**
     - macos/**
     - linux/**
 

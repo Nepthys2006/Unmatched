@@ -9,6 +9,7 @@ import '../../engine/defs.dart' show HeroDef;
 import '../../engine/state.dart';
 import '../shapes.dart';
 import '../theme.dart';
+import '../widgets.dart';
 
 /// The hero's portrait in a diamond rimmed in the player's colour (gold on their turn), with the
 /// seat number on a small bone diamond at the bottom point.
@@ -157,6 +158,81 @@ class StatCell extends StatelessWidget {
             key: ValueKey(value),
             child: Center(child: content),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// How many cards a player holds, as a small fan of their own card backs with the number beside it
+/// (the count pops when it changes). Shown for every player: you can see how many, never which.
+class HandCell extends StatelessWidget {
+  const HandCell({super.key, required this.count, required this.back, required this.size});
+  final int count;
+  final String back;
+
+  /// The plate's height; the cell is wider than tall.
+  final double size;
+
+  static double widthFor(double size) => size * 1.5;
+
+  @override
+  Widget build(BuildContext context) {
+    final cardW = size * 0.34;
+    final shown = count.clamp(0, 3);
+    final fanW = cardW + (cardW * 0.62) * 2;
+    return Tooltip(
+      message: '$count card${count == 1 ? '' : 's'} in hand',
+      child: Container(
+        key: const ValueKey('hand-cell'),
+        width: widthFor(size),
+        height: size,
+        padding: EdgeInsets.symmetric(horizontal: size * 0.1),
+        decoration: BoxDecoration(
+          color: const Color(0xE60A0D13),
+          border: Border(left: BorderSide(color: Palette.gold.withValues(alpha: 0.35))),
+        ),
+        child: Row(
+          children: [
+            SizedBox(
+              width: fanW,
+              height: size,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  if (shown == 0)
+                    Container(
+                      width: cardW,
+                      height: cardW / cardAspect,
+                      decoration: ShapeDecoration(shape: ChamferBorder(cut: 2, side: BorderSide(color: Palette.bone.withValues(alpha: 0.3)))),
+                    ),
+                  for (var i = 0; i < shown; i++)
+                    Transform.translate(
+                      offset: Offset((i - (shown - 1) / 2) * cardW * 0.62, 0),
+                      child: Transform.rotate(
+                        angle: shown == 1 ? 0 : (i / (shown - 1) - 0.5) * 0.5,
+                        child: CardImage(back, width: cardW, radius: 2),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 260),
+                transitionBuilder: (child, a) => ScaleTransition(
+                  scale: Tween(begin: 1.35, end: 1.0).animate(a),
+                  child: FadeTransition(opacity: a, child: child),
+                ),
+                child: Text(
+                  '$count',
+                  key: ValueKey(count),
+                  textAlign: TextAlign.center,
+                  style: titleStyle(size * 0.42, color: count == 0 ? Palette.muted : Colors.white, spacing: 0),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

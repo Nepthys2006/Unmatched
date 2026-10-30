@@ -98,7 +98,13 @@ class Board3DController {
     if (m == null) return;
     switch (m['t']) {
       case 'loaded':
-        if (_open) return;
+        // A page that says it has loaded when the board is already open is a new page: the host
+        // was rebuilt (the window crossed a UI-scale step, the device turned) or the web view
+        // reloaded. It knows nothing yet, so it is started over; ignoring it left a black board.
+        if (_open && status.value == Board3DStatus.ready) {
+          status.value = Board3DStatus.loading;
+          progress.value = 0;
+        }
         _open = true;
         _raw?.call(jsonEncode(_init()));
         if (_lastState != null) _raw?.call(_lastState!);
@@ -155,12 +161,23 @@ class Board3DController {
 }
 
 /// The web view showing the board for [controller].
-class Board3DView extends StatelessWidget {
+class Board3DView extends StatefulWidget {
   const Board3DView({super.key, required this.controller});
   final Board3DController controller;
 
   @override
-  Widget build(BuildContext context) => _NativeScale(child: host.buildHost(controller));
+  State<Board3DView> createState() => _Board3DViewState();
+}
+
+class _Board3DViewState extends State<Board3DView> {
+  /// Keeps the host (and the web view in it) alive when [_NativeScale] lays it out differently, as
+  /// the window grows or shrinks past a UI-scale step: the tree around it changes shape, and
+  /// without a global key that would tear the web view down and start a blank one.
+  final GlobalKey _host = GlobalKey(debugLabel: 'board3d host');
+
+  @override
+  Widget build(BuildContext context) =>
+      _NativeScale(child: KeyedSubtree(key: _host, child: host.buildHost(widget.controller)));
 }
 
 /// Lays [child] out at the screen's own pixel density. On tablets and desktops UiScale draws the

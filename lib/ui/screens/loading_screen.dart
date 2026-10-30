@@ -12,6 +12,7 @@ import '../services.dart';
 import '../shapes.dart';
 import '../theme.dart';
 import '../../engine/ai.dart';
+import '../audio.dart';
 import '../match/match_config.dart';
 import '../match/match_screen.dart';
 import 'menu_screen.dart';
@@ -28,6 +29,13 @@ const _tips = [
 ];
 
 const _quickMatch = String.fromEnvironment('QUICKMATCH');
+
+/// Dev only: with QUICKMATCH, the AI opponent is the UMCCC Model (1 v 1 only).
+const _quickUmccc = bool.fromEnvironment('QUICKUMCCC');
+
+/// Dev only (`--dart-define=DEMO=true`, run without the Supabase keys): skips sign-in and opens the
+/// menu as "Demo", to try the game offline without an account.
+const _demo = bool.fromEnvironment('DEMO');
 
 class LoadingScreen extends StatefulWidget {
   const LoadingScreen({super.key});
@@ -52,8 +60,10 @@ class _LoadingScreenState extends State<LoadingScreen> with SingleTickerProvider
   Future<void> _load() async {
     final s = context.services;
     final started = DateTime.now();
+    s.audio.music(Music.menu); // the same theme runs on through the menu
     try {
       final data = await s.loadData();
+      await s.loadUmcccModel();
       final heroes = data.heroes.values.toList();
       if (!mounted) return;
       setState(() {
@@ -93,8 +103,8 @@ class _LoadingScreenState extends State<LoadingScreen> with SingleTickerProvider
       }
       if (!mounted) return;
       // The map editor is offline work: no sign-in (a placeholder name, not saved).
-      if (mapDebug && !account && !s.settings.hasUsername) s.settings.username = 'MapDebug';
-      final Widget next = _quickMatch.isNotEmpty ? _quick(s) : (account || mapDebug ? const MenuScreen() : const UsernameScreen());
+      if ((mapDebug || _demo) && !account && !s.settings.hasUsername) s.settings.username = _demo ? 'Demo' : 'MapDebug';
+      final Widget next = _quickMatch.isNotEmpty ? _quick(s) : (account || mapDebug || _demo ? const MenuScreen() : const UsernameScreen());
       unawaited(
         Navigator.of(context).pushReplacement(
           PageRouteBuilder<void>(
@@ -126,7 +136,14 @@ class _LoadingScreenState extends State<LoadingScreen> with SingleTickerProvider
     final rng = int.tryParse(parts.elementAtOrNull(3) ?? '') == null ? null : math.Random(int.parse(parts[3]));
     return MatchScreen(
       seed: int.tryParse(parts.elementAtOrNull(3) ?? ''),
-      config: MatchConfig(mode: mode, players: players, map: map, ai: AiLevel.medium, heroIds: MatchConfig.randomLineup(s.data, hero, players, rng)),
+      config: MatchConfig(
+        mode: mode,
+        players: players,
+        map: map,
+        ai: AiLevel.medium,
+        umccc: _quickUmccc && mode == GameMode.duel,
+        heroIds: MatchConfig.randomLineup(s.data, hero, players, rng),
+      ),
     );
   }
 

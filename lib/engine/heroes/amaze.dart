@@ -6,6 +6,7 @@ import '../combat.dart';
 import '../events.dart';
 import '../game.dart';
 import '../hero_script.dart';
+import '../open_cards.dart';
 import '../prompt.dart';
 import '../state.dart';
 import 'common.dart';
@@ -481,6 +482,30 @@ class JillTrent extends HeroScript {
 
   @override
   List<String> status() => [if (gadget != null) gadget == Gadget.hypnoray ? 'Hypnoray Blaster' : 'Ultrabiotic Tonic'];
+
+  @override
+  List<OpenZone> openZones() => [
+    OpenZone(
+      id: 'gadget',
+      label: 'ACTIVE GADGET',
+      short: 'GADGET',
+      kind: OpenZoneKind.active,
+      cards: [
+        if (gadget == Gadget.hypnoray)
+          const OpenCard(
+            title: 'Hypnoray Blaster',
+            text: "DURING COMBAT: if your card's printed value is lower than your opponent's, reveal the top card of their deck and add its BOOST to your attack.",
+          )
+        else if (gadget == Gadget.tonic)
+          const OpenCard(
+            title: 'Ultrabiotic Tonic',
+            text: "AFTER COMBAT: if your card's printed value is higher than your opponent's, Jill Trent recovers 1 health.",
+          ),
+      ],
+      note: gadget == null ? 'Activates one at the start of her turn.' : 'Resolves whenever Jill Trent attacks.',
+      alwaysShow: false,
+    ),
+  ];
 
   @override
   Future<void> startOfTurn(Game g, Player active) async {

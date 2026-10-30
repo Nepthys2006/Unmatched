@@ -8,6 +8,7 @@ import '../combat.dart';
 import '../events.dart';
 import '../game.dart';
 import '../hero_script.dart';
+import '../open_cards.dart';
 import '../prompt.dart';
 import '../state.dart';
 import 'common.dart';
@@ -132,6 +133,17 @@ class Donatello extends HeroScript {
 
   @override
   List<String> status() => [for (final t in tucked) t.split(' ').map((w) => w[0] + w.substring(1).toLowerCase()).join(' ')];
+
+  @override
+  List<OpenZone> openZones() => [
+    OpenZone(
+      id: 'inventions',
+      label: 'INVENTIONS',
+      cards: [for (final c in me.removed.where((c) => tucked.contains(c.def.upperTitle))) OpenCard.of(c)],
+      note: tucked.isEmpty ? '' : 'Tucked under Donatello: the bonus lasts all game.',
+      alwaysShow: false,
+    ),
+  ];
 
   Future<int> removeFromDiscard(Fx x, bool Function(Card) which, String text) async {
     final cards = await x.game.chooseCards(x.me, x.me.discard.where(which), 0, 4, text, intent: Intent.loseOwn);

@@ -6,6 +6,7 @@ import '../defs.dart';
 import '../events.dart';
 import '../game.dart';
 import '../hero_script.dart';
+import '../open_cards.dart';
 import '../prompt.dart';
 import '../state.dart';
 import 'common.dart';
@@ -196,6 +197,24 @@ class Titania extends HeroScript {
   @override
   List<String> status() => [glamour == null ? 'No glamour' : 'Glamour: ${_cap(glamour!)}', '${glamourDiscard.length} discarded'];
 
+  static OpenCard _face(String g) => OpenCard(title: 'Glamour of ${_cap(g)}', text: glamours[g]!);
+
+  /// The face-up glamour is ongoing; the glamour deck is face down; discarded glamours lie face up.
+  @override
+  List<OpenZone> openZones() => [
+    OpenZone(
+      id: 'glamour',
+      label: 'GLAMOUR',
+      kind: OpenZoneKind.active,
+      cards: [if (glamour != null) _face(glamour!)],
+      hidden: glamourDeck.length,
+      hiddenLabel: 'in the glamour deck',
+      note: glamour == null ? (glamourDeck.isEmpty ? 'The glamour deck is empty.' : 'Flips a glamour at the start of the next turn.') : 'Ongoing while face up.',
+    ),
+    if (glamourDiscard.isNotEmpty)
+      OpenZone(id: 'glamour-discard', label: 'DISCARDED GLAMOURS', short: 'DISCARDED', cards: [for (final g in glamourDiscard) _face(g)], alwaysShow: false),
+  ];
+
   @override
   Map<String, CardScript> get cards => {
         'AS WISE AS BEAUTIFUL': CardScript(after: (x) async {
@@ -296,6 +315,16 @@ class Shakespeare extends HeroScript {
 
   @override
   List<String> status() => ['Line: $syllables/10 syllables'];
+
+  @override
+  List<OpenZone> openZones() => [
+    OpenZone(
+      id: 'line',
+      label: 'THE LINE',
+      cards: [for (final c in line) OpenCard.of(c, tag: '${c.def.syllables ?? 0} syl.')],
+      note: '$syllables of 10 syllables',
+    ),
+  ];
 
   @override
   List<String> reference() => [
@@ -441,6 +470,16 @@ class WaywardSisters extends HeroScript {
         'Cauldron: ${cauldron.isEmpty ? 'empty' : cauldron.map((c) => '${c.title} (${c.def.ingredient})').join(', ')}.',
         'Three Sisters with their own health; you lose when the last one falls.',
       ];
+
+  @override
+  List<OpenZone> openZones() => [
+    OpenZone(
+      id: 'cauldron',
+      label: 'CAULDRON',
+      cards: [for (final c in cauldron) OpenCard.of(c, tag: c.def.ingredient)],
+      note: ingredients.isEmpty ? '' : 'Ingredients: ${(ingredients.toList()..sort()).join(', ')}',
+    ),
+  ];
 
   @override
   List<String> status() => [

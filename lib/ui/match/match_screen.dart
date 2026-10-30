@@ -18,6 +18,7 @@ import '../../engine/defs.dart' show MapArt;
 import '../../engine/events.dart';
 import '../../engine/game.dart';
 import '../../engine/hero_script.dart' show FighterPlacedAtStart;
+import '../../engine/ismcts/ismcts_agent.dart';
 import '../../engine/portable_random.dart';
 import '../../engine/prompt.dart';
 import '../../engine/state.dart';
@@ -41,12 +42,16 @@ import 'board_layer.dart';
 import 'figure_art.dart';
 import 'hero_items.dart';
 import 'hud.dart';
+import 'open_zones.dart';
 import 'match_config.dart';
 import 'plate_parts.dart';
 
 /// Dev-only: `--dart-define=AUTOPLAY=true` lets an AI answer your prompts (after showing them)
 /// so whole matches can be screenshot and soak-tested. Never set in real builds.
 const _autoplay = bool.fromEnvironment('AUTOPLAY');
+
+/// Dev only (`--dart-define=UMCCC_LOG=true`): print the UMCCC Model's move times.
+const _umcccLog = bool.fromEnvironment('UMCCC_LOG');
 
 class _Abandoned implements Exception {
   const _Abandoned();
@@ -258,7 +263,7 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin,
         ..isAI = false;
       for (final p in game.players.skip(1)) {
         p
-          ..label = 'AI ${level.label}'
+          ..label = 'AI ${cfg.aiLabel}'
           ..isAI = true;
       }
     } else {
@@ -276,10 +281,28 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin,
     WidgetsBinding.instance.addPostFrameCallback((_) => _run());
   }
 
+  /// The UMCCC Model's search agents (they follow the match's events to track the opponent).
+  final List<IsmctsAgent> _umcccAgents = [];
+
+  /// The search AI: Insane-level helper, 200 simulations capped at 2.5 s per move, searched in short
+  /// slices on the UI thread so the animations keep running.
+  Agent _umcccBrain() {
+    final a = IsmctsAgent(
+      level: AiLevel.insane,
+      subPromptLevel: AiLevel.insane,
+      evaluator: _s.umcccEvaluator,
+      isWeb: kIsWeb,
+      useBackgroundIsolate: !kIsWeb,
+    );
+    _umcccAgents.add(a);
+    return _umcccLog ? TimedAgent(a, 'UMCCC') : a;
+  }
+
   Agent _agentFor(int seat, AiLevel level) {
     final human = HumanAgent(_onPrompt);
+    final useUmccc = widget.config.umccc && widget.net == null && seat != 0;
     final ai = PacedAgent(
-      AiAgent(level: level),
+      useUmccc ? _umcccBrain() : AiAgent(level: level),
       think: (p) => p.ask == Ask.action ? (650 * _speed).round() : (p.ask == Ask.card || p.ask == Ask.space ? (260 * _speed).round() : 0),
       onThinking: (p) {
         if (!_disposed && _thinking != p.player) setState(() => _thinking = p.player);
@@ -596,6 +619,9 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin,
 
   Future<void> _present(GameEvent e) async {
     if (_disposed) throw const _Abandoned();
+    for (final a in _umcccAgents) {
+      a.observeEvent(e);
+    }
     if (logIsPublic(e, me)) {
       _log.add(e is TurnStarted ? LogLine('Turn ${e.number} · ${e.player.name}', turn: true, color: colorOf(e.player)) : LogLine(e.log));
       if (_log.length > 400) _log.removeRange(0, 100);
@@ -784,8 +810,12 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin,
         );
         _s.settings.clearReconnect();
         OnlinePresenceService.instance.updateStatus(status: 'idle');
-        _s.audio.stopMusic();
-        _s.audio.sfx(won ? Sfx.victory : Sfx.hit);
+        if (won) {
+          _s.audio.music(Music.victory);
+        } else {
+          _s.audio.stopMusic();
+          _s.audio.sfx(Sfx.hit);
+        }
         _refresh();
       default:
         _refresh();
@@ -1412,6 +1442,9 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin,
     final menuW = (menuButtons * 44 * 1.16 + (menuButtons - 1) * 6) * ui;
     final camTop = 8 + 44 * ui + 10;
     final camBottom = camTop + 38 * ui;
+    // The camera row: its button, plus zoom in / out / fit (and turn / tilt in 3D) when opened.
+    final camButtons = 1 + (_camOpen ? (_in3d ? 5 : 3) : 0);
+    final camRowW = (camButtons * 38 * 1.16 + (camButtons - 1) * 6) * ui;
     final allies = [for (final o in others) if (o.team == me.team) o];
     final enemies = [for (final o in others) if (o.team != me.team) o];
     final compactEnemies = enemies.length > 1 || allies.isNotEmpty || size.height < 560;
@@ -1665,17 +1698,24 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin,
                 ),
               ),
 
+              // Beside the camera buttons (which open to the right), never under them.
               if (_b3 != null && settings.showFps)
                 Positioned(
-                  top: 62,
-                  left: 14,
+                  top: camTop,
+                  left: 10 + camRowW + 12 * ui,
                   child: SafeArea(
                     child: IgnorePointer(
-                      child: ValueListenableBuilder<int?>(
-                        valueListenable: _b3!.fps,
-                        builder: (_, v, _) => Text(
-                          v == null ? '' : (v == 0 ? 'FPS · idle' : '$v FPS'),
-                          style: titleStyle(13, color: v != null && v > 0 && v < 30 ? Palette.danger : Palette.good, spacing: 1),
+                      child: SizedBox(
+                        height: 38 * ui,
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: ValueListenableBuilder<int?>(
+                            valueListenable: _b3!.fps,
+                            builder: (_, v, _) => Text(
+                              v == null ? '' : (v == 0 ? 'FPS · idle' : '$v FPS'),
+                              style: titleStyle(13 * ui, color: v != null && v > 0 && v < 30 ? Palette.danger : Palette.good, spacing: 1),
+                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -2160,6 +2200,26 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin,
     );
   }
 
+  /// Pandora's HOPE: the top card of her box, shown beside her questions while HOPE is face up so
+  /// the decision is made looking at it (only on her own screen).
+  Widget? _peekAside() {
+    for (final z in me.script.openZones()) {
+      final peek = z.peek;
+      if (peek == null) continue;
+      final w = (MediaQuery.sizeOf(context).height * 0.3 * cardAspect).clamp(72.0, 120.0);
+      return Column(
+        key: const ValueKey('peek-aside'),
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          OpenCardFace(card: peek, width: w, accent: zoneAccent(z, me), peek: true),
+          const SizedBox(height: 4),
+          SizedBox(width: w, child: Text(z.peekLabel, textAlign: TextAlign.center, style: bodyStyle(12, color: Palette.select, weight: FontWeight.w600))),
+        ],
+      );
+    }
+    return null;
+  }
+
   /// A panel for prompts that can't be answered on the board or from the hand.
   Widget? _choiceOverlay(Prompt p) {
     if (p.ask == Ask.action || _isFighterPrompt || _isBoardSpacePrompt || _isHandCardPrompt || _isPathPrompt) return null;
@@ -2190,6 +2250,7 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin,
         color: const Color(0x8C000000),
         child: ChoicePanel(
           key: ValueKey(p),
+          aside: _peekAside(),
           title: p.text,
           labels: [for (final c in p.choices) c.label],
           source: source,
@@ -2234,7 +2295,7 @@ class _OpponentColumn extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.only(bottom: 6),
           child: compact
-              ? _MiniPlate(player: o, color: colorOf(o), active: active == o, ally: o.team == me.team, left: left, onTap: () => onTap(o))
+              ? _MiniPlate(player: o, color: colorOf(o), viewer: me, active: active == o, ally: o.team == me.team, left: left, onTap: () => onTap(o))
               : PlayerPlate(
                   player: o,
                   color: colorOf(o),
@@ -2242,6 +2303,7 @@ class _OpponentColumn extends StatelessWidget {
                   active: active == o,
                   actionsLeft: active == o ? actions : null,
                   showHandBacks: true,
+                  viewer: me,
                   onTap: () => onTap(o),
                 ),
         ),
@@ -2255,9 +2317,10 @@ class _OpponentColumn extends StatelessWidget {
 }
 
 class _MiniPlate extends StatelessWidget {
-  const _MiniPlate({required this.player, required this.color, required this.active, required this.ally, required this.onTap, this.left = false});
+  const _MiniPlate({required this.player, required this.color, required this.viewer, required this.active, required this.ally, required this.onTap, this.left = false});
   final Player player;
   final Color color;
+  final Player viewer;
   final bool active;
   final bool ally;
   final VoidCallback onTap;
@@ -2266,7 +2329,7 @@ class _MiniPlate extends StatelessWidget {
   static const _e = 40.0, _h = 30.0, _nameW = 74.0;
 
   /// Its width before UiScale (fixed, so the HUD can keep clear of it).
-  static const width = _e * 0.6 + _e * 0.46 + _nameW + 2 * _h + 4; // + the border, both sides
+  static const width = _e * 0.6 + _e * 0.46 + _nameW + _h + _h * 1.5 + 4; // + the border, both sides
 
   /// The compact plate (phones, team games): the same parts as PlayerPlate, smaller: the diamond
   /// emblem with the seat number, the name, health and hand on a plate in the hero's colour, and
@@ -2320,7 +2383,7 @@ class _MiniPlate extends StatelessWidget {
                               ),
                             ),
                             StatCell(value: hero.defeated ? 0 : hero.hp, size: h, heart: true, low: hero.hp <= 3, tooltip: '${hero.name}: ${hero.hp} health'),
-                            StatCell(value: player.hand.length, size: h, icon: Icons.style_rounded, tooltip: 'Cards in hand'),
+                            HandCell(count: player.hand.length, back: player.hero.back, size: h),
                           ],
                         ),
                       ),
@@ -2349,6 +2412,20 @@ class _MiniPlate extends StatelessWidget {
                         for (final g in CompanionsRow.groups(player)) CompanionChip(group: g, color: readable(color), size: 20),
                         AbilityChip(hero: player.hero, size: 20, iconOnly: true),
                       ],
+                    ),
+                  ),
+                ),
+              if (!player.eliminated && visibleZones(player).isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 3),
+                  child: SizedBox(
+                    width: width - e * 0.12,
+                    child: OpenZoneStrip(
+                      player: player,
+                      viewer: viewer,
+                      small: true,
+                      maxCards: 3,
+                      alignment: left ? WrapAlignment.start : WrapAlignment.end,
                     ),
                   ),
                 ),

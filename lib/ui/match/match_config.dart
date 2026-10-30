@@ -57,6 +57,13 @@ extension AiLevelX on AiLevel {
   };
 }
 
+/// A fifth opponent next to the four [AiLevel]s: the trained search AI. It is not an [AiLevel]
+/// because the lobby and the network code send levels by name between devices; this one is only
+/// offered for offline 1 v 1 (the model was trained on duels).
+const umcccLabel = 'UMCCC Model';
+const umcccBlurb = 'Trained search AI. Plans every card and move. 1 v 1 only.';
+const umcccColor = Color(0xFF9B7BFF);
+
 /// Maps that can host [mode] with [players] seats.
 List<MapDef> mapsFor(GameData data, GameMode mode, int players) {
   int starts(MapDef m) => m.spaces.where((s) => s.start != null).length;
@@ -70,12 +77,16 @@ List<MapDef> mapsFor(GameData data, GameMode mode, int players) {
 }
 
 class MatchConfig {
-  MatchConfig({required this.mode, required this.players, required this.map, required this.ai, required this.heroIds});
+  MatchConfig({required this.mode, required this.players, required this.map, required this.ai, required this.heroIds, this.umccc = false});
 
   final GameMode mode;
   final int players;
   final MapDef map;
   final AiLevel ai;
+
+  /// Play against the UMCCC Model instead of [ai] (offline 1 v 1 only).
+  final bool umccc;
+  String get aiLabel => umccc ? umcccLabel : ai.label;
 
   /// One hero per seat; seat 0 is the human.
   final List<String> heroIds;
@@ -89,5 +100,5 @@ class MatchConfig {
     return [human, ...pool.take(players - 1)];
   }
 
-  MatchConfig rematch() => MatchConfig(mode: mode, players: players, map: map, ai: ai, heroIds: heroIds);
+  MatchConfig rematch() => MatchConfig(mode: mode, players: players, map: map, ai: ai, heroIds: heroIds, umccc: umccc);
 }

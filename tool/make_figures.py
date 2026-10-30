@@ -16,6 +16,8 @@ import os
 
 from PIL import Image
 
+import sprite_edges  # keeps the colour under the cut-out's transparent edge (no black outline)
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MINIS = os.path.join(os.path.dirname(ROOT), 'Map Viewer')
 HEROES = os.path.join(ROOT, 'assets', 'heroes')
@@ -25,7 +27,7 @@ ORDER = {'cloak-dagger': ['cloak-dagger-2', 'cloak-dagger']}
 
 
 def webp(src, dest):
-    Image.open(src).save(dest, 'WEBP', quality=86, method=6)
+    sprite_edges.save_webp(Image.open(src), dest, quality=86)
 
 
 def main():

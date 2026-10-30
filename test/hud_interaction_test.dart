@@ -267,6 +267,9 @@ void main() {
         expect(find.byType(ResultView), findsOneWidget, reason: 'the match should finish despite $actions random presses');
         expect(find.text('SOMETHING WENT WRONG'), findsNothing);
         await t.pumpWidget(const SizedBox());
+        // _submit's 450 ms "back to the duel" camera timer may still be in flight; it checks
+        // _disposed, so just let it fire.
+        await t.pump(const Duration(seconds: 1));
       }, timeout: const Timeout(Duration(minutes: 8)));
     }
   }

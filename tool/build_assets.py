@@ -24,6 +24,8 @@ import sys
 
 from PIL import Image
 
+import sprite_edges
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 GAME = os.path.dirname(HERE)
 ROOT = os.path.dirname(GAME)                       # the Unmatched folder
@@ -116,6 +118,9 @@ def build_data():
 
 def save(im, path, **kw):
     os.makedirs(os.path.dirname(path), exist_ok=True)
+    if im.mode == "RGBA":  # cut-outs: keep the colour under the transparent edge (no black outline)
+        sprite_edges.save_webp(im, path, **kw)
+        return
     im.save(path, "WEBP", method=6, **kw)
 
 
