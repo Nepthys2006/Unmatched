@@ -50,9 +50,19 @@ class Audio {
   static const _fadeInSteps = 14;
   static const _fadeOutSteps = 5;
 
+  /// Every player plays alongside the others and never asks Android for audio focus.
+  ///
+  /// By default each player requests focus when it starts, and Android answers the player that
+  /// held it (the music) with a permanent "focus lost", which the plugin handles by pausing it for
+  /// good. So every click or hit sound silenced the music until the next track change. Mixing
+  /// with others means no sound can pause another. (On the web and Windows this is ignored.)
+  static final AudioContext _mix = AudioContextConfig(focus: AudioContextConfigFocus.mixWithOthers).build();
+
   AudioPlayer? _music;
   Music? _current;
   bool _musicStarted = false;
+  bool _musicPrepared = false;
+  DateTime _lastEnsure = DateTime.fromMillisecondsSinceEpoch(0);
 
   /// The track loaded in the player (its trim applies to the volume), which may differ from
   /// [_current] while a change is under way.
@@ -63,6 +73,9 @@ class Audio {
   /// Bumped by every track change, so a slower earlier change notices it was overtaken and stops.
   int _generation = 0;
   final List<AudioPlayer> _pool = [];
+
+  /// One entry per pool player: completes once it is set up (never with an error).
+  final List<Future<void>> _poolReady = [];
   int _next = 0;
   final Map<Sfx, DateTime> _last = {};
 
@@ -77,6 +90,17 @@ class Audio {
     } catch (_) {}
   }
 
+  /// Sets [p] up to play alongside everything else (see [_mix]). Never throws.
+  Future<void> _mixWithOthers(AudioPlayer p, {ReleaseMode? releaseMode}) async {
+    try {
+      await p.setAudioContext(_mix);
+    } catch (_) {}
+    if (releaseMode == null) return;
+    try {
+      await p.setReleaseMode(releaseMode);
+    } catch (_) {}
+  }
+
   /// Starts (or switches to) a track: the old one fades out, the new one fades in.
   void music(Music m) {
     if (!enabled) return;
@@ -85,6 +109,10 @@ class Audio {
     final gen = ++_generation;
     _guard(() async {
       final p = _music ??= _newPlayer('music');
+      if (!_musicPrepared) {
+        _musicPrepared = true;
+        await _mixWithOthers(p);
+      }
       if (_musicStarted) await _fadeOut(p, gen);
       if (gen != _generation) return;
       await p.stop();
@@ -123,12 +151,35 @@ class Audio {
     }
   }
 
-  /// Browsers only allow audio after a user gesture: retry the music on the first tap.
+  /// Browsers only allow audio after a user gesture: retry the music on the first tap. Once it is
+  /// playing, a tap also checks it was not paused behind our back (see [ensureMusic]).
   void userGesture() {
-    if (!enabled || _musicStarted || _current == null) return;
+    if (!enabled || _current == null) return;
+    if (_musicStarted) {
+      ensureMusic();
+      return;
+    }
     final m = _current!;
     _current = null;
     music(m);
+  }
+
+  /// Puts the music back if the system paused or stopped it without us asking (a phone call, another
+  /// app taking over the audio, the app coming back from the background). Resuming a player that
+  /// is already playing does nothing, so this is safe to call at any time. Looping tracks only:
+  /// the victory theme plays once and must not start again. At most once every 2 seconds.
+  void ensureMusic() {
+    final m = _current;
+    final p = _music;
+    if (!enabled || m == null || p == null || !_musicStarted || !m.loop) return;
+    final now = DateTime.now();
+    if (now.difference(_lastEnsure) < const Duration(seconds: 2)) return;
+    _lastEnsure = now;
+    final gen = _generation;
+    _guard(() async {
+      if (gen != _generation) return;
+      await p.resume();
+    });
   }
 
   void stopMusic() {
@@ -149,11 +200,13 @@ class Audio {
     _guard(() async {
       if (_pool.length < 6) {
         // Added before the first await: overlapping calls must see the pool already grown.
-        final p = _newPlayer('sfx${_pool.length}');
-        _pool.add(p);
-        await p.setReleaseMode(ReleaseMode.stop);
+        final fresh = _newPlayer('sfx${_pool.length}');
+        _pool.add(fresh);
+        _poolReady.add(_mixWithOthers(fresh, releaseMode: ReleaseMode.stop));
       }
-      final p = _pool[_next++ % _pool.length];
+      final i = _next++ % _pool.length;
+      await _poolReady[i]; // set up (and mixing with others) before its first sound
+      final p = _pool[i];
       await p.stop();
       await p.play(AssetSource('audio/${s.name}.wav'), volume: (settings.sfxVolume * volume).clamp(0, 1));
     });

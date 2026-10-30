@@ -361,6 +361,8 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin,
       _b3?.send(const {'t': 'hidden'});
     } else if (state == AppLifecycleState.resumed) {
       _b3?.send(const {'t': 'visible'});
+      // The system may have paused the music while the app was away (a call, another app).
+      if (mounted) _s.audio.ensureMusic();
     }
   }
 
@@ -1363,7 +1365,10 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin,
     if (!mounted) return;
     if (r == 'settings') {
       await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const SettingsScreen(inMatch: true)));
-      if (mounted) setState(() {});
+      if (mounted) {
+        _s.audio.ensureMusic(); // belt and braces: the battle music must still be playing
+        setState(() {});
+      }
     } else if (r == 'leave') {
       final ok = await showConfirm(
         context,
