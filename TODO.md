@@ -15,34 +15,12 @@ Last updated: 2026-10-28. For the full engine/API reference see `HANDOFF.md`.
 | Rules engine (`lib/engine/`) | ✅ Done |
 | All 70 heroes, every card | ✅ Done, checked against the printed cards |
 | Modes: 1v1, 2v2, 3v3, free-for-all 2–5 | ✅ Done |
-| AI: Easy / Medium / Hard / Insane | ✅ Done |
+| AI: Easy / Medium / Hard / Insane | ✅ Done; measured with `tool/ai_arena.dart` |
 | Flutter UI: loading, username, menu, setup, hero select, VS, match, results, settings | ✅ Playable end to end |
 | Maps | ✅ 47: the 32 printed Unmatched maps + 15 of the game's own in the same style (5 for 3v3) |
 | Tests | ✅ 104 engine + 32 widget tests passing (whole matches in every mode, 3 screen sizes) |
 | Checked in a browser | ✅ Chrome (desktop and phone-sized): 1v1, 2v2, 3v3 on the 3D maps |
 | Android / iOS / Windows app | ⚠️ Not run on a device yet (no phone or Visual Studio on this PC) |
-
-## Done (2026-10-30): crash, profiles/MMR, reconnect + AI takeover, host migration, map screens
-
-- **Crash fixed** (Active Players / invites): the list put a full-width `PlateButton` in a `ListTile.trailing`
-  (layout assertion on every platform). Rewritten as proper cards; `test/active_players_ui_test.dart`.
-  Invites now go through one place (`lib/ui/invite_flow.dart`): one listener above the navigator (was two
-  subscribers, so dialogs doubled), the menu's invite really creates the lobby and sends it, accepting joins the lobby.
-  `OnlinePresenceService.start` is idempotent (it used to leave a second Realtime channel per screen).
-- **Profile / Active Players / invite redesign** (`lib/ui/profile/profile_widgets.dart`, `dialogs/`): main hero
-  (most played) showcase, MMR badge + tier (Elo, PvP only, `Mmr` in `profile_stats.dart`), separate PvP and AI win rates.
-  Payload keeps the old keys; old saves/peers read as AI matches.
-- **Map screens on phones:** one slim bottom bar (Inspect / Random / Done), maps stay visible. `MapStrip` scrolls smoothly
-  (fixed-extent items, per-card repaint layers, smaller image decodes, mouse wheel/drag on desktop and web).
-- **Orientation:** `OrientationGuard` in `main.dart` re-asserts both landscapes + immersive mode after every rotation (manifest already `sensorLandscape`).
-- **Rejoin / AI takeover / host migration** (`lib/net/session.dart`, `lockstep.dart`, `transports.dart`): a player who drops keeps
-  their seat for `rejoinGrace` (2 min) and can rejoin the same match (token); after it an AI plays the seat. Players reconnect to the
-  host automatically; if the host is gone for the grace period the first remaining player becomes the host (LAN: from the address
-  in the lobby; online: next channel `<topic>-m`), or plays on alone against the AI. Tests: `net_test.dart` (real sockets, shortened
-  grace), `lifecycle_reconnect_test.dart`.
-- **Not done / limits:** a host whose *app is killed* cannot resume hosting (its match state lives only in memory); the others carry on
-  as above. The bundled web runtime in `assets/webapp` still has to be rebuilt (`tool/rebuild_and_release_all.ps1`) to ship these fixes.
-  `test/online_test.dart` needs the live Supabase project. Nothing was run on a real phone (only widget/socket tests here).
 
 ## Done (2026-10-28): Invisible Man's fog, every hero through the UI, multiplayer chat
 
@@ -119,6 +97,27 @@ Last updated: 2026-10-28. For the full engine/API reference see `HANDOFF.md`.
   target (fewer samples as the resolution rises), full anisotropic filtering on the map art,
   figure pictures upscaled and unsharp-masked once per tier (High: 900 px, Ultra: 1200 px) with
   alpha-to-coverage edges, and badge/number canvases drawn at the screen's density.
+
+## Done (2026-10-28): a stronger AI, and levels that differ
+
+- **AI arena** (`dart run tool/ai_arena.dart`): plays whole AI-vs-AI matches headless (~25 ms each)
+  against a frozen copy of the old AI (`tool/ai/baseline_ai.dart`), seats swapped so luck evens out,
+  and prints the win rate with its ± margin and what each side did. `dart run tool/ai_watch.dart`
+  prints one match with every choice. Every change below was kept only if the arena showed it helped.
+- **Insane now beats the old AI 73.5% of games** (4000 games, ± 1.4%):
+  - it ends its turn out of reach of the enemy's next move + attack when it can (arrows, +1 paths and
+    blocking fighters included), most of all with a hurt hero: 50% → 55%;
+  - it BOOSTs a maneuver only when the extra movement buys something: reaching a space to attack
+    from, or getting a hurt hero to safety. It used to discard a card on almost every maneuver with
+    5+ cards, or with a hurt hero whether or not it got away: 55% → 73%;
+  - King Arthur boosts an attack only when the extra damage is worth the card (no more boosting
+    with Bewilderment); attack cards are chosen with the exact odds of the defender's best card,
+    from the cards they may hold and how many they hold.
+  - Tried and dropped (they lost games): skipping defenses to save cards, attacking more or less often.
+- **Difficulty levels really differ now.** They used to differ only by noise, and every level won
+  50% against Insane. Now Hard, Medium and Easy also make a careless choice 10%, 25% and 55% of the
+  time: Insane beats them 59%, 70% and 87%; Medium beats the old AI 57%, Easy loses to it 66%.
+- `test/ai_test.dart` checks the BOOST rules, the safe end-of-turn space and that Insane beats Easy.
 
 ## Done (2026-10-25, later): 3D board, figures, hero pieces, map fixes
 
@@ -235,6 +234,13 @@ All data corrections live in `tool/card_fixes.json`.
 - [ ] iPhone build (needs a Mac)
 - [ ] Dev-only flags for testing: `--dart-define=QUICKMATCH=<map>[:players]` jumps straight into a
       match; `--dart-define=AUTOPLAY=true` lets an AI play your seat. Never use in real builds.
+- Map path editor: `flutter run -d chrome --dart-define=MAPDEBUG=true`, open a map's inspector,
+  fix paths, Copy patch, then `dart tool/apply_map_patch.dart` (reads the clipboard) and
+  `flutter test test/maps_test.dart` (see `lib/ui/dialogs/map_debug.dart`).
+- AI work: change `lib/engine/ai.dart`, then `dart run tool/ai_arena.dart --games=4000` (above 50% =
+  stronger than the old AI; `--a=`/`--b=` pick levels, `--heroes=`/`--maps=` narrow it down) and
+  `dart run tool/ai_watch.dart --heroes=a,b --map=id` to read one match. Ideas not done yet: picking
+  which fighter moves first, scheme timing, and team play (2v2/3v3 AIs don't cover for each other).
 
 ## Open questions for you
 
