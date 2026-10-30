@@ -61,13 +61,7 @@ class _SetupScreenState extends State<SetupScreen> {
     final pick = (others.isEmpty ? maps : others)[math.Random().nextInt(others.isEmpty ? maps.length : others.length)];
     setState(() => _map = pick);
     final i = maps.indexOf(pick);
-    if (_mapScroll.hasClients) {
-      _mapScroll.animateTo(
-        (i * 300.0 - 40).clamp(0, _mapScroll.position.maxScrollExtent),
-        duration: const Duration(milliseconds: 420),
-        curve: Curves.easeOutCubic,
-      );
-    }
+    MapStrip.scrollTo(_mapScroll, i, const Duration(milliseconds: 420));
   }
 
   @override
@@ -102,7 +96,7 @@ class _SetupScreenState extends State<SetupScreen> {
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 4, 24, 14),
+                  padding: compactHeight(context) ? const EdgeInsets.fromLTRB(24, 4, 24, 8) : const EdgeInsets.fromLTRB(24, 4, 24, 14),
                   child: Row(
                     children: [
                       Expanded(
@@ -120,8 +114,8 @@ class _SetupScreenState extends State<SetupScreen> {
                           label: 'Random map',
                           icon: Icons.casino_rounded,
                           style: PlateStyle.secondary,
-                          height: 50,
-                          fontSize: 17,
+                          height: compactHeight(context) ? 38 : 50,
+                          fontSize: compactHeight(context) ? 14 : 17,
                           onPressed: _randomMap,
                         ),
                         const SizedBox(width: 12),
@@ -129,8 +123,8 @@ class _SetupScreenState extends State<SetupScreen> {
                       PlateButton(
                         label: _step == 0 ? 'Choose map' : 'Choose hero',
                         icon: Icons.arrow_forward_rounded,
-                        height: 50,
-                        fontSize: 18,
+                        height: compactHeight(context) ? 38 : 50,
+                        fontSize: compactHeight(context) ? 15 : 18,
                         onPressed: _next,
                       ),
                     ],
@@ -238,13 +232,11 @@ class _SetupScreenState extends State<SetupScreen> {
           child: SectionLabel('${maps.length} maps for ${_mode.label}${_mode == GameMode.ffa ? ' · $_players players' : ''}'),
         ),
         Expanded(
-          child: ListView.separated(
+          child: MapStrip(
+            maps: maps,
             controller: _mapScroll,
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.fromLTRB(24, 4, 24, 8),
-            itemCount: maps.length,
-            separatorBuilder: (_, _) => const SizedBox(width: 12),
-            itemBuilder: (_, i) => MapCard(map: maps[i], selected: maps[i] == _map, onTap: () => setState(() => _map = maps[i])),
+            isSelected: (m) => m == _map,
+            onTap: (m) => setState(() => _map = m),
           ),
         ),
       ],

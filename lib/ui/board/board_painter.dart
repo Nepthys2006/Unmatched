@@ -264,10 +264,14 @@ class BoardPainter extends CustomPainter {
 }
 
 class MapPreview extends StatelessWidget {
-  const MapPreview(this.map, {super.key, this.height = 120, this.fit = BoxFit.cover});
+  const MapPreview(this.map, {super.key, this.height = 120, this.fit = BoxFit.cover, this.cacheWidth = 960, this.quality = FilterQuality.high});
   final MapDef map;
   final double height;
   final BoxFit fit;
+
+  /// Decode width: card thumbnails use less than the full-size previews.
+  final int cacheWidth;
+  final FilterQuality quality;
 
   @override
   Widget build(BuildContext context) {
@@ -277,7 +281,7 @@ class MapPreview extends StatelessWidget {
         aspectRatio: art.w / art.h,
         child: ClipRRect(
           borderRadius: BorderRadius.circular(6),
-          child: Image.asset(art.asset, fit: fit, cacheWidth: 960, filterQuality: FilterQuality.high),
+          child: Image.asset(art.asset, fit: fit, cacheWidth: cacheWidth, filterQuality: quality, gaplessPlayback: true),
         ),
       );
     }

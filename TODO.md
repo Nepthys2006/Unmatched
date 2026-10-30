@@ -22,6 +22,28 @@ Last updated: 2026-10-28. For the full engine/API reference see `HANDOFF.md`.
 | Checked in a browser | ✅ Chrome (desktop and phone-sized): 1v1, 2v2, 3v3 on the 3D maps |
 | Android / iOS / Windows app | ⚠️ Not run on a device yet (no phone or Visual Studio on this PC) |
 
+## Done (2026-10-30): crash, profiles/MMR, reconnect + AI takeover, host migration, map screens
+
+- **Crash fixed** (Active Players / invites): the list put a full-width `PlateButton` in a `ListTile.trailing`
+  (layout assertion on every platform). Rewritten as proper cards; `test/active_players_ui_test.dart`.
+  Invites now go through one place (`lib/ui/invite_flow.dart`): one listener above the navigator (was two
+  subscribers, so dialogs doubled), the menu's invite really creates the lobby and sends it, accepting joins the lobby.
+  `OnlinePresenceService.start` is idempotent (it used to leave a second Realtime channel per screen).
+- **Profile / Active Players / invite redesign** (`lib/ui/profile/profile_widgets.dart`, `dialogs/`): main hero
+  (most played) showcase, MMR badge + tier (Elo, PvP only, `Mmr` in `profile_stats.dart`), separate PvP and AI win rates.
+  Payload keeps the old keys; old saves/peers read as AI matches.
+- **Map screens on phones:** one slim bottom bar (Inspect / Random / Done), maps stay visible. `MapStrip` scrolls smoothly
+  (fixed-extent items, per-card repaint layers, smaller image decodes, mouse wheel/drag on desktop and web).
+- **Orientation:** `OrientationGuard` in `main.dart` re-asserts both landscapes + immersive mode after every rotation (manifest already `sensorLandscape`).
+- **Rejoin / AI takeover / host migration** (`lib/net/session.dart`, `lockstep.dart`, `transports.dart`): a player who drops keeps
+  their seat for `rejoinGrace` (2 min) and can rejoin the same match (token); after it an AI plays the seat. Players reconnect to the
+  host automatically; if the host is gone for the grace period the first remaining player becomes the host (LAN: from the address
+  in the lobby; online: next channel `<topic>-m`), or plays on alone against the AI. Tests: `net_test.dart` (real sockets, shortened
+  grace), `lifecycle_reconnect_test.dart`.
+- **Not done / limits:** a host whose *app is killed* cannot resume hosting (its match state lives only in memory); the others carry on
+  as above. The bundled web runtime in `assets/webapp` still has to be rebuilt (`tool/rebuild_and_release_all.ps1`) to ship these fixes.
+  `test/online_test.dart` needs the live Supabase project. Nothing was run on a real phone (only widget/socket tests here).
+
 ## Done (2026-10-28): Invisible Man's fog, every hero through the UI, multiplayer chat
 
 - **Invisible Man:** the fog can be moved by tapping the board for him and for his opponent

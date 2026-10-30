@@ -27,6 +27,38 @@ import 'profile_stats.dart';
 /// Bumped whenever the messages or the rules change in a way older copies can't follow.
 const netProtocol = 1;
 
+/// How long someone who drops out of a running match keeps their seat. Within it they can rejoin
+/// the same match; when it runs out an AI takes their seat for good and the match goes on. The
+/// same wait applies to the lobby host: if they do not come back, a remaining player takes over
+/// as host (or plays on alone against the AI). A variable only so tests can shorten it.
+Duration rejoinGrace = const Duration(minutes: 2);
+
+/// How often a device retries reaching the host (or the new host) while waiting. Shortened by tests.
+Duration rejoinRetry = const Duration(seconds: 3);
+
+/// How a player's device reaches (and, if needed, replaces) the host. Supplied by the screen that
+/// opened the session, which knows whether this is LAN or online.
+abstract class MatchTransport {
+  /// This device's address for others to reach it should it become the host (LAN); null if it
+  /// can't host or the address doesn't matter (online).
+  String? get localAddress => null;
+
+  /// LAN: only players that announced an address can take over as host.
+  bool get needsAddress => false;
+
+  /// Whether this device could host in place of a lost host.
+  bool get canHost => true;
+
+  /// A fresh connection to the current host.
+  Future<ClientLink> reconnect();
+
+  /// Starts hosting in place of a lost host; null when this device can't.
+  Future<HostLink?> hostNew() async => null;
+
+  /// A connection to the player at [hostSeat] who has taken over as host; null when not possible.
+  Future<ClientLink?> joinNew(Lobby lobby, int hostSeat) async => null;
+}
+
 enum SeatKind { open, human, ai, reservedDisconnected }
 
 class LobbySeat {
@@ -40,6 +72,8 @@ class LobbySeat {
     this.reconnectToken,
     this.reservedUntil,
     this.stats,
+    this.host = false,
+    this.addr,
   });
 
   SeatKind kind;
@@ -58,6 +92,12 @@ class LobbySeat {
   /// Public player stats payload
   Map<String, Object?>? stats;
 
+  /// This seat belongs to the lobby host (everyone knows, so they can pick a new one).
+  bool host;
+
+  /// LAN: where this player's device can be reached if it has to become the host.
+  String? addr;
+
   bool get isReserved =>
       kind == SeatKind.reservedDisconnected &&
       reservedUntil != null &&
@@ -70,6 +110,8 @@ class LobbySeat {
     'ready': ready,
     if (stats != null) 'stats': stats,
     if (kind == SeatKind.reservedDisconnected) 'reserved': true,
+    if (host) 'host': true,
+    if (addr != null) 'addr': addr,
   };
 
   static LobbySeat fromJson(Msg m) => LobbySeat(
@@ -78,6 +120,8 @@ class LobbySeat {
     hero: m['hero'] as String?,
     ready: m['ready'] == true,
     stats: m['stats'] is Map ? (m['stats'] as Map).cast<String, Object?>() : null,
+    host: m['host'] == true,
+    addr: m['addr'] as String?,
   );
 }
 
@@ -121,6 +165,8 @@ class NetMatch {
     required this.isHost,
     required List<String> names,
     required this.aiSeats,
+    required this.humanSeats,
+    required this.seatStats,
     required this.chat,
     required this._say,
   }) : names = ValueNotifier(names);
@@ -128,8 +174,17 @@ class NetMatch {
   final MatchConfig config;
   final int localSeat;
   final int seed;
-  final bool isHost;
+
+  /// Whether this device is the authority. Becomes true when the lost host is replaced by this device.
+  bool isHost;
   final Set<int> aiSeats;
+
+  /// The seats that started the match held by real players (an AI may take one over later; it
+  /// still counts as a match against a person for the rating).
+  final Set<int> humanSeats;
+
+  /// Each seat's public profile payload from the lobby (rating, main hero...), if it had one.
+  final List<Map<String, Object?>?> seatStats;
 
   /// Name per seat ("AI Hard" for AI seats and for players the AI took over).
   final ValueNotifier<List<String>> names;
@@ -142,12 +197,9 @@ class NetMatch {
   /// Subtle non-intrusive banner message shown during network delays or opponent absence.
   final ValueNotifier<String?> waitingNotice = ValueNotifier(null);
 
-  /// Role-specific timeout redirect event when grace period expires.
-  final ValueNotifier<({String title, String message, String redirect})?> timeoutRedirect = ValueNotifier(null);
-
   /// The lobby's chat, carried on into the match.
   final ChatLog chat;
-  final void Function(String text) _say;
+  void Function(String text) _say;
 
   /// Sends a chat message to everyone in the match.
   void say(String text) => _say(text);
@@ -166,9 +218,25 @@ class NetMatch {
 
   void _takeOver(int seat, AiLevel level) {
     _remotes[seat]?.takeOver(AiAgent(level: level));
+    _markAi(seat);
+  }
+
+  /// Shows [seat] as AI-run in the names.
+  void _markAi(int seat) {
     final n = List.of(names.value);
-    n[seat] = '${n[seat]} (AI)';
+    if (seat < n.length && !n[seat].endsWith('(AI)')) n[seat] = '${n[seat]} (AI)';
     names.value = n;
+  }
+
+  /// A short message shown over the match (who was replaced, who is hosting now).
+  final ValueNotifier<String?> toast = ValueNotifier(null);
+  Timer? _toastTimer;
+
+  /// Shows [text] for a few seconds.
+  void showToast(String text) {
+    toast.value = text;
+    _toastTimer?.cancel();
+    _toastTimer = Timer(const Duration(seconds: 7), () => toast.value = null);
   }
 
   /// Leaves the match (closes the connection).
@@ -183,7 +251,7 @@ class NetMatch {
 
 /// The lobby as either side sees it.
 abstract class LobbySession extends ChangeNotifier {
-  LobbySession(this.data);
+  LobbySession(this.data, {ChatLog? chat}) : chat = chat ?? ChatLog();
   final GameData data;
 
   Lobby? lobby;
@@ -194,7 +262,7 @@ abstract class LobbySession extends ChangeNotifier {
   String? closed;
 
   /// Table talk, in the lobby and through the match.
-  final ChatLog chat = ChatLog();
+  final ChatLog chat;
 
   /// Sends a chat message as this player.
   void say(String text);
@@ -236,6 +304,11 @@ abstract class LobbySession extends ChangeNotifier {
         for (var i = 0; i < l.seats.length; i++)
           if (l.seats[i].kind == SeatKind.ai) i,
       },
+      humanSeats: {
+        for (var i = 0; i < l.seats.length; i++)
+          if (l.seats[i].kind != SeatKind.ai && l.seats[i].kind != SeatKind.open) i,
+      },
+      seatStats: [for (final s in l.seats) s.stats],
       chat: chat,
       say: say,
     );
@@ -277,10 +350,61 @@ class HostSession extends LobbySession {
     _sub = link.events.listen(_onEvent);
   }
 
+
+  /// A player's device takes over a running match whose host is lost for good. [link] is the new
+  /// meeting point for the other players (or a [_NoLink] when playing on alone). The old host's
+  /// seat, and every AI seat the old host was running, go to AI here; the other people get the
+  /// grace period to join the new host, like anyone who drops out.
+  HostSession._adopt(
+    HostLink link,
+    super.data, {
+    required Lobby adoptedLobby,
+    required int seat,
+    required NetMatch running,
+    required this.dataVersion,
+    required super.chat,
+  }) : link = link {
+    lobby = adoptedLobby;
+    mySeat = seat;
+    match = running;
+    _sub = link.events.listen(_onEvent);
+    _chatSeq = chat.messages.isEmpty ? 0 : chat.messages.last.id;
+    final level = adoptedLobby.ai;
+    final solo = link is _NoLink;
+    _wireMatch(running);
+    for (var i = 0; i < _l.seats.length; i++) {
+      final s = _l.seats[i];
+      s.peer = null;
+      if (i == seat) {
+        s.kind = SeatKind.human;
+        continue;
+      }
+      final wasHost = s.host;
+      s.host = false;
+      if (s.kind == SeatKind.open) continue;
+      final agent = running._remotes[i];
+      if (s.kind == SeatKind.ai || wasHost || solo) {
+        // AI seats the old host ran, the lost host's own seat, and (alone) everyone else.
+        s.kind = SeatKind.ai;
+        agent?.takeOver(AiAgent(level: level));
+        running._markAi(i);
+      } else {
+        // Another person: the match waits for them to join the new host, up to the grace period.
+        agent?.becomeHost(running._invalid);
+        _beginAway(i);
+      }
+    }
+    _sync();
+  }
+
   final HostLink link;
   final String dataVersion;
   late final StreamSubscription<LinkEvent> _sub;
-  final Map<int, ({Timer noticeTimer, Timer timeoutTimer})> _awayTimers = {};
+  /// Seats whose player dropped out, with the timer that hands the seat to an AI.
+  final Map<int, Timer> _awayTimers = {};
+  /// Seconds each away seat has left (counted by [_ticker], not read from the clock).
+  final Map<int, int> _awayLeft = {};
+  Timer? _ticker;
 
   @override
   bool get isHost => true;
@@ -295,6 +419,9 @@ class HostSession extends LobbySession {
   }
 
   void _sync() {
+    for (var i = 0; i < _l.seats.length; i++) {
+      _l.seats[i].host = i == mySeat;
+    }
     link.broadcast({'t': 'lobby', 'lobby': _l.toJson()});
     link.lobbyChanged(info);
     _changed();
@@ -316,38 +443,82 @@ class HostSession extends LobbySession {
       case PeerLeft(:final peer):
         final seat = _seatOf(peer);
         if (seat == null) return;
-        final s = _l.seats[seat];
-        s.peer = null;
-        s.kind = SeatKind.reservedDisconnected;
-        s.reservedUntil = DateTime.now().add(const Duration(minutes: 2));
-
-        _awayTimers[seat]?.noticeTimer.cancel();
-        _awayTimers[seat]?.timeoutTimer.cancel();
-
-        final noticeTimer = Timer(const Duration(minutes: 2), () {
-          if (match != null) {
-            match?.waitingNotice.value = "It looks like your opponent stepped away—waiting for them to return...";
-          } else {
-            if (_l.seats[seat].kind == SeatKind.reservedDisconnected) {
-              _l.seats[seat] = LobbySeat(SeatKind.open);
-              _sync();
-            }
-          }
-        });
-        final timeoutTimer = Timer(const Duration(minutes: 5), () {
-          _awayTimers.remove(seat);
-          match?.waitingNotice.value = null;
-          match?.timeoutRedirect.value = (
-            title: 'Opponent Away',
-            message: "It seems your opponent has been away or unable to move for a while. Returning you to the main lobby.",
-            redirect: 'lobby',
-          );
-        });
-        _awayTimers[seat] = (noticeTimer: noticeTimer, timeoutTimer: timeoutTimer);
+        _beginAway(seat);
         _sync();
       case PeerMessage(:final peer, :final msg):
         _onMessage(peer, msg);
     }
+  }
+
+  /// A player's connection is gone. Their seat is held for [rejoinGrace]: they can come back to
+  /// it (same match, same position) until then; after that an AI takes it for good.
+  void _beginAway(int seat) {
+    final s = _l.seats[seat];
+    s.peer = null;
+    s.kind = SeatKind.reservedDisconnected;
+    s.reservedUntil = DateTime.now().add(rejoinGrace);
+    _awayLeft[seat] = rejoinGrace.inSeconds;
+    _awayTimers[seat]?.cancel();
+    _awayTimers[seat] = Timer(rejoinGrace, () => _graceOver(seat));
+    _ticker ??= Timer.periodic(const Duration(seconds: 1), (_) {
+      for (final k in _awayLeft.keys.toList()) {
+        _awayLeft[k] = (_awayLeft[k]! - 1).clamp(0, 86400);
+      }
+      _tick();
+    });
+    _tick();
+  }
+
+  /// The seat's player is back (or gone for good): forget the wait.
+  void _endAway(int seat) {
+    _awayTimers.remove(seat)?.cancel();
+    _awayLeft.remove(seat);
+    _tick();
+  }
+
+  void _graceOver(int seat) {
+    _awayTimers.remove(seat);
+    _awayLeft.remove(seat);
+    if (seat >= _l.seats.length || _l.seats[seat].kind != SeatKind.reservedDisconnected) {
+      _tick();
+      return;
+    }
+    final s = _l.seats[seat];
+    final m = match;
+    if (m == null) {
+      // Still in the lobby: the seat opens up again.
+      _l.seats[seat] = LobbySeat(SeatKind.open);
+    } else {
+      // The match goes on without them: an AI plays the seat from the decision being waited on.
+      // The token stays on the seat so a late return is told what happened.
+      s.kind = SeatKind.ai;
+      m._takeOver(seat, _l.ai);
+      link.broadcast({'t': 'seatAi', 'seat': seat});
+      _announce("${s.name ?? 'A player'} didn't come back in time. An AI plays their seat now.");
+    }
+    _tick();
+    _sync();
+  }
+
+  void _announce(String text) => match?.showToast(text);
+
+  /// Keeps the on-screen "waiting for ... to rejoin" line (with its countdown) up to date.
+  void _tick() {
+    final m = match;
+    if (_awayLeft.isEmpty) {
+      _ticker?.cancel();
+      _ticker = null;
+      if (m != null) m.waitingNotice.value = null;
+      return;
+    }
+    if (m == null) return;
+    final first = _awayLeft.entries.reduce((a, b) => a.value <= b.value ? a : b);
+    final secs = first.value;
+    final clock = '${secs ~/ 60}:${(secs % 60).toString().padLeft(2, '0')}';
+    final who = _l.seats[first.key].name ?? 'A player';
+    m.waitingNotice.value = _awayLeft.length > 1
+        ? 'Waiting for ${_awayLeft.length} players to rejoin ($clock), then AI takes over'
+        : '$who disconnected. They can rejoin for $clock, then an AI takes over.';
   }
 
   void _reject(String peer, String why) {
@@ -368,13 +539,21 @@ class HostSession extends LobbySession {
         final clientStats = m['stats'] is Map ? (m['stats'] as Map).cast<String, Object?>() : null;
         final name = '${m['name'] ?? ''}'.trim();
 
-        // 1. Authenticated Rejoin verification for reserved/disconnected seats
+        // 1. Authenticated rejoin: a player who dropped out gets their own seat back. The secret
+        //    token proves who they are (a seat can also be reclaimed by name when neither side
+        //    ever had a token, as after the host changed).
         int reconnectSeat = -1;
         for (var i = 0; i < _l.seats.length; i++) {
           final s = _l.seats[i];
+          final tokenMatch = clientToken != null && s.reconnectToken != null && clientToken == s.reconnectToken;
+          // A seat the AI has taken over is not given back; the player is told why.
+          if (s.kind == SeatKind.ai && match != null && tokenMatch) {
+            return _reject(peer, 'You were away for more than ${rejoinGrace.inMinutes} minutes, so an AI took your seat. The match goes on without you.');
+          }
           final isAway = s.kind == SeatKind.reservedDisconnected || (s.kind == SeatKind.human && s.peer == null);
-          if (isAway) {
-            final tokenMatch = clientToken != null && s.reconnectToken != null && clientToken == s.reconnectToken;
+          // The old connection may not have been noticed as gone yet; the token still proves it's them.
+          final stale = s.kind == SeatKind.human && s.peer != null && tokenMatch;
+          if (isAway || stale) {
             final idMatch = clientPlayerId != null && s.playerId != null && clientPlayerId == s.playerId;
             final legacyMatch = s.reconnectToken == null && s.playerId == null && s.name != null && name.isNotEmpty && s.name == name;
             if (tokenMatch || (s.reconnectToken == null && idMatch) || legacyMatch) {
@@ -386,17 +565,15 @@ class HostSession extends LobbySession {
 
         if (reconnectSeat >= 0) {
           final s = _l.seats[reconnectSeat];
+          final old = s.peer;
           s.kind = SeatKind.human;
           s.peer = peer;
           s.reservedUntil = null;
           if (name.isNotEmpty) s.name = name;
           if (clientStats != null) s.stats = clientStats;
-          _awayTimers[reconnectSeat]?.noticeTimer.cancel();
-          _awayTimers[reconnectSeat]?.timeoutTimer.cancel();
-          _awayTimers.remove(reconnectSeat);
-          if (_awayTimers.isEmpty) {
-            match?.waitingNotice.value = null;
-          }
+          if (m['addr'] is String) s.addr = m['addr'] as String;
+          _endAway(reconnectSeat);
+          if (old != null && old != peer) link.drop(old);
           if (match != null) {
             _reconnectSeat(reconnectSeat, peer);
           } else {
@@ -423,6 +600,7 @@ class HostSession extends LobbySession {
           playerId: clientPlayerId,
           reconnectToken: clientToken,
           stats: clientStats,
+          addr: m['addr'] as String?,
         );
         link.send(peer, {'t': 'welcome', 'seat': open});
         _sendChat(peer, 1);
@@ -444,6 +622,19 @@ class HostSession extends LobbySession {
       case 'ans' when seat != null && match != null:
         final seq = m['seq'], picks = m['picks'];
         if (seq is int && picks is List && picks.every((x) => x is int)) match!.ls.offer(seq, seat, picks.cast<int>());
+      case 'have' when seat != null && match != null:
+        // A player joining a new host reports the latest decisions it knows. One that only
+        // reached some devices when the old host was lost is taken over here before this host's
+        // AI decides it differently. (Decisions of the sender's own seat go the normal way.)
+        final list = m['a'];
+        if (list is! List) return;
+        for (final e in list) {
+          if (e is! List || e.length != 3 || e[0] is! int || e[1] is! int || e[2] is! List) continue;
+          final seq = e[0] as int, who = e[1] as int, picks = (e[2] as List).whereType<int>().toList();
+          if (who == seat || who < 0 || who >= _l.seats.length || seq != match!.ls.answered) continue;
+          match!.ls.put(seq, (seat: who, picks: picks));
+          match!.ls.publish?.call(seq, (seat: who, picks: picks));
+        }
       case 'chat' when seat != null:
         final text = m['text'];
         if (text is String) _post(seat, text, peer: peer);
@@ -618,54 +809,68 @@ class HostSession extends LobbySession {
     // The match seed: decks are shuffled from it on every device. Fresh and secure each match.
     final seed = rng.nextInt(0x7FFFFFFF);
     final m = match = _makeMatch(_l, heroes, seed, mySeat!);
-    m.ls.publish = (seq, a) => link.broadcast({'t': 'ans', 'seq': seq, 'seat': a.seat, 'picks': a.picks});
-    m._invalid = (seat) {
-      final p = _l.seats[seat].peer;
-      if (p != null) _reject(p, 'Your game sent an illegal move.');
-      _l.seats[seat].peer = null;
-      m._takeOver(seat, AiLevel.hard);
-      link.broadcast({'t': 'seatAi', 'seat': seat});
-    };
-    m._leave = () => unawaited(leave());
-    m._report = (winner, players) => link.finished(winner: winner, players: players);
+    _wireMatch(m);
     link.broadcast({'t': 'start', 'lobby': _l.toJson(), 'heroes': heroes, 'seed': seed});
     link.lobbyChanged(info);
     _changed();
   }
 
-    void takeOver(int seat, [AiLevel level = AiLevel.hard]) => match?._takeOver(seat, level);
+  void takeOver(int seat, [AiLevel level = AiLevel.hard]) => match?._takeOver(seat, level);
 
-void _reconnectSeat(int seat, String peer) {
-    _awayTimers[seat]?.noticeTimer.cancel();
-    _awayTimers[seat]?.timeoutTimer.cancel();
-    _awayTimers.remove(seat);
-    if (_awayTimers.isEmpty) {
-      match?.waitingNotice.value = null;
-    }
+  /// Connects a match to this host: answers are relayed, illegal moves hand the seat to an AI.
+  void _wireMatch(NetMatch m) {
+    m.isHost = true;
+    m.ls.publish = (seq, a) => link.broadcast({'t': 'ans', 'seq': seq, 'seat': a.seat, 'picks': a.picks});
+    m._invalid = (seat) {
+      final p = _l.seats[seat].peer;
+      if (p != null) _reject(p, 'Your game sent an illegal move.');
+      _l.seats[seat].peer = null;
+      _l.seats[seat].kind = SeatKind.ai;
+      m._takeOver(seat, AiLevel.hard);
+      link.broadcast({'t': 'seatAi', 'seat': seat});
+    };
+    m._leave = () => unawaited(leave());
+    m._report = (winner, players) => link.finished(winner: winner, players: players);
+    m._say = say;
+  }
+
+  void _reconnectSeat(int seat, String peer) {
     _l.seats[seat].peer = peer;
     link.send(peer, {'t': 'welcome', 'seat': seat});
+    final m = match!;
     final heroes = [for (final s in _l.seats) s.hero!];
-    link.send(peer, {'t': 'start', 'lobby': _l.toJson(), 'heroes': heroes, 'seed': match!.seed});
+    final log = m.ls.since(0).toList();
+    // `replay` tells the device how many decisions it has to play through quickly to catch up.
+    link.send(peer, {'t': 'start', 'lobby': _l.toJson(), 'heroes': heroes, 'seed': m.seed, 'replay': log.length});
     _sendChat(peer, 1);
-    final m = match;
-    if (m != null) {
-      for (final (seq, a) in m.ls.since(0)) {
-        link.send(peer, {'t': 'ans', 'seq': seq, 'seat': a.seat, 'picks': a.picks});
-      }
+    // Seats that started with a person but are AI-run now (replaced after a grace period, or the
+    // lost host's seat after a host change).
+    for (var i = 0; i < _l.seats.length; i++) {
+      if (_l.seats[i].kind == SeatKind.ai && m.humanSeats.contains(i)) link.send(peer, {'t': 'seatAi', 'seat': i, 'quiet': true});
     }
+    for (final (seq, a) in log) {
+      link.send(peer, {'t': 'ans', 'seq': seq, 'seat': a.seat, 'picks': a.picks});
+    }
+    _sync();
   }
 
   bool _left = false;
+
+  void _stopTimers() {
+    for (final t in _awayTimers.values) {
+      t.cancel();
+    }
+    _awayTimers.clear();
+    _awayLeft.clear();
+    _ticker?.cancel();
+    _ticker = null;
+  }
 
   @override
   Future<void> leave() async {
     if (_left) return;
     _left = true;
-    for (final t in _awayTimers.values) {
-      t.noticeTimer.cancel();
-      t.timeoutTimer.cancel();
-    }
-    _awayTimers.clear();
+    _stopTimers();
     match?.ls.fail(StateError('Left the match'));
     await _sub.cancel();
     await link.close();
@@ -673,13 +878,30 @@ void _reconnectSeat(int seat, String peer) {
 
   @override
   void dispose() {
-    for (final t in _awayTimers.values) {
-      t.noticeTimer.cancel();
-      t.timeoutTimer.cancel();
-    }
-    _awayTimers.clear();
+    _stopTimers();
     super.dispose();
   }
+}
+
+/// The link of a host that has no one to talk to (a player playing on alone after the host was
+/// lost): everything is accepted and goes nowhere.
+class _NoLink implements HostLink {
+  @override
+  Stream<LinkEvent> get events => const Stream.empty();
+  @override
+  void send(String peer, Msg m) {}
+  @override
+  void broadcast(Msg m) {}
+  @override
+  void drop(String peer) {}
+  @override
+  String get address => 'offline';
+  @override
+  void lobbyChanged(LobbyInfo info) {}
+  @override
+  Future<void> finished({String? winner, required List<String> players}) async {}
+  @override
+  Future<void> close() async {}
 }
 
 // ========================================================================================== player
@@ -688,33 +910,53 @@ class ClientSession extends LobbySession {
   ClientSession(
     this.link,
     super.data, {
-    required String name,
-    required String dataVersion,
+    required this._name,
+    required this._dataVersion,
     required this.address,
     this.playerId,
     this.reconnectToken,
+    this.transport,
   }) {
-    _sub = link.messages.listen(_onMessage);
-    link.send({
-      't': 'hello',
-      'v': netProtocol,
-      'data': dataVersion,
-      'name': name,
-      if (playerId != null) 'playerId': playerId,
-      if (reconnectToken != null) 'token': reconnectToken,
-      'stats': ProfileStats.instance.toSummaryPayload(),
-    });
-    unawaited(link.done.then(_onDone));
+    _attach(link);
     _repair = Timer.periodic(const Duration(seconds: 2), (_) => _checkLost());
   }
 
-  final ClientLink link;
+  ClientLink link;
   final String? playerId;
   final String? reconnectToken;
-  late final StreamSubscription<Msg> _sub;
+
+  /// How to reconnect, and how to take over as host, during a match. Without it a lost host ends
+  /// the wait after [rejoinGrace] and this device plays on alone against the AI.
+  final MatchTransport? transport;
+  final String _name;
+  final String _dataVersion;
+  StreamSubscription<Msg>? _sub;
   late final Timer _repair;
-  Timer? _noticeTimer;
-  Timer? _timeoutTimer;
+  Timer? _recoveryTicker;
+  bool _recovering = false;
+
+  /// Set once this device has become the host (see [_promote]).
+  HostSession? promoted;
+
+  Msg _hello() => {
+    't': 'hello',
+    'v': netProtocol,
+    'data': _dataVersion,
+    'name': _name,
+    if (playerId != null) 'playerId': playerId,
+    if (reconnectToken != null) 'token': reconnectToken,
+    'stats': ProfileStats.instance.toSummaryPayload(),
+    'addr': ?transport?.localAddress,
+  };
+
+  /// Starts using [l] as the connection to the host and introduces this player to it.
+  void _attach(ClientLink l) {
+    unawaited(_sub?.cancel());
+    link = l;
+    _sub = l.messages.listen(_onMessage);
+    l.send(_hello());
+    unawaited(l.done.then((reason) => _linkDone(l, reason)));
+  }
 
   /// Answers that came before the start message (messages can arrive out of order online).
   final List<Msg> _early = [];
@@ -726,6 +968,7 @@ class ClientSession extends LobbySession {
   /// Online messages can get lost: ask again for answers we've waited on for a while, and send
   /// again our own answers the host hasn't confirmed.
   void _checkLost() {
+    if (_recovering) return;
     final gap = chat.gap;
     if (gap != null) link.send({'t': 'chatResend', 'from': gap});
     final m = match;
@@ -737,6 +980,7 @@ class ClientSession extends LobbySession {
       link.send({'t': 'ans', 'seq': e.key, 'picks': e.value});
     }
   }
+
   @override
   final String address;
 
@@ -744,9 +988,8 @@ class ClientSession extends LobbySession {
   bool get isHost => false;
 
   void _onMessage(Msg m) {
-    _noticeTimer?.cancel();
-    _timeoutTimer?.cancel();
-    match?.waitingNotice.value = null;
+    // Any word from the host means it is there.
+    if (!_recovering) match?.waitingNotice.value = null;
     switch (m['t']) {
       case 'welcome':
         mySeat = m['seat'] as int?;
@@ -758,10 +1001,16 @@ class ClientSession extends LobbySession {
         closed = '${m['why']}';
         _changed();
         unawaited(leave());
+      case 'start' when match != null && match!.seed == m['seed']:
+        // Reconnected to the host of the match this device is already playing: carry on, the
+        // answers that were missed follow.
+        lobby = Lobby.fromJson((m['lobby'] as Map).cast<String, Object?>());
+        _changed();
       case 'start':
         final l = lobby = Lobby.fromJson((m['lobby'] as Map).cast<String, Object?>());
         final heroes = (m['heroes'] as List).cast<String>();
         final mm = match = _makeMatch(l, heroes, m['seed'] as int, mySeat!);
+        mm.ls.replayTarget = (m['replay'] as num?)?.toInt() ?? 0;
         mm.ls.publish = (seq, a) {
           if (a.seat != mySeat) return;
           _unacked[seq] = a.picks;
@@ -783,9 +1032,10 @@ class ClientSession extends LobbySession {
       case 'seatAi':
         final seat = m['seat'];
         if (seat is int && match != null) {
-          final n = List.of(match!.names.value);
-          n[seat] = '${n[seat]} (AI)';
-          match!.names.value = n;
+          final already = match!.names.value[seat].endsWith('(AI)');
+          match!._markAi(seat);
+          final name = match!.names.value[seat].replaceAll(' (AI)', '');
+          if (!already && m['quiet'] != true) match!.showToast(seat == mySeat ? 'An AI is playing your seat now.' : "$name didn't come back in time. An AI plays their seat now.");
         }
       case 'chat':
         final c = ChatMessage.fromJson(m['m']);
@@ -802,32 +1052,157 @@ class ClientSession extends LobbySession {
     if (clean.isNotEmpty) link.send({'t': 'chat', 'text': clean});
   }
 
-  void _onDone(String? reason) {
-    if (match != null && !_left) {
-      _noticeTimer?.cancel();
-      _timeoutTimer?.cancel();
-      _noticeTimer = Timer(const Duration(minutes: 2), () {
-        match?.waitingNotice.value = 'Waiting for the host to return...';
-      });
-      _timeoutTimer = Timer(const Duration(minutes: 5), () {
-        match?.waitingNotice.value = null;
-        match?.timeoutRedirect.value = (
-          title: 'Host Away',
-          message: "It seems like the host has been away or unable to make a move for a while. We've returned you to the mode selection menu.",
-          redirect: 'mode',
-        );
-        final why = closed ?? reason ?? 'The host left the match.';
-        closed = why;
-        match?.ls.fail(StateError(why));
-        _changed();
-      });
+  /// The connection ended. In a match that starts the recovery: reconnect to the same host for
+  /// [rejoinGrace], then (if it never came back) hand the host's job to a remaining player.
+  void _linkDone(ClientLink l, String? reason) {
+    if (!identical(l, link) || _left || promoted != null) return;
+    if (match != null && !_recovering) {
+      unawaited(_recover(reason));
       return;
     }
-    final why = closed ?? reason ?? (match != null ? 'The host left the match.' : 'Lost the connection to the host.');
+    if (match != null) return;
+    final why = closed ?? reason ?? 'Lost the connection to the host.';
+    closed = why;
+    _changed();
+  }
+
+  void _fail(String? reason) {
+    final why = closed ?? reason ?? 'The host left the match.';
     closed = why;
     match?.ls.fail(StateError(why));
     match?.lost.value = why;
     _changed();
+  }
+
+  static String _clock(int seconds) {
+    final s = seconds;
+    return '${s ~/ 60}:${(s % 60).toString().padLeft(2, '0')}';
+  }
+
+  Future<void> _recover(String? reason) async {
+    final m = match!;
+    _recovering = true;
+    var left = rejoinGrace.inSeconds;
+    var expired = false;
+    final deadline = Timer(rejoinGrace, () => expired = true);
+    void notice() {
+      if (_left) return;
+      m.waitingNotice.value = 'Lost the connection to the host. Reconnecting... ${_clock(left)}';
+    }
+
+    notice();
+    _recoveryTicker = Timer.periodic(const Duration(seconds: 1), (_) {
+      left = (left - 1).clamp(0, 86400);
+      notice();
+    });
+    final t = transport;
+    while (!_left && !expired) {
+      if (t != null) {
+        try {
+          final nl = await t.reconnect().timeout(const Duration(seconds: 10));
+          if (_left) {
+            unawaited(nl.close());
+            return;
+          }
+          deadline.cancel();
+          _recoveryTicker?.cancel();
+          _recovering = false;
+          m.waitingNotice.value = null;
+          _attach(nl);
+          return;
+        } catch (_) {
+          // The host isn't there yet; try again shortly.
+        }
+      }
+      await Future<void>.delayed(rejoinRetry);
+    }
+    deadline.cancel();
+    _recoveryTicker?.cancel();
+    if (_left) return;
+    await _migrate(reason);
+  }
+
+  /// The host did not come back in time. The first remaining person who can host takes over (the
+  /// others join them); if there is nobody else, or the others can't be reached, this device plays
+  /// on alone against the AI. Every device holds the whole match, so none of it is lost.
+  Future<void> _migrate(String? reason) async {
+    final m = match!;
+    final l = lobby;
+    final me = mySeat;
+    final t = transport;
+    if (l == null || me == null) return _fail(reason);
+    final hostSeat = l.seats.indexWhere((s) => s.host);
+    bool eligible(int i) {
+      final s = l.seats[i];
+      if (i == hostSeat || (s.kind != SeatKind.human && s.kind != SeatKind.reservedDisconnected)) return false;
+      if (i == me) return t == null || t.canHost;
+      return t != null && (!t.needsAddress || s.addr != null);
+    }
+
+    final order = [
+      for (var i = 0; i < l.seats.length; i++)
+        if (eligible(i)) i,
+    ];
+    final newHost = order.isEmpty ? me : order.first;
+    if (newHost == me) {
+      final hl = await t?.hostNew().timeout(const Duration(seconds: 20), onTimeout: () => null).catchError((Object _) => null);
+      return _promote(hl ?? _NoLink(), hl == null);
+    }
+    // Someone else takes over: join them, or play on alone if they never appear.
+    final name = l.seats[newHost].name ?? 'Another player';
+    var expired = false;
+    final deadline = Timer(rejoinGrace ~/ 2, () => expired = true);
+    m.waitingNotice.value = 'The host is gone. Waiting for $name to take over...';
+    while (!_left && !expired) {
+      try {
+        final nl = await t!.joinNew(l, newHost).timeout(const Duration(seconds: 10));
+        if (nl != null) {
+          if (_left) {
+            unawaited(nl.close());
+            return;
+          }
+          _recovering = false;
+          m.waitingNotice.value = null;
+          m.showToast("$name is hosting the match now. An AI plays the old host's seat.");
+          deadline.cancel();
+          _attach(nl);
+          nl.send({
+            't': 'have',
+            'a': [
+              for (final (seq, a) in m.ls.since(math.max(0, m.ls.answered - 40))) [seq, a.seat, a.picks],
+            ],
+          });
+          return;
+        }
+      } catch (_) {}
+      await Future<void>.delayed(rejoinRetry);
+    }
+    deadline.cancel();
+    if (!_left) await _promote(_NoLink(), true);
+  }
+
+  Future<void> _promote(HostLink hostLink, bool solo) async {
+    final m = match!;
+    _recovering = false;
+    m.waitingNotice.value = null;
+    _repair.cancel();
+    unawaited(_sub?.cancel());
+    _sub = null;
+    final session = promoted = HostSession._adopt(
+      hostLink,
+      data,
+      adoptedLobby: lobby!,
+      seat: mySeat!,
+      running: m,
+      dataVersion: _dataVersion,
+      chat: chat,
+    );
+    m.showToast(solo ? 'The host left. You play on against the AI.' : 'The host left. You are hosting the match now; an AI plays their seat.');
+    // The old connection is of no use any more.
+    try {
+      await link.close();
+    } catch (_) {}
+    if (_left) await session.leave();
   }
 
   @override
@@ -855,19 +1230,19 @@ class ClientSession extends LobbySession {
   Future<void> leave() async {
     if (_left) return;
     _left = true;
-    _noticeTimer?.cancel();
-    _timeoutTimer?.cancel();
+    _recoveryTicker?.cancel();
     _repair.cancel();
+    final p = promoted;
+    if (p != null) return p.leave();
     match?.ls.fail(StateError('Left the match'));
-    await _sub.cancel();
+    await _sub?.cancel();
     await link.close();
   }
 
   @override
   void dispose() {
     _repair.cancel();
-    _noticeTimer?.cancel();
-    _timeoutTimer?.cancel();
+    _recoveryTicker?.cancel();
     super.dispose();
   }
 }

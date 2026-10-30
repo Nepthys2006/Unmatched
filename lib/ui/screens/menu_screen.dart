@@ -17,7 +17,6 @@ import 'multiplayer_screen.dart';
 import 'setup_screen.dart';
 import '../dialogs/active_players_drawer.dart';
 import '../dialogs/player_profile_modal.dart';
-import '../dialogs/invite_banner_dialog.dart';
 import 'dart:async';
 import '../../net/online_presence.dart';
 import '../../net/profile_stats.dart';
@@ -31,7 +30,6 @@ class MenuScreen extends StatefulWidget {
 class _MenuScreenState extends State<MenuScreen> with SingleTickerProviderStateMixin {
   late final AnimationController _intro = AnimationController(vsync: this, duration: const Duration(milliseconds: 900))..forward();
   List<HeroDef> _trio = const [];
-  StreamSubscription<MatchInvite>? _inviteSub;
 
   @override
   void didChangeDependencies() {
@@ -48,22 +46,10 @@ class _MenuScreenState extends State<MenuScreen> with SingleTickerProviderStateM
         username: s.settings.username,
       ),
     );
-    _inviteSub ??= OnlinePresenceService.instance.invites.listen((inv) {
-      if (!mounted) return;
-      InviteBannerDialog.show(
-        context,
-        invite: inv,
-        onAccept: () async {
-          await _open(const MultiplayerScreen(online: true));
-        },
-        onDecline: () {},
-      );
-    });
   }
 
   @override
   void dispose() {
-    _inviteSub?.cancel();
     _intro.dispose();
     super.dispose();
   }
@@ -127,6 +113,20 @@ class _MenuScreenState extends State<MenuScreen> with SingleTickerProviderStateM
                           ],
                         ),
                         SizedBox(height: h * 0.05),
+                        if (s.settings.hasActiveReconnect) ...[
+                          PlateButton(
+                            label: 'Rejoin match',
+                            subtitle: 'Your match is still running',
+                            icon: Icons.login_rounded,
+                            style: PlateStyle.confirm,
+                            height: plateH,
+                            fontSize: font,
+                            onPressed: () => _open(
+                              MultiplayerScreen(online: (s.settings.reconnectTopic ?? '').isNotEmpty, autoRejoin: true),
+                            ),
+                          ),
+                          SizedBox(height: h * 0.03),
+                        ],
                         PlateButton(
                           label: 'Play vs AI',
                           subtitle: '1v1 · teams · free-for-all',
@@ -182,20 +182,7 @@ class _MenuScreenState extends State<MenuScreen> with SingleTickerProviderStateM
                   icon: Icons.people_alt_rounded,
                   tooltip: 'Active Players',
                   size: 48,
-                  onPressed: () {
-                    showModalBottomSheet<void>(
-                      context: context,
-                      backgroundColor: Colors.transparent,
-                      isScrollControlled: true,
-                      builder: (_) => ActivePlayersDrawer(
-                        onlineUsers: OnlinePresenceService.instance.users,
-                        onInvite: (user) async {
-                          Navigator.of(context).pop();
-                          await _open(const MultiplayerScreen(online: true));
-                        },
-                      ),
-                    );
-                  },
+                  onPressed: () => ActivePlayersDrawer.show(context),
                 ),
               ),
               // Bottom left: who is playing.
@@ -204,17 +191,12 @@ class _MenuScreenState extends State<MenuScreen> with SingleTickerProviderStateM
                 bottom: 12,
                 child: _NamePlate(
                   name: s.settings.username,
-                  onTap: () {
-                    showDialog<void>(
-                      context: context,
-                      builder: (_) => PlayerProfileModal(
-                        name: s.settings.username,
-                        status: 'Online - Idle',
-                        summary: ProfileStats.instance.toSummaryPayload(),
-                        isSelf: true,
-                      ),
-                    );
-                  },
+                  onTap: () => PlayerProfileModal.show(
+                    context,
+                    name: s.settings.username,
+                    statsPayload: ProfileStats.instance.toSummaryPayload(),
+                    isSelf: true,
+                  ),
                 ),
               ),
             ],

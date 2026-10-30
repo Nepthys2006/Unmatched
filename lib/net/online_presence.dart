@@ -33,15 +33,33 @@ class OnlineUser {
     _ => 'Online - Idle',
   };
 
-  factory OnlineUser.fromJson(Map<String, Object?> json) => OnlineUser(
-    id: (json['id'] ?? '').toString(),
-    name: (json['name'] ?? 'Player').toString(),
-    avatar: json['avatar'] as String?,
-    status: (json['status'] ?? 'idle').toString(),
-    lobbyId: (json['lobby_id'] ?? json['lobbyId']) as String?,
-    stats: json['stats'] is Map ? (json['stats'] as Map).cast<String, Object?>() : null,
-    seenAt: json['seen_at'] != null ? DateTime.tryParse(json['seen_at'].toString()) : null,
-  );
+  /// The player's profile (rating, main hero, win rates) from the stats they publish.
+  PlayerProfile get profile => PlayerProfile.fromPayload(stats);
+
+  /// Reads a database row or a Realtime presence payload. Values of the wrong type from a peer on
+  /// another build are ignored rather than thrown on.
+  factory OnlineUser.fromJson(Map<String, Object?> json) {
+    String? text(Object? v) => v?.toString();
+    Map<String, Object?>? map(Object? v) {
+      if (v is! Map) return null;
+      try {
+        return v.cast<String, Object?>();
+      } catch (_) {
+        return null;
+      }
+    }
+
+    final name = (text(json['name']) ?? '').trim();
+    return OnlineUser(
+      id: text(json['id']) ?? '',
+      name: name.isEmpty ? 'Player' : name,
+      avatar: text(json['avatar']),
+      status: text(json['status']) ?? 'idle',
+      lobbyId: text(json['lobby_id'] ?? json['lobbyId']),
+      stats: map(json['stats']),
+      seenAt: DateTime.tryParse('${json['seen_at'] ?? ''}'),
+    );
+  }
 }
 
 class MatchInvite {
@@ -52,6 +70,7 @@ class MatchInvite {
     required this.lobbyId,
     required this.lobbyName,
     required this.expiresAt,
+    this.fromStats,
   });
 
   final String fromId;
@@ -60,6 +79,11 @@ class MatchInvite {
   final String lobbyId;
   final String lobbyName;
   final DateTime expiresAt;
+
+  /// The challenger's rating badge payload (rating, main hero, win rates), if they sent it.
+  final Map<String, Object?>? fromStats;
+
+  PlayerProfile get fromProfile => PlayerProfile.fromPayload(fromStats);
 
   bool get isExpired => DateTime.now().isAfter(expiresAt);
 }
@@ -84,7 +108,33 @@ class OnlinePresenceService extends ChangeNotifier {
   List<OnlineUser> get onlineUsers => _users.values.toList();
   List<OnlineUser> get users => onlineUsers;
 
+  /// Delivers an invite as if it had arrived over the network (tests).
+  @visibleForTesting
+  void debugReceiveInvite(MatchInvite invite) => _invites.add(invite);
+
+  /// Replaces the directory without a server (tests).
+  @visibleForTesting
+  void debugSetUsers(Iterable<OnlineUser> users) {
+    _users
+      ..clear()
+      ..addEntries(users.map((u) => MapEntry(u.id, u)));
+    notifyListeners();
+  }
+
   final StreamController<MatchInvite> _invites = StreamController.broadcast();
+  final Map<String, DateTime> _recentInvites = {};
+
+  /// Someone answered one of our invites with "no" (or was busy): their name and why.
+  final StreamController<({String name, String reason})> _declines = StreamController.broadcast();
+  Stream<({String name, String reason})> get declines => _declines.stream;
+
+  static Map<String, Object?>? _tryCast(Map m) {
+    try {
+      return m.cast<String, Object?>();
+    } catch (_) {
+      return null;
+    }
+  }
   Stream<MatchInvite> get invites => _invites.stream;
 
   Future<void> start({
@@ -93,6 +143,17 @@ class OnlinePresenceService extends ChangeNotifier {
     SupabaseClient? client,
   }) async {
     if (!isOnlineConfigured && client == null) return;
+    if (playerId.isEmpty) return;
+    // Already running for this player (every screen asks): only pick up a changed name. Starting
+    // again would leave the old Realtime channel subscribed, and invites would arrive twice.
+    if (_active && _myId == playerId && client == null) {
+      if (_myName != username) {
+        _myName = username;
+        _trackRealtime();
+      }
+      return;
+    }
+    if (_active) await stop();
     _myId = playerId;
     _myName = username;
     _myStatus = 'idle';
@@ -137,7 +198,7 @@ class OnlinePresenceService extends ChangeNotifier {
         event: 'invite:send',
         callback: (payload) {
           final d = payload['payload'] is Map ? payload['payload'] as Map : payload;
-          if (d['toId'] == _myId) {
+          if (d['toId'] == _myId && d['fromId'] != _myId) {
             final exp = d['expiresAt'] != null
                 ? (DateTime.tryParse(d['expiresAt'].toString()) ?? DateTime.now().add(const Duration(seconds: 60)))
                 : DateTime.now().add(const Duration(seconds: 60));
@@ -148,10 +209,25 @@ class OnlinePresenceService extends ChangeNotifier {
               lobbyId: '${d['lobbyId'] ?? ''}',
               lobbyName: '${d['lobbyName'] ?? 'Match'}',
               expiresAt: exp,
+              fromStats: d['fromStats'] is Map ? _tryCast(d['fromStats'] as Map) : null,
             );
-            if (!inv.isExpired) {
+            // The same invite can arrive twice (a retry, two sockets): show it once.
+            final seen = _recentInvites[inv.lobbyId];
+            _recentInvites[inv.lobbyId] = DateTime.now();
+            if (seen != null && DateTime.now().difference(seen) < const Duration(seconds: 10)) return;
+            if (!inv.isExpired && !_invites.isClosed) {
               _invites.add(inv);
             }
+          }
+        },
+      );
+
+      ch.onBroadcast(
+        event: 'invite:decline',
+        callback: (payload) {
+          final d = payload['payload'] is Map ? payload['payload'] as Map : payload;
+          if (d['toId'] == _myId && !_declines.isClosed) {
+            _declines.add((name: '${d['fromName'] ?? 'Player'}', reason: '${d['reason'] ?? 'declined'}'));
           }
         },
       );
@@ -225,24 +301,47 @@ class OnlinePresenceService extends ChangeNotifier {
     _trackRealtime();
   }
 
-  Future<void> sendInvite({
+  /// 'idle', 'matching' or 'inGame': what this device last told the others.
+  String get myStatus => _myStatus;
+
+  /// Whether the Realtime channel is up, so an invite can actually be delivered.
+  bool get canInvite => _active && _channel != null && _channelSubscribed;
+
+  /// Sends a match invite to [targetUserId]. False when it could not be sent.
+  Future<bool> sendInvite({
     required String targetUserId,
     required String lobbyId,
     required String lobbyName,
   }) async {
     final ch = _channel;
-    if (ch == null) return;
+    if (ch == null || !_channelSubscribed || targetUserId.isEmpty || targetUserId == _myId) return false;
     try {
       await ch.sendBroadcastMessage(
         event: 'invite:send',
         payload: {
           'fromId': _myId,
           'fromName': _myName,
+          'fromStats': ProfileStats.instance.toBadgePayload(),
           'toId': targetUserId,
           'lobbyId': lobbyId,
           'lobbyName': lobbyName,
           'expiresAt': DateTime.now().add(const Duration(seconds: 60)).toIso8601String(),
         },
+      );
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Tells the sender of [invite] it was declined ([reason] 'declined', 'busy' or 'expired').
+  Future<void> declineInvite(MatchInvite invite, {String reason = 'declined'}) async {
+    final ch = _channel;
+    if (ch == null || !_channelSubscribed || invite.fromId.isEmpty) return;
+    try {
+      await ch.sendBroadcastMessage(
+        event: 'invite:decline',
+        payload: {'toId': invite.fromId, 'fromId': _myId, 'fromName': _myName, 'lobbyId': invite.lobbyId, 'reason': reason},
       );
     } catch (_) {}
   }

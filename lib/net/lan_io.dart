@@ -213,6 +213,9 @@ Future<List<InternetAddress>> localAddresses() async {
   }
 }
 
+/// This device's address on the local network (what players on it type to reach it), if any.
+Future<String?> firstLocalAddress() async => (await localAddresses()).firstOrNull?.address;
+
 /// Listens for host beacons. [games] updates as hosts appear and disappear.
 class LanDiscovery {
   final Map<String, (LanGame, DateTime)> _seen = {};

@@ -8,6 +8,7 @@ import 'package:unmatched_game/engine/game.dart';
 import 'package:unmatched_game/engine/portable_random.dart';
 import 'package:unmatched_game/net/lan.dart';
 import 'package:unmatched_game/net/session.dart';
+import 'package:unmatched_game/net/transports.dart';
 import 'package:unmatched_game/ui/match/match_config.dart';
 
 import 'support.dart';
@@ -49,7 +50,7 @@ class Copy {
   ].join('\n');
 }
 
-Future<(HostSession, List<ClientSession>)> lobby(GameMode mode, int players, String map, int clients) async {
+Future<(HostSession, List<ClientSession>)> lobby(GameMode mode, int players, String map, int clients, {bool transport = false}) async {
   final data = loadData();
   late HostSession host;
   final link = await LanHost.start(describe: () => {'name': 'Host'});
@@ -58,7 +59,14 @@ Future<(HostSession, List<ClientSession>)> lobby(GameMode mode, int players, Str
   host.setMap(map);
   final cs = <ClientSession>[];
   for (var i = 0; i < clients; i++) {
-    final c = ClientSession(await joinLan('127.0.0.1'), data, name: 'P$i', dataVersion: 'test', address: '127.0.0.1');
+    final c = ClientSession(
+      await joinLan('127.0.0.1'),
+      data,
+      name: 'P$i',
+      dataVersion: 'test',
+      address: '127.0.0.1',
+      transport: transport ? LanTransport('127.0.0.1', '127.0.0.1') : null,
+    );
     cs.add(c);
     await until(() => c.mySeat != null && c.lobby != null);
   }
@@ -111,20 +119,103 @@ void main() {
     }, timeout: const Timeout(Duration(minutes: 4)));
   }
 
-  test('when a player leaves mid-match, the AI takes their seat and the match finishes', () async {
-    final (host, cs) = await lobby(GameMode.ffa, 3, 'cross', 2);
-    final copies = [Copy(host.match!), Copy(cs[0].match!), Copy(cs[1].match!)];
-    final runs = [for (final c in copies) c.game.run()];
-    // The leaver's own copy stops with an error once they're gone.
-    unawaited(runs[2].then((_) {}, onError: (_) {}));
-    // Player 2 drops out after a few turns.
-    await until(() => copies[0].game.turnNumber >= 3, timeout: const Duration(minutes: 1));
-    await cs[1].leave();
-    await Future.wait([runs[0], runs[1]]).timeout(const Duration(minutes: 3));
-    expect(copies[1].summary, copies[0].summary);
-    expect(copies[0].game.over, isTrue);
-    expect(host.match!.names.value[cs[1].mySeat!], endsWith('(AI)'));
-    await cs[0].leave();
-    await host.leave();
-  }, timeout: const Timeout(Duration(minutes: 4)));
+  group('leaving, rejoining and losing the host', () {
+    // The real 2-minute grace, shortened so the matches can play out in a test.
+    setUp(() {
+      rejoinGrace = const Duration(seconds: 3);
+      rejoinRetry = const Duration(milliseconds: 250);
+    });
+    tearDown(() {
+      rejoinGrace = const Duration(minutes: 2);
+      rejoinRetry = const Duration(seconds: 3);
+    });
+
+    test('a player who does not come back: after the grace period the AI takes their seat and the match finishes', () async {
+      final (host, cs) = await lobby(GameMode.ffa, 3, 'cross', 2);
+      final copies = [Copy(host.match!), Copy(cs[0].match!), Copy(cs[1].match!)];
+      final runs = [for (final c in copies) c.game.run()];
+      // The leaver's own copy stops with an error once they're gone.
+      unawaited(runs[2].then((_) {}, onError: (_) {}));
+      await until(() => copies[0].game.turnNumber >= 3, timeout: const Duration(minutes: 1));
+      await cs[1].leave();
+      // Nothing is taken over straight away...
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      expect(host.match!.names.value[cs[1].mySeat!], isNot(endsWith('(AI)')));
+      // ...but once the grace period is over the match goes on without them.
+      await Future.wait([runs[0], runs[1]]).timeout(const Duration(minutes: 3));
+      expect(copies[1].summary, copies[0].summary);
+      expect(copies[0].game.over, isTrue);
+      expect(host.match!.names.value[cs[1].mySeat!], endsWith('(AI)'));
+      expect(cs[0].match!.names.value[cs[1].mySeat!], endsWith('(AI)'));
+      await cs[0].leave();
+      await host.leave();
+    }, timeout: const Timeout(Duration(minutes: 4)));
+
+    test('a player who comes back inside the grace period gets their seat and the same match back', () async {
+      rejoinGrace = const Duration(seconds: 20);
+      final (host, cs) = await lobby(GameMode.duel, 2, 'blossom', 1);
+      final hostCopy = Copy(host.match!);
+      final gone = Copy(cs[0].match!);
+      final hostRun = hostCopy.game.run();
+      unawaited(gone.game.run().then((_) {}, onError: (_) {}));
+      await until(() => hostCopy.game.turnNumber >= 3, timeout: const Duration(minutes: 1));
+      final seat = cs[0].mySeat!;
+      await cs[0].leave(); // the app is closed
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      expect(host.lobby!.seats[seat].kind, SeatKind.reservedDisconnected);
+
+      // Reopened: a new device introduces itself as the same player and is given the match so far.
+      final back = ClientSession(await joinLan('127.0.0.1'), loadData(), name: 'P0', dataVersion: 'test', address: '127.0.0.1');
+      await until(() => back.match != null);
+      expect(back.mySeat, seat);
+      expect(back.match!.ls.replayTarget, greaterThan(0), reason: 'it has to catch up on the decisions already made');
+      final copy = Copy(back.match!);
+      await Future.wait([hostRun, copy.game.run()]).timeout(const Duration(minutes: 3));
+      // Same game, move for move.
+      expect(copy.summary, hostCopy.summary);
+      expect(copy.log, hostCopy.log);
+      expect(host.match!.names.value[seat], isNot(endsWith('(AI)')), reason: 'no AI took the seat');
+      await back.leave();
+      await host.leave();
+    }, timeout: const Timeout(Duration(minutes: 4)));
+
+    test('the host is lost: a remaining player takes over as host and the others follow', () async {
+      rejoinGrace = const Duration(seconds: 6);
+      final (host, cs) = await lobby(GameMode.ffa, 3, 'cross', 2, transport: true);
+      final copies = [Copy(host.match!), Copy(cs[0].match!), Copy(cs[1].match!)];
+      final runs = [for (final c in copies) c.game.run()];
+      unawaited(runs[0].then((_) {}, onError: (_) {}));
+      await until(() => copies[1].game.turnNumber >= 3, timeout: const Duration(minutes: 1));
+      unawaited(host.leave()); // the host's app dies
+      await Future.wait([runs[1], runs[2]]).timeout(const Duration(minutes: 3));
+      expect(copies[1].game.over, isTrue);
+      expect(copies[2].summary, copies[1].summary);
+      expect(copies[2].log, copies[1].log);
+      // The first remaining player became the host, the other one is playing on their game.
+      expect(cs[0].promoted, isNotNull);
+      expect(cs[1].promoted, isNull);
+      expect(cs[0].match!.isHost, isTrue);
+      expect(cs[0].match!.names.value[0], endsWith('(AI)'), reason: "the old host's seat is the AI's");
+      expect(cs[1].match!.names.value[0], endsWith('(AI)'));
+      expect(cs[1].match!.names.value[1], isNot(endsWith('(AI)')));
+      await cs[1].leave();
+      await cs[0].leave();
+    }, timeout: const Timeout(Duration(minutes: 4)));
+
+    test('the host is lost and nobody else is left: the player plays on alone against the AI', () async {
+      rejoinGrace = const Duration(seconds: 3);
+      final (host, cs) = await lobby(GameMode.duel, 2, 'blossom', 1, transport: true);
+      final copies = [Copy(host.match!), Copy(cs[0].match!)];
+      final runs = [for (final c in copies) c.game.run()];
+      unawaited(runs[0].then((_) {}, onError: (_) {}));
+      await until(() => copies[1].game.turnNumber >= 3, timeout: const Duration(minutes: 1));
+      unawaited(host.leave());
+      await runs[1].timeout(const Duration(minutes: 3));
+      expect(copies[1].game.over, isTrue);
+      expect(cs[0].promoted, isNotNull);
+      expect(cs[0].match!.names.value[0], endsWith('(AI)'));
+      expect(cs[0].match!.lost.value, isNull, reason: 'the match does not end with an error');
+      await cs[0].leave();
+    }, timeout: const Timeout(Duration(minutes: 4)));
+  });
 }

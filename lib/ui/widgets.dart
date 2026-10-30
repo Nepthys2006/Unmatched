@@ -11,6 +11,9 @@ import 'theme.dart';
 
 const cardAspect = 600 / 832;
 
+/// A landscape phone (or a short window): bars and buttons shrink so the content keeps the room.
+bool compactHeight(BuildContext context) => MediaQuery.sizeOf(context).height < 460;
+
 enum PlateStyle { primary, secondary, confirm, danger, hero }
 
 void _tapSound(BuildContext context, {double volume = 0.6}) {

@@ -30,13 +30,13 @@ if ($Target -eq 'windows' -or $Target -eq 'all') {
 
 if ($Target -eq 'apk' -or $Target -eq 'all') {
   Write-Host "`n=== Building Android APK (Release) ===" -ForegroundColor Green
-  flutter build apk --release --dart-define-from-file=.env
+  flutter build apk --release --no-tree-shake-icons --dart-define-from-file=.env
   Write-Host "Android APK ready at: build\app\outputs\flutter-apk\app-release.apk" -ForegroundColor Green
 }
 
 if ($Target -eq 'web' -or $Target -eq 'all') {
   Write-Host "`n=== Building Web (Release) ===" -ForegroundColor Green
-  flutter build web --release --no-web-resources-cdn --dart-define-from-file=.env
+  flutter build web --release --no-web-resources-cdn --no-tree-shake-icons --dart-define-from-file=.env
   python tool/bundle_webapp.py
   Write-Host "Web build ready at: build\web\" -ForegroundColor Green
 }

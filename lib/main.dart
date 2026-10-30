@@ -1,8 +1,11 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:async';
+
+import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'ui/audio.dart';
+import 'ui/invite_flow.dart';
 import 'ui/screens/loading_screen.dart';
 import 'ui/services.dart';
 import 'ui/settings.dart';
@@ -14,7 +17,7 @@ Future<void> main() async {
   // (the JS rotate overlay and the Flutter RotatePrompt guide users to landscape; locking here
   // would prevent the overlay from ever appearing).
   if (!kIsWeb) {
-    await SystemChrome.setPreferredOrientations([DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
+    await SystemChrome.setPreferredOrientations(OrientationGuard.landscapes);
   }
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   final settings = await Settings.load();
@@ -33,9 +36,10 @@ class UnmatchedApp extends StatelessWidget {
         services: services,
         child: MaterialApp(
           title: 'Unmatched',
+          navigatorKey: appNavigatorKey,
           debugShowCheckedModeBanner: false,
           theme: buildTheme(),
-          builder: (context, child) => UiScale(child: child!),
+          builder: (context, child) => OrientationGuard(child: InviteListener(child: UiScale(child: child!))),
           home: home ?? const LoadingScreen(),
         ),
       );
@@ -107,4 +111,60 @@ class RotatePrompt extends StatelessWidget {
           ),
         ),
       );
+}
+
+/// Phones follow the sensor between landscape-left and landscape-right (flip the phone 180° and
+/// the game turns with it) but never go upright. The lock itself is declared in the Android
+/// manifest (`sensorLandscape`) and the iOS Info.plist; this re-asserts it, and the immersive
+/// full-screen mode that Android drops on a rotation, each time the window changes shape or
+/// insets, so the notch/gesture-bar padding follows the phone to its new side.
+class OrientationGuard extends StatefulWidget {
+  const OrientationGuard({super.key, required this.child});
+  final Widget child;
+
+  static const landscapes = [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight];
+
+  /// Phones and tablets only: desktops and browsers have no sensor to follow.
+  static bool get applies => !kIsWeb && (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS);
+
+  @override
+  State<OrientationGuard> createState() => _OrientationGuardState();
+}
+
+class _OrientationGuardState extends State<OrientationGuard> with WidgetsBindingObserver {
+  Timer? _settle;
+
+  @override
+  void initState() {
+    super.initState();
+    if (OrientationGuard.applies) WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    _settle?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeMetrics() {
+    // The metrics fire several times while the rotation animates; act once it has settled.
+    _settle?.cancel();
+    _settle = Timer(const Duration(milliseconds: 250), _reassert);
+  }
+
+  void _reassert() {
+    if (!mounted) return;
+    final view = View.maybeOf(context);
+    // Leave the system bars alone while the keyboard is up.
+    if (view != null && view.viewInsets.bottom > 0) return;
+    SystemChrome.setPreferredOrientations(OrientationGuard.landscapes);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    // Padding (notch side) is read from MediaQuery by the screens; make sure they re-read it.
+    setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }

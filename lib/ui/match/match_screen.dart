@@ -31,7 +31,6 @@ import '../../net/online_presence.dart';
 import '../../net/profile_stats.dart';
 import '../chat_panel.dart';
 import '../screens/settings_screen.dart';
-import '../screens/setup_screen.dart';
 import '../settings.dart';
 import '../services.dart';
 import '../shapes.dart';
@@ -93,6 +92,9 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin,
   bool _showChat = false;
   ChatMessage? _chatToast;
   Timer? _chatToastTimer;
+
+  /// Keeps the persisted rejoin window fresh while a multiplayer match is open.
+  Timer? _rejoinBeat;
   Combat? _combat;
   bool _revealed = false;
   bool _resolved = false;
@@ -200,6 +202,8 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin,
   ui.Image? _boardImage;
 
   double get _speed {
+    // Catching up after a rejoin: play through what already happened without the show.
+    if (widget.net?.ls.replaying ?? false) return 0;
     final base = _s.settings.speed;
     // Once you're out, the rest of the game plays out quickly.
     return game.players.isNotEmpty && me.eliminated ? base * 0.35 : base;
@@ -261,7 +265,7 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin,
       _applyNames();
       net.names.addListener(_applyNames);
       net.lost.addListener(_onLost);
-      net.timeoutRedirect.addListener(_onTimeoutRedirect);
+      _rejoinBeat = _s.settings.startReconnectBeat();
       net.chat.addListener(_onChat);
       _chatSeen = net.chat.latestIncoming?.id ?? 0;
     }
@@ -337,32 +341,10 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin,
     }
   }
 
-  Future<void> _onTimeoutRedirect() async {
-    final tr = widget.net?.timeoutRedirect.value;
-    if (tr == null || _disposed || !mounted) return;
-    await showConfirm(
-      context,
-      title: tr.title,
-      message: tr.message,
-      confirm: 'OK',
-      cancel: null,
-    );
-    if (!mounted) return;
-    if (tr.redirect == 'mode') {
-      widget.net?.leave();
-      _s.audio.music(Music.menu);
-      Navigator.of(context).popUntil((r) => r.isFirst);
-      Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const SetupScreen()));
-    } else {
-      _toMenu();
-    }
-  }
-
   /// Multiplayer: the connection is gone.
   Future<void> _onLost() async {
     final why = widget.net?.lost.value;
     if (why == null || _disposed || !mounted || _result != null) return;
-    if (widget.net?.timeoutRedirect.value != null) return;
     await showConfirm(context, title: 'Connection lost', message: why, confirm: 'Back to menu', cancel: 'Stay');
     if (mounted) _toMenu();
   }
@@ -562,7 +544,7 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin,
     WidgetsBinding.instance.removeObserver(this);
     widget.net?.names.removeListener(_applyNames);
     widget.net?.lost.removeListener(_onLost);
-    widget.net?.timeoutRedirect.removeListener(_onTimeoutRedirect);
+    _rejoinBeat?.cancel();
     widget.net?.chat.removeListener(_onChat);
     widget.net?.chat.open = false;
     _chatToastTimer?.cancel();
@@ -783,14 +765,22 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin,
             net.reportResult(winner: winners.isEmpty ? null : winners.join(' & '), players: [for (final p in game.players) p.label]),
           );
         }
-        final opp = game.players.where((p) => p.team != me.team).firstOrNull;
+        final opponents = game.players.where((p) => p.team != me.team).toList();
+        final opp = opponents.firstOrNull;
+        // Against real players when any opponent started the match as one; the rating moves by
+        // how strong they were. Otherwise it is a match against the AI and only the PvE book changes.
+        final people = net == null ? const <Player>[] : [for (final p in opponents) if (net.humanSeats.contains(p.seat)) p];
+        final pvp = people.isNotEmpty;
+        final ratings = [for (final p in people) PlayerProfile.fromPayload(p.seat < net!.seatStats.length ? net.seatStats[p.seat] : null).mmr];
         ProfileStats.instance.recordMatch(
           won: won,
           heroId: me.hero.id,
           opponentName: opp?.label ?? 'Opponent',
           opponentHeroId: opp?.hero.id ?? '',
           mapId: widget.config.map.id,
-          mode: net != null ? 'online' : 'local',
+          mode: pvp ? 'online' : 'local',
+          pvp: pvp,
+          opponentMmr: ratings.isEmpty ? null : (ratings.reduce((a, b) => a + b) / ratings.length).round(),
         );
         _s.settings.clearReconnect();
         OnlinePresenceService.instance.updateStatus(status: 'idle');
@@ -1959,6 +1949,38 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin,
                   ),
               ],
 
+              if (widget.net case final net?)
+                ValueListenableBuilder<String?>(
+                  valueListenable: net.toast,
+                  builder: (context, text, _) {
+                    if (text == null) return const SizedBox.shrink();
+                    return Positioned(
+                      top: pad.top + 56,
+                      left: size.width * 0.15,
+                      right: size.width * 0.15,
+                      child: IgnorePointer(
+                        child: Center(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            decoration: const ShapeDecoration(
+                              color: Color(0xEB1A1A24),
+                              shape: PlateBorder(side: BorderSide(color: Palette.confirmHi, width: 1.2)),
+                              shadows: [BoxShadow(color: Colors.black54, blurRadius: 10, offset: Offset(0, 3))],
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.smart_toy_rounded, size: 16, color: Palette.confirmHi),
+                                const SizedBox(width: 10),
+                                Flexible(child: Text(text, textAlign: TextAlign.center, style: bodyStyle(13, color: Palette.bone))),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
               if (widget.net case final net?)
                 ValueListenableBuilder<String?>(
                   valueListenable: net.waitingNotice,

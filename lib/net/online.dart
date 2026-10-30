@@ -169,6 +169,21 @@ class OnlineHost implements HostLink, ChatKeeper {
     return h;
   }
 
+  /// Takes over the channel of a running match whose host is lost (host migration): no lobby is
+  /// created or listed, the channel only carries the match for the players who rejoin it.
+  static Future<OnlineHost> adopt({required String topic, required String hostName, SupabaseClient? client}) async {
+    final sb = client ?? _client;
+    final h = OnlineHost._(hostName, sb, '', '', topic).._adopted = true;
+    h._ch = await _join(sb, _channel(topic), 'host', bind: h._bind);
+    await h._ch.track({'role': 'host', 'name': hostName});
+    h._out = _Outbox(h._ch, 'h2c', (items) => {'items': items});
+    h._info = (mode: 'duel', players: 2, open: 0, playing: true, status: 'inGame');
+    return h;
+  }
+
+  /// A host that took over an existing match: it has no lobby row to keep up to date.
+  bool _adopted = false;
+
   final String name;
   final SupabaseClient _sb;
   final String _id;
@@ -213,7 +228,7 @@ class OnlineHost implements HostLink, ChatKeeper {
   }
 
   Future<void> _push() async {
-    if (_closed) return;
+    if (_closed || _adopted) return;
     try {
       await _rpc(_sb, 'update_lobby', {
         'p_id': _id,
@@ -241,7 +256,7 @@ class OnlineHost implements HostLink, ChatKeeper {
   @override
   Future<void> keepChat(Msg m) {
     // Once the match is over nothing more is kept (the "gg" after it is only passed on).
-    if (_closed) return Future.value();
+    if (_closed || _adopted) return Future.value();
     return _chatWrites = _chatWrites.then(
       (_) => _rpc(_sb, 'chat_post', {
         'p_room': _room,
@@ -264,6 +279,7 @@ class OnlineHost implements HostLink, ChatKeeper {
     if (_closed) return;
     _closed = true;
     _beat?.cancel();
+    if (_adopted) return;
     await _clearChat();
     await _rpc(_sb, 'finish_lobby', {'p_id': _id, 'p_token': _token, 'p_winner': winner, 'p_players': players}).catchError((_) => null);
   }
@@ -288,7 +304,7 @@ class OnlineHost implements HostLink, ChatKeeper {
   Future<void> close() async {
     _beat?.cancel();
     _debounce?.cancel();
-    if (!_closed) {
+    if (!_closed && !_adopted) {
       _closed = true;
       await _clearChat();
       await _rpc(_sb, 'close_lobby', {'p_id': _id, 'p_token': _token}).catchError((_) => null);

@@ -3,11 +3,14 @@
 /// 2 & 4...), so tapping an open seat moves you there to change sides.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../engine/ai.dart';
 import '../../engine/defs.dart';
 import '../../net/lan.dart';
+import '../../net/online_presence.dart';
 import '../../net/session.dart';
 import '../../net/profile_stats.dart';
 import '../dialogs/player_profile_modal.dart';
@@ -38,18 +41,28 @@ class _LobbyScreenState extends State<LobbyScreen> {
   bool _closedShown = false;
   int _view = 0; // 0 = Lobby Overview, 1 = Battlefield page (similar to VS AI)
   final _mapScroll = ScrollController();
+  Timer? _rejoinBeat;
 
   @override
   void initState() {
     super.initState();
     s.addListener(_changed);
+    // Keeps the rejoin window counting from the last sign of life (see Settings.touchReconnect).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _rejoinBeat = context.services.settings.startReconnectBeat();
+    });
   }
 
   @override
   void dispose() {
+    _rejoinBeat?.cancel();
     _mapScroll.dispose();
     s.removeListener(_changed);
-    if (!_started) s.leave();
+    if (!_started) {
+      s.leave();
+      // No longer waiting in a lobby: show as idle again (an invite sets "matching").
+      unawaited(OnlinePresenceService.instance.updateStatus(status: 'idle'));
+    }
     super.dispose();
   }
 
@@ -557,31 +570,25 @@ class _LobbyScreenState extends State<LobbyScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(24, 4, 24, 0),
+          padding: EdgeInsets.fromLTRB(24, 4, 24, compactHeight(context) ? 2 : 0),
           child: SectionLabel(
             s.isHost
                 ? '${maps.length} maps for ${l.mode.label}${l.mode == GameMode.ffa ? ' · ${l.players} players' : ''}'
                 : 'Current Battlefield: ${currentMap.name} · ${maps.length} maps available',
-            trailing: Text(
-              s.isHost ? 'Tap any map to pick for this lobby' : 'Tap any map to inspect spaces and artwork',
-              style: bodyStyle(12, color: Palette.muted),
-            ),
+            trailing: compactHeight(context)
+                ? null
+                : Text(
+                    s.isHost ? 'Tap any map to pick for this lobby' : 'Tap any map to inspect spaces and artwork',
+                    style: bodyStyle(12, color: Palette.muted),
+                  ),
           ),
         ),
         Expanded(
-          child: ListView.separated(
+          child: MapStrip(
+            maps: maps,
             controller: _mapScroll,
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.fromLTRB(24, 4, 24, 8),
-            itemCount: maps.length,
-            separatorBuilder: (_, _) => const SizedBox(width: 12),
-            itemBuilder: (_, i) => MapCard(
-              map: maps[i],
-              selected: maps[i].id == l.mapId,
-              onTap: s.isHost
-                  ? () => s.setMap(maps[i].id)
-                  : () => showMapInspectDialog(context, maps[i]),
-            ),
+            isSelected: (m) => m.id == l.mapId,
+            onTap: (m) => s.isHost ? s.setMap(m.id) : showMapInspectDialog(context, m),
           ),
         ),
         _battlefieldBottomBar(l, currentMap, maps),
@@ -591,118 +598,115 @@ class _LobbyScreenState extends State<LobbyScreen> {
 
   Widget _battlefieldBottomBar(Lobby l, MapDef map, List<MapDef> maps) {
     final starts = map.spaces.where((s) => s.start != null).length;
+    // On a landscape phone the bar is one slim row so the maps above keep the room.
+    final compact = compactHeight(context);
+    final bh = compact ? 36.0 : 42.0;
+    final bf = compact ? 13.0 : 14.0;
     return Container(
-      padding: const EdgeInsets.fromLTRB(24, 8, 24, 14),
+      padding: compact ? const EdgeInsets.fromLTRB(16, 5, 16, 6) : const EdgeInsets.fromLTRB(24, 8, 24, 14),
       decoration: const ShapeDecoration(
         color: Color(0xEB0A0D13),
         shape: Border(top: BorderSide(color: Palette.line, width: 1.5)),
       ),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1080),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final isNarrow = constraints.maxWidth < 820;
-              final buttons = Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  PlateButton(
-                    label: 'Inspect',
-                    icon: Icons.zoom_in_rounded,
-                    style: PlateStyle.secondary,
-                    height: 42,
-                    fontSize: 14,
-                    onPressed: () => showMapInspectDialog(context, map),
-                  ),
-                  if (s.isHost)
+      child: SafeArea(
+        top: false,
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1080),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final isNarrow = !compact && constraints.maxWidth < 820;
+                final buttons = Wrap(
+                  spacing: compact ? 6 : 8,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
                     PlateButton(
-                      label: 'Random map',
-                      icon: Icons.shuffle_rounded,
+                      label: 'Inspect',
+                      icon: Icons.zoom_in_rounded,
                       style: PlateStyle.secondary,
-                      height: 42,
-                      fontSize: 14,
-                      onPressed: () {
-                        s.randomMap();
-                        final updated = context.services.data.maps[l.mapId];
-                        if (updated != null && _mapScroll.hasClients) {
-                          final idx = maps.indexOf(updated);
-                          if (idx >= 0) {
-                            _mapScroll.animateTo(
-                              (idx * 300.0 - 40).clamp(0, _mapScroll.position.maxScrollExtent),
-                              duration: const Duration(milliseconds: 380),
-                              curve: Curves.easeOutCubic,
-                            );
-                          }
-                        }
-                      },
+                      height: bh,
+                      fontSize: bf,
+                      onPressed: () => showMapInspectDialog(context, map),
                     ),
-                  PlateButton(
-                    label: s.isHost ? 'Done' : 'Back to Lobby',
-                    icon: Icons.check_rounded,
-                    style: PlateStyle.confirm,
-                    height: 42,
-                    fontSize: 15,
-                    onPressed: () => setState(() => _view = 0),
-                  ),
-                ],
-              );
-
-              final textInfo = Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 4,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      Text(
-                        map.name.toUpperCase(),
-                        style: titleStyle(19, color: Palette.brass, spacing: 0.8),
+                    if (s.isHost)
+                      PlateButton(
+                        label: compact ? 'Random' : 'Random map',
+                        icon: Icons.shuffle_rounded,
+                        style: PlateStyle.secondary,
+                        height: bh,
+                        fontSize: bf,
+                        onPressed: () {
+                          s.randomMap();
+                          final updated = context.services.data.maps[l.mapId];
+                          if (updated != null) MapStrip.scrollTo(_mapScroll, maps.indexOf(updated), const Duration(milliseconds: 380));
+                        },
                       ),
+                    PlateButton(
+                      label: s.isHost ? 'Done' : (compact ? 'Back' : 'Back to Lobby'),
+                      icon: Icons.check_rounded,
+                      style: PlateStyle.confirm,
+                      height: bh,
+                      fontSize: compact ? 14 : 15,
+                      onPressed: () => setState(() => _view = 0),
+                    ),
+                  ],
+                );
+
+                final textInfo = Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 2,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          map.name.toUpperCase(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: titleStyle(compact ? 16 : 19, color: Palette.brass, spacing: 0.8),
+                        ),
+                        Text(
+                          '${map.spaces.length} SPACES · $starts STARTS',
+                          style: titleStyle(compact ? 11 : 12, color: Palette.boneDim, spacing: 0.8),
+                        ),
+                      ],
+                    ),
+                    if (!compact) ...[
+                      const SizedBox(height: 2),
                       Text(
-                        '${map.spaces.length} SPACES · $starts STARTS',
-                        style: titleStyle(12, color: Palette.boneDim, spacing: 0.8),
+                        map.blurb,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: bodyStyle(13, color: Palette.boneDim),
                       ),
                     ],
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    map.blurb,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: bodyStyle(13, color: Palette.boneDim),
-                  ),
-                ],
-              );
+                  ],
+                );
 
-              if (isNarrow) {
-                return Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                if (isNarrow) {
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [textInfo, const SizedBox(height: 8), buttons],
+                  );
+                }
+                return Row(
                   children: [
-                    textInfo,
-                    const SizedBox(height: 8),
+                    Expanded(child: textInfo),
+                    const SizedBox(width: 12),
                     buttons,
                   ],
                 );
-              }
-              return Row(
-                children: [
-                  Expanded(child: textInfo),
-                  const SizedBox(width: 12),
-                  buttons,
-                ],
-              );
-            },
+              },
+            ),
           ),
         ),
       ),
     );
   }
-
 
   Widget _seats(Lobby l) {
     final teams = l.mode.isTeams;

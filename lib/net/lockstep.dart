@@ -28,6 +28,21 @@ class Lockstep {
   /// The number of the next decision.
   int take() => _next++;
 
+  /// A device that joins (or rejoins) a running match is sent every decision made so far; until it
+  /// has played through them [replaying] is true: it answers from the log instead of asking the
+  /// player again, and the match screen skips the animations.
+  int replayTarget = 0;
+  bool get replaying => _next < replayTarget;
+
+  /// How many decisions have been answered so far.
+  int get answered {
+    var n = 0;
+    while (_answers.containsKey(n)) {
+      n++;
+    }
+    return n;
+  }
+
   /// Records an answer from the network (or made here). Later copies of the same decision are
   /// ignored: the first one wins.
   void put(int seq, Answer a) {
@@ -108,6 +123,8 @@ class LocalSeatAgent implements Agent {
   @override
   Future<List<int>> decide(Game game, Prompt prompt) async {
     final seq = ls.take();
+    // Catching up after a rejoin: this decision was already made, take the recorded answer.
+    if (seq < ls.replayTarget) return (await ls.wait(seq)).picks;
     final picks = await inner.decide(game, prompt);
     final a = (seat: seat, picks: picks);
     ls.put(seq, a);
@@ -122,18 +139,37 @@ class RemoteSeatAgent implements Agent {
   RemoteSeatAgent(this.ls, this.seat, {this.host = false, this.onInvalid});
   final Lockstep ls;
   final int seat;
-  final bool host;
+
+  /// Whether this device is the authority (checks and relays answers). A player's device becomes
+  /// the host when the host is lost for good (see [becomeHost]).
+  bool host;
 
   /// Host only: the seat's player sent an illegal answer (the seat is then taken over).
-  final void Function(int seat)? onInvalid;
+  void Function(int seat)? onInvalid;
 
   Agent? _takeover;
-  Completer<void> _dropped = Completer<void>();
 
-  /// Host only: from now on [ai] answers for this seat (also the decision being waited on).
+  /// Completed whenever the role changes, to wake a decision that is waiting under the old one.
+  Completer<void> _changed = Completer<void>();
+  void _notify() {
+    if (!_changed.isCompleted) _changed.complete();
+    _changed = Completer<void>();
+  }
+
+  /// From now on [ai] answers for this seat, including the decision being waited on. On the host
+  /// this is the AI covering a player who left; on a device that has just become the host it
+  /// covers the seats the lost host was running.
   void takeOver(Agent ai) {
     _takeover = ai;
-    if (!_dropped.isCompleted) _dropped.complete();
+    _notify();
+  }
+
+  /// This device is now the authority for the seat: wait for the player's answer here instead of
+  /// for the old host's relay.
+  void becomeHost(void Function(int seat)? onInvalid) {
+    host = true;
+    this.onInvalid = onInvalid;
+    _notify();
   }
 
   bool get takenOver => _takeover != null;
@@ -141,26 +177,35 @@ class RemoteSeatAgent implements Agent {
   @override
   Future<List<int>> decide(Game game, Prompt prompt) async {
     final seq = ls.take();
-    if (_takeover == null) {
-      if (!host) return (await ls.wait(seq)).picks;
-      final picks = await Future.any<List<int>?>([ls.waitOffer(seq, seat), _dropped.future.then((_) => null)]);
-      if (picks != null) {
-        if (validPicks(prompt, picks)) {
-          final a = (seat: seat, picks: picks);
-          ls.put(seq, a);
-          ls.publish?.call(seq, a);
-          return picks;
+    if (seq < ls.replayTarget) return (await ls.wait(seq)).picks;
+    while (_takeover == null) {
+      final changed = _changed.future.then<void>((_) {});
+      if (!host) {
+        // Wait for the host's relay, unless the role changes meanwhile.
+        final a = await Future.any<Answer?>([ls.wait(seq), changed.then((_) => null)]);
+        if (a != null) return a.picks;
+      } else {
+        final picks = await Future.any<List<int>?>([ls.waitOffer(seq, seat), changed.then((_) => null)]);
+        if (picks != null) {
+          if (validPicks(prompt, picks)) {
+            final a = (seat: seat, picks: picks);
+            ls.put(seq, a);
+            ls.publish?.call(seq, a);
+            return picks;
+          }
+          onInvalid?.call(seat);
+          takeOver(AiAgent(level: AiLevel.hard));
         }
-        onInvalid?.call(seat);
-        takeOver(AiAgent(level: AiLevel.hard));
       }
     }
-    // Taken over: the host's AI answers and the answer goes to everyone.
+    // The answer may have arrived while the seat was being taken over: it stands.
+    final known = ls.known(seq);
+    if (known != null) return known.picks;
+    // Taken over: the AI answers here and the answer goes to everyone.
     final picks = await _takeover!.decide(game, prompt);
     final a = (seat: seat, picks: picks);
     ls.put(seq, a);
     ls.publish?.call(seq, a);
-    _dropped = Completer<void>()..complete();
     return picks;
   }
 }

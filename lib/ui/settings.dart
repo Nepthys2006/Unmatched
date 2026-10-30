@@ -1,6 +1,7 @@
 /// Player settings, persisted with shared_preferences.
 library;
 
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -159,7 +160,7 @@ class Settings extends ChangeNotifier {
     required String token,
     String? topic,
     int? seat,
-    Duration duration = const Duration(minutes: 2),
+    Duration duration = rejoinWindow,
   }) {
     reconnectLobbyId = lobbyId;
     reconnectToken = token;
@@ -167,6 +168,24 @@ class Settings extends ChangeNotifier {
     reconnectSeat = seat;
     reconnectExpiresAt = DateTime.now().add(duration);
     _saveReconnect();
+  }
+
+  /// The rejoin window: the 2-minute grace period plus a little slack for the heartbeat below.
+  static const rejoinWindow = Duration(minutes: 2, seconds: 15);
+
+  /// While a player sits in a lobby or match, this is called every few seconds. The window to
+  /// rejoin then counts from the last one, i.e. from when the app was closed or lost its
+  /// connection (not from when the lobby was joined).
+  void touchReconnect() {
+    if (reconnectToken == null) return;
+    reconnectExpiresAt = DateTime.now().add(rejoinWindow);
+    _saveReconnect();
+  }
+
+  /// A timer that keeps the rejoin window fresh; cancel it when the screen goes away.
+  Timer startReconnectBeat() {
+    touchReconnect();
+    return Timer.periodic(const Duration(seconds: 10), (_) => touchReconnect());
   }
 
   void clearReconnect() {

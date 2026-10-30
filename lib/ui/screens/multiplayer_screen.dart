@@ -12,6 +12,7 @@ import '../../net/lan.dart';
 import '../../net/link.dart';
 import '../../net/online.dart';
 import '../../net/session.dart';
+import '../../net/transports.dart';
 import '../services.dart';
 import '../shapes.dart';
 import '../theme.dart';
@@ -21,11 +22,13 @@ import 'lobby_screen.dart';
 import 'menu_screen.dart' show gameSnack;
 import '../../net/online_presence.dart';
 import '../dialogs/active_players_drawer.dart';
-import '../dialogs/invite_banner_dialog.dart';
 
 class MultiplayerScreen extends StatefulWidget {
-  const MultiplayerScreen({super.key, required this.online});
+  const MultiplayerScreen({super.key, required this.online, this.autoRejoin = false});
   final bool online;
+
+  /// Opened from the main menu's "Rejoin match": go straight back into the match.
+  final bool autoRejoin;
 
   @override
   State<MultiplayerScreen> createState() => _MultiplayerScreenState();
@@ -44,7 +47,6 @@ class _MultiplayerScreenState extends State<MultiplayerScreen> {
   List<OnlineLobby>? _lobbies;
   String? _listError;
   Timer? _refresh;
-  StreamSubscription<MatchInvite>? _inviteSub;
 
   String _randomToken() {
     final r = math.Random.secure();
@@ -61,6 +63,11 @@ class _MultiplayerScreenState extends State<MultiplayerScreen> {
       _sub = d.games.listen((g) => setState(() => _found = g));
       unawaited(d.start());
     }
+    if (widget.autoRejoin) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_rejoinActive());
+      });
+    }
     // A browser that was handed the game by a LAN host joins that host.
     final host = servedByLanHost;
     if (!_online && host != null) _address.text = host;
@@ -74,7 +81,6 @@ class _MultiplayerScreenState extends State<MultiplayerScreen> {
           playerId: s.settings.playerId,
           username: s.settings.username,
         );
-        _inviteSub = OnlinePresenceService.instance.invites.listen(_onInviteReceived);
       });
     }
   }
@@ -84,7 +90,6 @@ class _MultiplayerScreenState extends State<MultiplayerScreen> {
     _sub?.cancel();
     _discovery?.stop();
     _refresh?.cancel();
-    _inviteSub?.cancel();
     _address.dispose();
     _lobbyName.dispose();
     _password.dispose();
@@ -138,9 +143,6 @@ class _MultiplayerScreenState extends State<MultiplayerScreen> {
                 };
               },
             );
-      final lobbyId = _online ? (link as OnlineHost).id : 'lan';
-      final topic = _online ? (link as OnlineHost).room : null;
-      s.settings.saveReconnect(lobbyId: lobbyId, token: token, topic: topic);
       session = HostSession(
         link,
         s.data,
@@ -177,6 +179,7 @@ class _MultiplayerScreenState extends State<MultiplayerScreen> {
         address: target,
         playerId: s.settings.playerId,
         reconnectToken: token,
+        transport: LanTransport(target, await firstLocalAddress(), hostName: s.settings.username),
       );
       await _openLobby(session);
     } catch (e) {
@@ -199,6 +202,7 @@ class _MultiplayerScreenState extends State<MultiplayerScreen> {
       final token = s.settings.reconnectToken ?? _randomToken();
       s.settings.saveReconnect(lobbyId: l.id, token: token);
       final link = await OnlineClient.join(l.id, password: password);
+      s.settings.saveReconnect(lobbyId: l.id, token: token, topic: link.topic);
       final session = ClientSession(
         link,
         s.data,
@@ -207,6 +211,7 @@ class _MultiplayerScreenState extends State<MultiplayerScreen> {
         address: l.name,
         playerId: s.settings.playerId,
         reconnectToken: token,
+        transport: link.topic == null ? null : OnlineTransport(link.topic!, hostName: s.settings.username),
       );
       await _openLobby(session);
     } catch (e) {
@@ -237,6 +242,7 @@ class _MultiplayerScreenState extends State<MultiplayerScreen> {
           address: lobbyId,
           playerId: s.settings.playerId,
           reconnectToken: token,
+          transport: (topic != null && topic.isNotEmpty) ? OnlineTransport(topic, hostName: s.settings.username) : null,
         );
         await _openLobby(session);
       } else {
@@ -251,75 +257,7 @@ class _MultiplayerScreenState extends State<MultiplayerScreen> {
     }
   }
 
-  void _onInviteReceived(MatchInvite inv) {
-    if (!mounted) return;
-    InviteBannerDialog.show(
-      context,
-      invite: inv,
-      onAccept: () async {
-        final s = context.services;
-        final token = s.settings.reconnectToken ?? _randomToken();
-        s.settings.saveReconnect(lobbyId: inv.lobbyId, token: token);
-        setState(() => _busy = true);
-        try {
-          final link = await OnlineClient.join(inv.lobbyId);
-          final session = ClientSession(
-            link,
-            s.data,
-            name: s.settings.username,
-            dataVersion: s.dataVersion,
-            address: inv.lobbyName,
-            playerId: s.settings.playerId,
-            reconnectToken: token,
-          );
-          await _openLobby(session);
-        } catch (e) {
-          _error(e);
-        } finally {
-          if (mounted) setState(() => _busy = false);
-        }
-      },
-      onDecline: () {},
-    );
-  }
-
-  void _openActivePlayers() {
-    ActivePlayersDrawer.show(
-      context,
-      onInvite: (user) async {
-        final s = context.services;
-        setState(() => _busy = true);
-        try {
-          final lobbyName = '${s.settings.username} vs ${user.name}';
-          final token = _randomToken();
-          final link = await OnlineHost.create(
-            name: lobbyName,
-            hostName: s.settings.username,
-            info: (mode: 'duel', players: 2, open: 1, playing: false, status: 'matching'),
-          );
-          s.settings.saveReconnect(lobbyId: link.id, token: token, topic: link.room);
-          await OnlinePresenceService.instance.sendInvite(
-            targetUserId: user.id,
-            lobbyId: link.id,
-            lobbyName: lobbyName,
-          );
-          final session = HostSession(
-            link,
-            s.data,
-            name: s.settings.username,
-            dataVersion: s.dataVersion,
-            playerId: s.settings.playerId,
-            reconnectToken: token,
-          );
-          await _openLobby(session);
-        } catch (e) {
-          _error(e);
-        } finally {
-          if (mounted) setState(() => _busy = false);
-        }
-      },
-    );
-  }
+  void _openActivePlayers() => ActivePlayersDrawer.show(context);
 
   Future<String?> _askPassword(String lobby) async {
     final c = TextEditingController();

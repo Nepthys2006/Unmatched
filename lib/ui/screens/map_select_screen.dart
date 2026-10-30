@@ -4,7 +4,9 @@ library;
 
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 
 import '../../engine/defs.dart';
 import '../board/board_painter.dart';
@@ -46,14 +48,7 @@ class _MapSelectScreenState extends State<MapSelectScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final i = widget.maps.indexOf(_selected);
-      if (i > 0 && _scroll.hasClients) {
-        _scroll.animateTo(
-          (i * 300.0 - 40).clamp(0, _scroll.position.maxScrollExtent),
-          duration: const Duration(milliseconds: 350),
-          curve: Curves.easeOutCubic,
-        );
-      }
+      MapStrip.scrollTo(_scroll, widget.maps.indexOf(_selected), const Duration(milliseconds: 350));
     });
   }
 
@@ -67,14 +62,7 @@ class _MapSelectScreenState extends State<MapSelectScreen> {
     final others = widget.maps.where((m) => m != _selected).toList();
     final pick = (others.isEmpty ? widget.maps : others)[math.Random().nextInt(others.isEmpty ? widget.maps.length : others.length)];
     setState(() => _selected = pick);
-    final i = widget.maps.indexOf(pick);
-    if (_scroll.hasClients) {
-      _scroll.animateTo(
-        (i * 300.0 - 40).clamp(0, _scroll.position.maxScrollExtent),
-        duration: const Duration(milliseconds: 400),
-        curve: Curves.easeOutCubic,
-      );
-    }
+    MapStrip.scrollTo(_scroll, widget.maps.indexOf(pick), const Duration(milliseconds: 400));
   }
 
   void _confirm() {
@@ -105,34 +93,29 @@ class _MapSelectScreenState extends State<MapSelectScreen> {
                           label: 'Random',
                           icon: Icons.shuffle_rounded,
                           style: PlateStyle.secondary,
-                          height: 38,
+                          height: compactHeight(context) ? 34 : 38,
                           fontSize: 14,
                           onPressed: _random,
                         )
                       : null,
                 ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 4, 24, 8),
-                  child: SectionLabel(
-                    '${maps.length} available battlefield${maps.length == 1 ? '' : 's'}',
-                    trailing: Text(
-                      'Tap any battlefield to view map layout and special rules',
-                      style: bodyStyle(12, color: Palette.muted),
+                if (!compactHeight(context))
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 4, 24, 8),
+                    child: SectionLabel(
+                      '${maps.length} available battlefield${maps.length == 1 ? '' : 's'}',
+                      trailing: Text(
+                        'Tap any battlefield to view map layout and special rules',
+                        style: bodyStyle(12, color: Palette.muted),
+                      ),
                     ),
                   ),
-                ),
                 Expanded(
-                  child: ListView.separated(
+                  child: MapStrip(
+                    maps: maps,
                     controller: _scroll,
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.fromLTRB(24, 4, 24, 12),
-                    itemCount: maps.length,
-                    separatorBuilder: (_, _) => const SizedBox(width: 14),
-                    itemBuilder: (_, i) => MapCard(
-                      map: maps[i],
-                      selected: maps[i] == _selected,
-                      onTap: () => setState(() => _selected = maps[i]),
-                    ),
+                    isSelected: (m) => m == _selected,
+                    onTap: (m) => setState(() => _selected = m),
                   ),
                 ),
                 _bottomBar(),
@@ -146,8 +129,9 @@ class _MapSelectScreenState extends State<MapSelectScreen> {
 
   Widget _bottomBar() {
     final starts = _selected.spaces.where((s) => s.start != null).length;
+    final compact = compactHeight(context);
     return Container(
-      padding: const EdgeInsets.fromLTRB(24, 10, 24, 14),
+      padding: compact ? const EdgeInsets.fromLTRB(24, 6, 24, 8) : const EdgeInsets.fromLTRB(24, 10, 24, 14),
       decoration: const ShapeDecoration(
         color: Color(0xEB0A0D13),
         shape: Border(top: BorderSide(color: Palette.line, width: 1.5)),
@@ -186,13 +170,15 @@ class _MapSelectScreenState extends State<MapSelectScreen> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      _selected.blurb,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: bodyStyle(13, color: Palette.boneDim),
-                    ),
+                    if (!compact) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        _selected.blurb,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: bodyStyle(13, color: Palette.boneDim),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -202,16 +188,16 @@ class _MapSelectScreenState extends State<MapSelectScreen> {
                   label: 'Select Battlefield',
                   icon: Icons.check_rounded,
                   style: PlateStyle.confirm,
-                  height: 48,
-                  fontSize: 17,
+                  height: compact ? 38 : 48,
+                  fontSize: compact ? 14 : 17,
                   onPressed: _confirm,
                 )
               else
                 PlateButton(
                   label: 'Close',
                   style: PlateStyle.secondary,
-                  height: 46,
-                  fontSize: 16,
+                  height: compact ? 38 : 46,
+                  fontSize: compact ? 14 : 16,
                   onPressed: () => Navigator.of(context).pop(),
                 ),
             ],
@@ -222,9 +208,109 @@ class _MapSelectScreenState extends State<MapSelectScreen> {
   }
 }
 
+/// The scrolling row of battlefield cards, shared by match setup, the lobby and the picker.
+///
+/// Built to scroll smoothly: fixed-extent children (no per-frame measuring), every card in its own
+/// repaint layer, a little pre-built overscroll so images decode before they slide in, and the
+/// mouse wheel / touchpad mapped onto the sideways scroll (a plain horizontal list ignores the
+/// vertical wheel on desktop and the web) with mouse dragging enabled.
+class MapStrip extends StatefulWidget {
+  const MapStrip({
+    super.key,
+    required this.maps,
+    required this.controller,
+    required this.isSelected,
+    required this.onTap,
+    this.padding = const EdgeInsets.fromLTRB(24, 4, 10, 8),
+  });
+
+  final List<MapDef> maps;
+  final ScrollController controller;
+  final bool Function(MapDef map) isSelected;
+  final void Function(MapDef map) onTap;
+  final EdgeInsets padding;
+
+  /// One card plus the gap after it.
+  static const extent = MapCard.width + 14.0;
+
+  /// Scrolls so the card at [index] sits near the left edge.
+  static void scrollTo(ScrollController c, int index, Duration duration) {
+    if (index < 0 || !c.hasClients) return;
+    c.animateTo(
+      (index * extent - 40).clamp(0.0, c.position.maxScrollExtent),
+      duration: duration,
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  @override
+  State<MapStrip> createState() => _MapStripState();
+}
+
+class _MapStripState extends State<MapStrip> {
+  double? _wheelTarget;
+
+  void _onSignal(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent) return;
+    final c = widget.controller;
+    if (!c.hasClients) return;
+    // Sideways gestures (shift+wheel, touchpad) already scroll the list; only turn vertical into sideways.
+    final dx = event.scrollDelta.dx, dy = event.scrollDelta.dy;
+    if (dx.abs() >= dy.abs()) return;
+    GestureBinding.instance.pointerSignalResolver.register(event, (e) {
+      final p = c.position;
+      // Fine deltas (touchpads) follow the fingers directly; wheel notches glide.
+      if (dy.abs() < 40) {
+        _wheelTarget = null;
+        c.jumpTo((p.pixels + dy).clamp(0.0, p.maxScrollExtent));
+        return;
+      }
+      final base = (_wheelTarget != null && p.isScrollingNotifier.value) ? _wheelTarget! : p.pixels;
+      final target = (base + dy * 1.4).clamp(0.0, p.maxScrollExtent);
+      _wheelTarget = target;
+      c.animateTo(target, duration: const Duration(milliseconds: 220), curve: Curves.easeOutCubic);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final maps = widget.maps;
+    return Listener(
+      onPointerSignal: _onSignal,
+      child: ScrollConfiguration(
+        behavior: ScrollConfiguration.of(context).copyWith(
+          dragDevices: const {PointerDeviceKind.touch, PointerDeviceKind.mouse, PointerDeviceKind.trackpad, PointerDeviceKind.stylus},
+          scrollbars: false,
+        ),
+        child: ListView.builder(
+          controller: widget.controller,
+          scrollDirection: Axis.horizontal,
+          padding: widget.padding,
+          itemCount: maps.length,
+          itemExtent: MapStrip.extent,
+          scrollCacheExtent: const ScrollCacheExtent.pixels(MapStrip.extent * 3),
+          addAutomaticKeepAlives: false,
+          itemBuilder: (_, i) {
+            final m = maps[i];
+            return RepaintBoundary(
+              key: ValueKey(m.id),
+              child: Padding(
+                padding: const EdgeInsets.only(right: 14),
+                child: MapCard(map: m, selected: widget.isSelected(m), onTap: () => widget.onTap(m)),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
 /// A card displaying a battlefield's preview, name, description, spaces, starts, and zones.
 class MapCard extends StatelessWidget {
   const MapCard({super.key, required this.map, required this.selected, required this.onTap});
+
+  static const width = 290.0;
   final MapDef map;
   final bool selected;
   final VoidCallback onTap;
@@ -232,10 +318,10 @@ class MapCard extends StatelessWidget {
   /// The 3D map's screenshot when playing in 3D, else the 2D board.
   Widget _preview(BuildContext context) {
     final thumb = modelThumb(map);
-    if (thumb == null || !context.services.settings.board3d || !board3dSupported) return MapPreview(map);
+    if (thumb == null || !context.services.settings.board3d || !board3dSupported) return MapPreview(map, cacheWidth: 640, quality: FilterQuality.medium);
     return ClipPath(
       clipper: const ShapeBorderClipper(shape: ChamferBorder(cut: 6)),
-      child: Image.asset(thumb, fit: BoxFit.cover, width: double.infinity, height: double.infinity),
+      child: Image.asset(thumb, fit: BoxFit.cover, width: double.infinity, height: double.infinity, cacheWidth: 640),
     );
   }
 
@@ -251,7 +337,7 @@ class MapCard extends StatelessWidget {
       selected: selected,
       label: '${map.name}. ${map.blurb}',
       child: SizedBox(
-        width: 290,
+        width: width,
         child: Material(
           color: selected ? Palette.panelHi : Palette.panel,
           shape: shape,
