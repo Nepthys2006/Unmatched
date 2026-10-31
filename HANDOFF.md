@@ -16,6 +16,7 @@ A fan-made, personal-use digital version of the board game **Unmatched** (Restor
 | Flutter UI (`lib/ui/`) | **Playable end to end**, every mode. See TODO.md for what's left. |
 | Maps (`assets/maps/`, `assets/data/maps.json`) | **Done.** 47 printed-style 2D boards (the 32 official maps + 15 own, 5 of them 3v3). Built by `tool/build_maps.py`. The 3D view (`lib/ui/board3d/`) is no longer used. |
 | 3D fighters (`assets/web3d/board.js`, `assets/web3d/figures.json`) | **Done.** Each fighter is its miniature render sculpted into a rounded relief (sidekicks: their token as a domed coin) on a podium in the player's colour, turned to face the camera, with a shield badge (portrait, name, HP). Falls back to the orb if its picture is missing. |
+| Ghost Rider 3D model (`assets/web3d/ghost-rider/`) | **Done, standalone.** Procedural Three.js build of the character sheet (`model.js`): the rider (stance with a burning chain whip, or T-pose), the Hell Cycle, and the rider on the bike posed by IK with fire everywhere (GPU particle fire + bloom). Open `index.html` through a local server (`python3 -m http.server` in `assets/`) for the viewer. `.glb` exports (no fire) in `models/`, rebuilt by `node tool/export_ghost_rider.mjs`. Not in the app bundle or on the board yet. |
 
 ## The user's requirements for the UI (all still to build)
 

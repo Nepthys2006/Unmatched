@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Ghost Rider 3D</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600&family=Saira+Condensed:wght@700;800&display=swap">
+<script type="importmap">
+{ "imports": { "three": "../three/three.module.min.js", "three/addons/": "../three/addons/" } }
+</script>
+<style>
+  /* Layout: the model fills the screen; the name sits top left, the sheet's palette top right,
+     and a steel dock along the bottom switches model and pose. One dark look, on purpose: fire reads
+     best on black. */
+  @font-face { font-family: "GR Saira"; font-weight: 800; src: url("../../fonts/SairaCondensed-ExtraBold.ttf") format("truetype"); }
+  @font-face { font-family: "GR Barlow"; font-weight: 500; src: url("../../fonts/BarlowSemiCondensed-Medium.ttf") format("truetype"); }
+  @font-face { font-family: "GR Barlow"; font-weight: 600; src: url("../../fonts/BarlowSemiCondensed-SemiBold.ttf") format("truetype"); }
+  :root {
+    --night: #0a0807;          /* asphalt at midnight */
+    --leather: #151314;        /* jacket black */
+    --steel: #b5b8bd;          /* chain and chrome */
+    --steel-dim: #75787e;
+    --infernal: #f07316;       /* the skull's fire */
+    --ember: #ffa028;
+    --blue-flame: #3d82ff;
+    --line: rgba(181, 184, 189, .16);
+    --display: "GR Saira", "Saira Condensed", "Arial Narrow", sans-serif;
+    --ui: "GR Barlow", "Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
+    color-scheme: dark;
+  }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--night); color: var(--steel); font-family: var(--ui); overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #stage { position: fixed; inset: 0; }
+  #stage canvas { display: block; width: 100%; height: 100%; touch-action: none; outline: none; }
+
+  .brand {
+    position: fixed; top: calc(env(safe-area-inset-top, 0px) + 18px);
+    left: max(16px, env(safe-area-inset-left, 0px)); pointer-events: none;
+  }
+  .brand h1 {
+    margin: 0; font-family: var(--display); font-weight: 800; font-size: clamp(30px, 5.2vw, 54px);
+    line-height: .9; letter-spacing: .01em; text-transform: uppercase; color: #f3eee8;
+    text-shadow: 0 0 18px rgba(240, 115, 22, .55), 0 0 2px rgba(255, 160, 40, .8);
+  }
+  .brand p { margin: 8px 0 0; font-size: 13px; font-weight: 500; letter-spacing: .14em; text-transform: uppercase; color: var(--steel-dim); }
+
+  .palette {
+    position: fixed; top: calc(env(safe-area-inset-top, 0px) + 20px);
+    right: max(16px, env(safe-area-inset-right, 0px));
+    display: grid; grid-template-columns: repeat(6, 44px); gap: 6px; pointer-events: none;
+  }
+  .palette figure { margin: 0; display: grid; gap: 5px; }
+  .palette i { display: block; height: 22px; border-radius: 2px; border: 1px solid var(--line); }
+  .palette figcaption { font-size: 9.5px; line-height: 1.15; letter-spacing: .08em; text-transform: uppercase; color: var(--steel-dim); }
+
+  .dock {
+    position: fixed; left: 0; right: 0; bottom: 0;
+    padding-block: 14px calc(env(safe-area-inset-bottom, 0px) + 16px);
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px 18px;
+    background: linear-gradient(to top, rgba(10, 8, 7, .92), rgba(10, 8, 7, 0));
+  }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 3px; background: rgba(21, 19, 20, .85); overflow: hidden; }
+  .seg button {
+    appearance: none; border: 0; background: none; color: var(--steel); font: 600 14px/1 var(--ui);
+    letter-spacing: .1em; text-transform: uppercase; padding: 11px 16px; cursor: pointer; white-space: nowrap;
+  }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button:hover { color: #fff; }
+  .seg button[aria-pressed="true"], .seg button[aria-selected="true"] {
+    color: #160b03; background: linear-gradient(180deg, var(--ember), var(--infernal));
+  }
+  .views button { font-size: 15px; padding: 12px 18px; }
+  .seg button:focus-visible { outline: 2px solid var(--blue-flame); outline-offset: -2px; }
+  .opts { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center; }
+  .hint {
+    position: fixed; right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(env(safe-area-inset-bottom, 0px) + 84px);
+    margin: 0; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--steel-dim); pointer-events: none;
+  }
+  #status {
+    position: fixed; inset: 0; display: grid; place-items: center; pointer-events: none;
+    font: 600 14px var(--ui); letter-spacing: .2em; text-transform: uppercase; color: var(--ember);
+  }
+  @media (max-width: 720px) {
+    .palette { display: none; }
+    .hint { display: none; }
+    .seg button { padding: 10px 12px; font-size: 13px; }
+    .views button { padding: 11px 13px; font-size: 14px; }
+  }
+</style>
+</head>
+<body>
+<div id="stage" aria-label="3D view of Ghost Rider. Drag to orbit, scroll or pinch to zoom."></div>
+
+<header class="brand">
+  <h1>Ghost Rider</h1>
+  <p id="caption">The rider, on foot</p>
+</header>
+
+<aside class="palette" aria-label="Colour palette from the character sheet">
+  <figure><i style="background:#f07316"></i><figcaption>Infernal orange</figcaption></figure>
+  <figure><i style="background:#1560e8"></i><figcaption>Blue flame</figcaption></figure>
+  <figure><i style="background:#ffa028"></i><figcaption>Ember glow</figcaption></figure>
+  <figure><i style="background:#1e1f22"></i><figcaption>Metal black</figcaption></figure>
+  <figure><i style="background:#121214"></i><figcaption>Leather black</figcaption></figure>
+  <figure><i style="background:linear-gradient(135deg,#e2e4e7,#8d9096)"></i><figcaption>Steel silver</figcaption></figure>
+</aside>
+
+<p class="hint">Drag to orbit · scroll to zoom</p>
+<div id="status">Lighting the hellfire</div>
+
+<nav class="dock" aria-label="Model controls">
+  <div class="seg views" role="tablist" aria-label="Model">
+    <button id="v-rider" role="tab" data-view="rider" aria-selected="true">Rider</button>
+    <button id="v-cycle" role="tab" data-view="cycle" aria-selected="false">Hell Cycle</button>
+    <button id="v-riding" role="tab" data-view="riding" aria-selected="false">Riding</button>
+  </div>
+  <div class="opts">
+    <div class="seg" data-for="rider" aria-label="Pose">
+      <button id="p-stance" data-pose="stance" aria-pressed="true">Stance</button>
+      <button id="p-tpose" data-pose="tpose" aria-pressed="false">T-pose</button>
+    </div>
+    <div class="seg" data-for="riding" aria-label="Throttle" hidden>
+      <button id="t-open" data-throttle="1" aria-pressed="true">Full throttle</button>
+      <button id="t-idle" data-throttle="0" aria-pressed="false">Parked</button>
+    </div>
+    <div class="seg" aria-label="View options">
+      <button id="o-spin" data-toggle="spin" aria-pressed="true">Turntable</button>
+      <button id="o-glow" data-toggle="glow" aria-pressed="true">Glow</button>
+    </div>
+  </div>
+</nav>
+
+<script type="module" src="./viewer.js"></script>
+</body>
+</html>
