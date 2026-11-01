@@ -12,16 +12,36 @@ import 'package:unmatched_game/net/session.dart';
 import 'net_test.dart' show Copy, until;
 import 'support.dart';
 
-/// The service-role client from the local .env if present.
-SupabaseClient? admin() {
+Map<String, String> _env() {
   final f = File('.env');
-  if (!f.existsSync()) return null;
-  final env = {
+  if (!f.existsSync()) return {};
+  return {
     for (final l in f.readAsLinesSync())
       if (l.contains('=') && !l.startsWith('#')) l.substring(0, l.indexOf('=')).trim(): l.substring(l.indexOf('=') + 1).trim(),
   };
+}
+
+/// The service-role client from the local .env if present.
+SupabaseClient? admin() {
+  final env = _env();
   final url = env['SUPABASE_URL'], key = env['SUPABASE_SERVICE_ROLE_KEY'] ?? env['SUPABASE_KEY'];
   return url == null || key == null || key.isEmpty ? null : SupabaseClient(url, key);
+}
+
+/// Only with a real service-role key (the tables are closed to the anon key by design).
+SupabaseClient? serviceRole() {
+  final env = _env();
+  final url = env['SUPABASE_URL'], key = env['SUPABASE_SERVICE_ROLE_KEY'];
+  return url == null || key == null || key.isEmpty ? null : SupabaseClient(url, key);
+}
+
+/// A second, separate connection for the guest: two devices never share one realtime socket, and
+/// sharing it here made the guest unable to see the host's presence.
+SupabaseClient? guestClient() {
+  final env = _env();
+  final url = env['SUPABASE_URL'], key = env['SUPABASE_KEY'] ?? env['SUPABASE_ANON_KEY'];
+  if (url != null && key != null && key.isNotEmpty) return SupabaseClient(url, key);
+  return isOnlineConfigured ? newSupabaseClient() : null;
 }
 
 void main() {
@@ -42,18 +62,19 @@ void main() {
     );
     final host = HostSession(hostLink, data, name: 'Host', dataVersion: 'test');
 
+    final guest = guestClient() ?? targetClient;
     final listed = (await listLobbies(client: targetClient)).where((l) => l.name == tag).toList();
     expect(listed, hasLength(1));
     expect(listed.single.locked, isTrue);
     expect(listed.single.open, 1);
 
     await expectLater(
-      OnlineClient.join(listed.single.id, password: 'wrong', client: targetClient),
+      OnlineClient.join(listed.single.id, password: 'wrong', client: guest),
       throwsA(predicate((e) => '$e'.contains('Wrong password'))),
     );
 
     final c = ClientSession(
-      await OnlineClient.join(listed.single.id, password: 'sesame', client: targetClient),
+      await OnlineClient.join(listed.single.id, password: 'sesame', client: guest),
       data,
       name: 'Guest',
       dataVersion: 'test',
@@ -79,7 +100,7 @@ void main() {
 
     final winner = a.game.winner?.hero.name;
     await host.match!.reportResult(winner: winner, players: ['Host', 'Guest']);
-    final sb = admin();
+    final sb = serviceRole();
     if (sb != null) {
       final lobby = await sb.from('lobbies').select('id').eq('name', tag);
       expect(lobby, isEmpty, reason: 'the lobby row is deleted when the match ends');

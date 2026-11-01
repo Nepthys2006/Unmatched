@@ -67,7 +67,7 @@ void main() {
         for (var i = 0; i < 9000 && yourTurn.evaluate().isEmpty; i++) {
           await t.pump(const Duration(milliseconds: 20));
           // Optional start-of-turn choices and defending (an opponent may attack first): pass.
-          for (final label in ['SKIP', 'NO DEFENSE']) {
+          for (final label in ['SKIP', 'NO DEFENSE', 'KEEP HAND']) {
             final skip = find.text(label);
             if (skip.evaluate().isNotEmpty) await t.tap(skip.first);
           }

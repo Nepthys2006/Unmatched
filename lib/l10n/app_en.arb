@@ -1,0 +1,33 @@
+{
+  "@@locale": "en",
+
+  "fsTitleIphone": "Full screen on iPhone",
+  "@fsTitleIphone": { "description": "Title of the help dialog on an iPhone (shown in capitals)." },
+  "fsTitleIpad": "Full screen on iPad",
+  "@fsTitleIpad": { "description": "Title of the help dialog on an iPad (shown in capitals)." },
+  "fsBodyIphone": "Safari can't show a web page full screen on iPhone. Add Unmatched to your Home Screen and open it from there: it runs without Safari's bars.",
+  "fsBodyIpad": "Add Unmatched to your Home Screen and open it from there: it runs full screen without Safari's bars.",
+  "fsStepShareIphoneSafari": "Tap Share in Safari",
+  "@fsStepShareIphoneSafari": { "description": "Step 1 on iPhone Safari: the Share button is in the bottom bar." },
+  "fsStepShareIpadSafari": "Tap Share in the top bar of Safari",
+  "@fsStepShareIpadSafari": { "description": "Step 1 on iPad Safari: the Share button is at the top right." },
+  "fsStepShareOther": "Tap Share (or the menu) in your browser",
+  "@fsStepShareOther": { "description": "Step 1 in another iOS browser (Chrome, Firefox, Edge...)." },
+  "fsStepAdd": "Choose Add to Home Screen",
+  "fsStepOpen": "Open Unmatched from your Home Screen",
+  "fsGotIt": "Got it",
+  "fsDialogLabel": "Add Unmatched to your Home Screen",
+  "@fsDialogLabel": { "description": "The dialog's accessible name (read by screen readers)." },
+  "fsStepNumber": "Step {number}",
+  "@fsStepNumber": { "placeholders": { "number": { "type": "int" } } },
+
+  "fsButtonEnter": "Full screen",
+  "fsButtonExit": "Exit full screen",
+  "fsInstallApp": "Better full screen: install the app",
+  "fsInstallAppHint": "Add Unmatched to your Home Screen to play without Safari's bars.",
+
+  "rotateTitle": "Turn your phone",
+  "rotateBody": "Unmatched is played in landscape.",
+  "largerTitle": "Make this window larger",
+  "largerBody": "Unmatched needs a bit more room. Drag the window wider, or open it full screen."
+}

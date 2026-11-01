@@ -39,6 +39,7 @@ class Game {
     Random? random,
     this.presenter,
     this.firstSeat,
+    this.mulligans = false,
     List<int>? teams,
     HeroScript Function(String heroId)? scripts,
   })  : // Real games shuffle with the OS's cryptographic RNG so decks can't be predicted;
@@ -71,6 +72,10 @@ class Game {
 
   /// Seat that goes first; random when null.
   final int? firstSeat;
+
+  /// Offer every player one mulligan after the starting hands are drawn. Off by default: it adds
+  /// a prompt to setup, so only a front end that can show it turns it on.
+  final bool mulligans;
   final List<Player> players = [];
   final List<GameEvent> log = [];
   final Map<String, CardScript> commonCards = commonCardScripts;
@@ -196,6 +201,35 @@ class Game {
       p.deck.removeRange(0, min(n, p.deck.length));
       await emit(CardsDrawn(p, List.of(p.hand)));
     }
+    if (mulligans) {
+      for (final p in order) {
+        await offerMulligan(p);
+      }
+    }
+  }
+
+  /// One mulligan per player per game: keep the starting hand, or shuffle all of it back into the
+  /// deck and draw a new hand of the same size. The new hand is final.
+  Future<void> offerMulligan(Player p) async {
+    if (p.mulliganUsed || p.hand.isEmpty) return;
+    p.mulliganUsed = true;
+    final size = p.hand.length;
+    final take = await chooseOption(p, const ['Mulligan', 'Keep Hand'],
+            'Opening hand: keep it, or take your one mulligan (shuffle it back and draw $size new cards)?',
+            intent: Intent.mulligan) ==
+        0;
+    if (take) {
+      p.deck.addAll(p.hand);
+      p.hand.clear();
+      p.deck.shuffle(rng);
+      // A hero's guaranteed starting card (Black Widow's mission) comes back to the hand first.
+      await p.script.beforeStartingHand();
+      final n = max(0, size - p.hand.length);
+      p.hand.addAll(p.deck.take(n));
+      p.deck.removeRange(0, min(n, p.deck.length));
+    }
+    await emit(Mulliganed(p, take));
+    if (take) await emit(CardsDrawn(p, List.of(p.hand)));
   }
 
   Future<void> playTurn(Player p) async {

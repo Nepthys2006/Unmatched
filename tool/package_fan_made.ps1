@@ -19,6 +19,15 @@ foreach ($need in @("$ProjectDir\build\web\index.html", "$WindowsBuild\Unmatched
     if (-not (Test-Path $need)) { throw "Missing $need - run rebuild_and_release_all.ps1 first." }
 }
 
+# The offline worker of a web build must carry its own cache name (tool\stamp_sw.py, run by the
+# rebuild script); an unstamped one would keep returning players on an old release.
+foreach ($web in @("$ProjectDiruild\web", "$ProjectDiruild\web_play")) {
+    $sw = "$web\sw.js"
+    if ((Test-Path $sw) -and (Select-String -Path $sw -SimpleMatch '__BUILD__' -Quiet)) {
+        throw "$sw is not stamped (still has __BUILD__) - run rebuild_and_release_all.ps1, or: python tool/stamp_sw.py build/web build/web_play"
+    }
+}
+
 Write-Host "1. Syncing the /play/ web build to landing/play..."
 # The website needs the build made with --base-href /play/ (build\web_play). The plain web build
 # (build\web, base href /) would break the site's /play/ page.

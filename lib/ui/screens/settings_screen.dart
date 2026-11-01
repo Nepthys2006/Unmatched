@@ -10,6 +10,7 @@ import '../services.dart';
 import '../settings.dart';
 import '../shapes.dart';
 import '../theme.dart';
+import '../match/fullscreen_button.dart';
 import '../widgets.dart';
 import 'username_screen.dart';
 
@@ -30,7 +31,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final s = context.services.settings;
     setState(() => _signingOut = true);
     await AccountService().signOut(s.accountToken);
-    s.update((x) => x.accountToken = '');
+    s.update((x) => x
+      ..accountToken = ''
+      ..accountId = '');
     if (!mounted) return;
     await Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute<void>(builder: (_) => const UsernameScreen()),
@@ -123,6 +126,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ),
       const SizedBox(height: 14),
+      const FullscreenSettingsRow(),
       const SectionLabel('Graphics'),
       Row(
         children: [

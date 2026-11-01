@@ -95,13 +95,17 @@ class _LoadingScreenState extends State<LoadingScreen> with SingleTickerProvider
           final name = await AccountService().check(s.settings.accountToken);
           if (name == null) {
             account = false;
-            s.settings.update((x) => x.accountToken = '');
+            s.settings.update((x) => x
+              ..accountToken = ''
+              ..accountId = '');
           } else if (name != s.settings.username) {
             s.settings.update((x) => x.username = name);
           }
         } catch (_) {}
       }
       if (!mounted) return;
+      // Signed in: send whatever was saved while the app was closed or offline.
+      if (account) s.sync.nudge();
       // The map editor is offline work: no sign-in (a placeholder name, not saved).
       if ((mapDebug || _demo) && !account && !s.settings.hasUsername) s.settings.username = _demo ? 'Demo' : 'MapDebug';
       final Widget next = _quickMatch.isNotEmpty ? _quick(s) : (account || mapDebug || _demo ? const MenuScreen() : const UsernameScreen());

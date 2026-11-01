@@ -18,6 +18,7 @@ OUT = ROOT / 'assets' / 'webapp'
 KEEP = [
     'index.html', 'main.dart.js', 'flutter.js', 'flutter_bootstrap.js', 'manifest.json', 'favicon.png', 'version.json',
     'icons/Icon-192.png', 'icons/Icon-512.png',
+    'icons/apple-touch-icon-180.png', 'icons/apple-touch-icon-167.png', 'icons/apple-touch-icon-152.png',
     'canvaskit/canvaskit.js', 'canvaskit/canvaskit.wasm',
     'canvaskit/chromium/canvaskit.js', 'canvaskit/chromium/canvaskit.wasm',
     'assets/AssetManifest.bin', 'assets/AssetManifest.bin.json', 'assets/FontManifest.json', 'assets/NOTICES',

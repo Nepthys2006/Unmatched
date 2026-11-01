@@ -1,6 +1,7 @@
 /// App-wide services (settings, audio, game data) handed down the tree.
 library;
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/services.dart';
@@ -9,14 +10,62 @@ import 'package:flutter/widgets.dart';
 import '../engine/defs.dart';
 import '../engine/heroes/registry.dart';
 import '../engine/ismcts/evaluator.dart';
+import '../net/match_store.dart';
+import '../net/match_sync.dart';
+import '../net/profile_stats.dart';
+import '../net/rules_version.dart';
+import 'platform/fullscreen_controller.dart';
+import 'platform/fullscreen_help_storage.dart';
+import 'platform/platform_info_factory.dart';
+import 'platform/platform_info_service.dart';
 import 'audio.dart';
 import 'settings.dart';
 
 class Services {
-  Services({required this.settings, required this.audio, this.preloadImages = true});
+  Services({
+    required this.settings,
+    required this.audio,
+    this.preloadImages = true,
+    MatchStore? matchStore,
+    MatchBackend? matchBackend,
+    PlatformInfoService? platformInfo,
+    FullscreenHelpStorage? helpStorage,
+    this.debugPanel = false,
+  }) {
+    fullscreen = FullscreenController(
+      platform: platformInfo ?? createPlatformInfoService(),
+      storage: helpStorage ?? const SharedPrefsFullscreenHelpStorage(),
+    );
+    unawaited(fullscreen.load());
+    matches = matchStore ?? MatchStore.memory();
+    sync = MatchSyncService(
+      store: matches,
+      backend: matchBackend ?? const NoBackend(),
+      token: () => settings.accountToken,
+      accountId: () => settings.accountId,
+      onAccountId: (id) => settings.update((x) => x.accountId = id),
+      onProfile: ProfileStats.instance.applyServerProfile,
+    );
+  }
 
   final Settings settings;
   final Audio audio;
+
+  /// Show the hidden debug panel's launcher (debug builds and `?debug=1`; set by main()).
+  final bool debugPanel;
+
+  /// What the Full Screen button does on this device, and whether the Home Screen help may show.
+  late final FullscreenController fullscreen;
+
+  /// The debug panel's "Simulate portrait / Split View": the window size the app should pretend to
+  /// have (null: the real one). Never set in a normal session.
+  final ValueNotifier<Size?> simulatedWindow = ValueNotifier(null);
+
+  /// Every finished match, saved on this device first.
+  late final MatchStore matches;
+
+  /// Sends the saved matches to the server whenever it can, and tells how that is going.
+  late final MatchSyncService sync;
 
   /// Off in widget tests, where image decoding never finishes inside fake time.
   final bool preloadImages;
@@ -41,7 +90,8 @@ class Services {
 
   GameData get data => _data ?? (throw StateError('Game data not loaded yet'));
 
-  /// Fingerprint of the hero and map data: multiplayer only pairs devices with the same rules.
+  /// Fingerprint of the rules data (see rules_version.dart): multiplayer pairs devices that play the
+  /// same rules, whatever platform or build they run.
   String dataVersion = '';
   bool get loaded => _data != null;
 
@@ -50,25 +100,18 @@ class Services {
   Future<GameData> loadData([AssetBundle? bundle]) async {
     if (_data != null) return _data!;
     final b = bundle ?? rootBundle;
-    var hash = 0x811c9dc5;
     Future<Object?> json(String path) async {
       final bytes = await b.load(path);
       final list = bytes.buffer.asUint8List(bytes.offsetInBytes, bytes.lengthInBytes);
-      // FNV-1a over the raw file bytes. The multiply by 0x01000193 (2^24 + 0x193) is split so no
-      // intermediate passes 2^53: on the web ints are doubles, and a plain multiply loses bits
-      // there, giving the browser a different "game version" from the apps.
-      for (final x in list) {
-        final h = hash ^ x;
-        hash = (h * 0x193 + (h & 0xFF) * 0x1000000) & 0xFFFFFFFF;
-      }
       return jsonDecode(utf8.decode(list));
     }
 
     final heroes = await json('assets/data/heroes.json') as List;
     final maps = await json('assets/data/maps.json') as Map<String, dynamic>;
-    dataVersion = hash.toRadixString(16);
     // heroes.json lists all 70 heroes; only those whose cards are scripted are playable.
-    return _data = GameData.fromJson(heroes, maps)..heroes.removeWhere((id, _) => !isImplemented(id));
+    final data = GameData.fromJson(heroes, maps)..heroes.removeWhere((id, _) => !isImplemented(id));
+    dataVersion = rulesFingerprint(heroes, maps, playable: data.heroes.keys);
+    return _data = data;
   }
 }
 

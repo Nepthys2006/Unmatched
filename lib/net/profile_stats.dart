@@ -87,17 +87,12 @@ enum MmrTier {
   MmrTier? get next => index + 1 < values.length ? values[index + 1] : null;
 }
 
-/// MMR arithmetic (Elo): everyone starts at [start]; a result moves the rating by how surprising
-/// it was. New players move faster for their first [provisional] ranked matches.
+/// MMR is calculated by the server (Elo, start 1000, K 32 and 48 for a player's first 10 ranked
+/// matches; see supabase/match_sync.sql) when a match is synced, in order of played_at. This device
+/// only shows the last rating the server told it, so a match played offline moves nothing here until
+/// it has been synced and the server has verified it.
 abstract final class Mmr {
   static const start = 1000;
-  static const provisional = 10;
-
-  static int delta({required int mine, required int theirs, required bool won, required int rankedMatches}) {
-    final expected = 1 / (1 + math.pow(10, (theirs - mine) / 400));
-    final k = rankedMatches < provisional ? 40 : 24;
-    return (k * ((won ? 1 : 0) - expected)).round();
-  }
 }
 
 class RecentMatch {
@@ -265,9 +260,23 @@ class ProfileStats extends ChangeNotifier {
 
   PlayerProfile get profile => PlayerProfile.fromPayload(toSummaryPayload());
 
-  /// Records a finished match. [pvp] means at least one opponent was a real player; then
-  /// [opponentMmr] (the opponents' average, if known) sets how far the rating moves.
-  /// Returns the MMR change (0 for matches against the AI).
+  /// Ranked matches the server has counted for this player (as of the last sync).
+  int rankedMatches = 0;
+
+  /// The rating the server reported for this account (see [applyServerProfile]).
+  void applyServerProfile(Map<String, Object?> p) {
+    final m = (p['mmr'] as num?)?.toInt();
+    if (m == null) return;
+    mmr = math.max(0, m);
+    peakMmr = math.max(mmr, (p['peak_mmr'] as num?)?.toInt() ?? mmr);
+    rankedMatches = (p['ranked_matches'] as num?)?.toInt() ?? rankedMatches;
+    notifyListeners();
+    _save();
+  }
+
+  /// Records a finished match in the local books. [pvp] means at least one opponent was a real
+  /// player. The rating is NOT touched here: the server rates a match when it syncs and verifies it.
+  /// Returns 0 (kept so callers read the same either way).
   int recordMatch({
     required bool won,
     required String heroId,
@@ -276,14 +285,10 @@ class ProfileStats extends ChangeNotifier {
     required String mapId,
     required String mode,
     bool pvp = false,
-    int? opponentMmr,
   }) {
-    var change = 0;
+    const change = 0;
     if (pvp) {
-      change = Mmr.delta(mine: mmr, theirs: opponentMmr ?? Mmr.start, won: won, rankedMatches: this.pvp.matches);
       this.pvp = this.pvp.plus(won: won);
-      mmr = math.max(0, mmr + change);
-      peakMmr = math.max(peakMmr, mmr);
     } else {
       pve = pve.plus(won: won);
     }
@@ -368,6 +373,7 @@ class ProfileStats extends ChangeNotifier {
       pve = Record(wins: p.getInt('stats_pve_wins') ?? 0, losses: p.getInt('stats_pve_losses') ?? 0);
       mmr = p.getInt('stats_mmr') ?? Mmr.start;
       peakMmr = p.getInt('stats_mmr_peak') ?? mmr;
+      rankedMatches = p.getInt('stats_ranked') ?? 0;
     } else {
       // Saved before the split: the matches in the history that were online were against people
       // (the history keeps the last 40), everything else counts as against the AI.
@@ -393,6 +399,7 @@ class ProfileStats extends ChangeNotifier {
       await p.setInt('stats_pve_losses', pve.losses);
       await p.setInt('stats_mmr', mmr);
       await p.setInt('stats_mmr_peak', peakMmr);
+      await p.setInt('stats_ranked', rankedMatches);
       await p.setString('stats_heroes', jsonEncode({for (final e in heroRecords.entries) e.key: e.value.toJson()}));
       await p.setString('stats_recent', jsonEncode([for (final m in recentMatches) m.toJson()]));
     } catch (_) {}

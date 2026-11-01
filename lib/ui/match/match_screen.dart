@@ -23,10 +23,13 @@ import '../../engine/portable_random.dart';
 import '../../engine/prompt.dart';
 import '../../engine/state.dart';
 import '../audio.dart';
-import '../platform/fullscreen.dart';
+import '../dialogs/fullscreen_help_dialog.dart';
+import '../platform/platform_info.dart' show FullscreenAction;
 import '../board/board_painter.dart';
 import '../board3d/board3d.dart';
 import '../../net/chat.dart';
+import '../../net/match_record.dart';
+import '../../net/uuid.dart';
 import '../../net/session.dart';
 import '../../net/online_presence.dart';
 import '../../net/profile_stats.dart';
@@ -58,7 +61,10 @@ class _Abandoned implements Exception {
 }
 
 class MatchScreen extends StatefulWidget {
-  const MatchScreen({super.key, required this.config, this.seed, this.autoplay = _autoplay, this.net});
+  const MatchScreen({super.key, required this.config, this.seed, this.autoplay = _autoplay, this.net, this.turnLimit});
+
+  /// Tests only: how long a decision may take in a match against other people (default [turnLimit]).
+  final Duration? turnLimit;
 
   /// LAN / online: who sits where and how decisions travel. Null for a game against the AI.
   final NetMatch? net;
@@ -194,6 +200,29 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin,
   @visibleForTesting
   String? get debugError => _error;
   Size _viewport = Size.zero;
+
+  /// When play began (the length of the match, for the record saved at the end).
+  DateTime? _startedAt;
+
+  // Leaving, running out of time too often or dropping out of a 1 v 1 against a person is a loss.
+  bool _ended = false;
+  ({int seat, String reason})? _forfeit;
+  Timer? _turnTimer;
+  final ValueNotifier<int?> _countdown = ValueNotifier(null);
+  int _strikes = 0;
+
+  Duration get _limit => widget.turnLimit ?? turnLimit;
+
+  /// A match against other people has a clock on every decision (AI-only matches never do).
+  bool get _timed => widget.net != null && widget.net!.humanSeats.length >= 2 && !widget.autoplay && _limit > Duration.zero;
+  bool get _duelVsPerson => widget.net?.duelWithPerson ?? false;
+
+  /// The HUD's full screen shortcut: only where the browser can really do it (never the Home Screen
+  /// help in the middle of a match) and not while already full screen.
+  bool get _fullscreenButton {
+    final c = _s.fullscreen;
+    return (c.action == FullscreenAction.api || c.action == FullscreenAction.apiThenHelp) && !c.isFullscreen;
+  }
   Animation<Matrix4>? _camTween;
 
   /// The 3D map, when it's on (Settings > Battlefield) and this map and platform have one.
@@ -243,6 +272,7 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin,
     if (_started) return;
     _started = true;
     OnlinePresenceService.instance.updateStatus(status: 'inGame');
+    _s.fullscreen.inMatch = true;
     final cfg = widget.config;
     geo = BoardGeometry(cfg.map);
     final level = cfg.ai;
@@ -251,6 +281,9 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin,
       map: cfg.map,
       heroIds: cfg.heroIds,
       teams: cfg.teams,
+      // The mulligan opens every offline match. In lockstep matches the host decides at the start
+      // (only when every player's build has it); the choice is then one more numbered decision.
+      mulligans: widget.net?.mulligans ?? true,
       seed: widget.seed,
       random: widget.net == null ? null : PortableRandom(widget.net!.seed),
       presenter: _present,
@@ -270,6 +303,7 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin,
       _applyNames();
       net.names.addListener(_applyNames);
       net.lost.addListener(_onLost);
+      net.forfeit.addListener(_onForfeit);
       _rejoinBeat = _s.settings.startReconnectBeat();
       net.chat.addListener(_onChat);
       _chatSeen = net.chat.latestIncoming?.id ?? 0;
@@ -371,6 +405,8 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin,
     final why = widget.net?.lost.value;
     if (why == null || _disposed || !mounted || _result != null) return;
     await showConfirm(context, title: 'Connection lost', message: why, confirm: 'Back to menu', cancel: 'Stay');
+    // Not coming back to a 1 v 1 against a person is a forfeit (the other side is told if it can be).
+    if (mounted && _duelVsPerson && !_ended && _result == null) await _forfeitSelf('disconnect', announce: false);
     if (mounted) _toMenu();
   }
 
@@ -378,12 +414,15 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin,
     try {
       await _waitForBoard();
       if (_disposed) return;
+      _startedAt = DateTime.now();
       await game.run();
     } on _Abandoned {
       return;
     } catch (e, st) {
+      // A match ended by a forfeit stops its game loop in a wait that then fails: nothing to report.
+      if (_ended || _disposed) return;
       debugPrint('Match error: $e\n$st');
-      if (!_disposed) setState(() => _error = '$e');
+      setState(() => _error = '$e');
     }
   }
 
@@ -569,6 +608,9 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin,
     WidgetsBinding.instance.removeObserver(this);
     widget.net?.names.removeListener(_applyNames);
     widget.net?.lost.removeListener(_onLost);
+    widget.net?.forfeit.removeListener(_onForfeit);
+    _turnTimer?.cancel();
+    _countdown.dispose();
     _rejoinBeat?.cancel();
     widget.net?.chat.removeListener(_onChat);
     widget.net?.chat.open = false;
@@ -585,6 +627,7 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin,
     _cam.dispose();
     _pxPerUnit.dispose();
     OnlinePresenceService.instance.updateStatus(status: 'idle');
+    _s.fullscreen.inMatch = false;
     super.dispose();
   }
 
@@ -621,6 +664,8 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin,
 
   Future<void> _present(GameEvent e) async {
     if (_disposed) throw const _Abandoned();
+    // The match was ended by a forfeit: the game loop is finished, only the result may follow.
+    if (_ended && e is! GameOver) throw const _Abandoned();
     for (final a in _umcccAgents) {
       a.observeEvent(e);
     }
@@ -771,6 +816,12 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin,
           cards,
           private: private,
         );
+      case Mulliganed(:final player, :final took):
+        _refresh();
+        if (took) {
+          _s.audio.sfx(Sfx.card, volume: 0.6);
+          await _wait(player == me ? 500 : 250);
+        }
       case CardsDrawn(:final player):
         if (player == me) _s.audio.sfx(Sfx.card, volume: 0.6);
         _refresh();
@@ -799,7 +850,7 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin,
         // how strong they were. Otherwise it is a match against the AI and only the PvE book changes.
         final people = net == null ? const <Player>[] : [for (final p in opponents) if (net.humanSeats.contains(p.seat)) p];
         final pvp = people.isNotEmpty;
-        final ratings = [for (final p in people) PlayerProfile.fromPayload(p.seat < net!.seatStats.length ? net.seatStats[p.seat] : null).mmr];
+        unawaited(_saveMatch(won: won, opponents: opponents, people: people));
         ProfileStats.instance.recordMatch(
           won: won,
           heroId: me.hero.id,
@@ -808,7 +859,6 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin,
           mapId: widget.config.map.id,
           mode: pvp ? 'online' : 'local',
           pvp: pvp,
-          opponentMmr: ratings.isEmpty ? null : (ratings.reduce((a, b) => a + b) / ratings.length).round(),
         );
         _s.settings.clearReconnect();
         OnlinePresenceService.instance.updateStatus(status: 'idle');
@@ -821,6 +871,38 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin,
         _refresh();
       default:
         _refresh();
+    }
+  }
+
+  /// Saves this match on the device (vs AI, LAN and online alike) and lets the sync send it as soon
+  /// as it can. The rating is the server's job: nothing here changes MMR.
+  Future<void> _saveMatch({required bool won, required List<Player> opponents, required List<Player> people}) async {
+    try {
+      final net = widget.net;
+      final opp = opponents.firstOrNull;
+      final duel = game.players.length == 2 && people.length == 1;
+      final oppUid = duel && net != null && people.first.seat < net.seatUids.length ? net.seatUids[people.first.seat] : null;
+      final record = MatchRecord.finished(
+        matchId: net?.matchId.isNotEmpty == true ? net!.matchId : newUuid(),
+        won: won,
+        myHero: me.hero.id,
+        opponentHero: opp?.hero.id ?? '',
+        opponentName: opp?.label ?? '',
+        players: game.players.length,
+        humanOpponents: people.length,
+        online: net?.online ?? false,
+        mapId: widget.config.map.id,
+        playedAt: DateTime.now(),
+        durationSeconds: DateTime.now().difference(_startedAt ?? DateTime.now()).inSeconds,
+        myUserId: _s.settings.accountId,
+        opponentUserId: oppUid,
+        endedBy: _forfeit == null ? EndedBy.normal : (_forfeit!.seat == me.seat ? EndedBy.forfeitMe : EndedBy.forfeitOpponent),
+        forfeitReason: _forfeit?.reason,
+        turns: game.turnNumber,
+      );
+      if (await _s.matches.add(record)) _s.sync.matchSaved();
+    } catch (e) {
+      debugPrint('Could not save the match: $e');
     }
   }
 
@@ -975,7 +1057,7 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin,
   bool get _combatCovers => _combat != null && !_pickingInCombat;
 
   void _onPrompt(Prompt p, Completer<List<int>> c) {
-    if (_disposed) {
+    if (_disposed || _ended) {
       c.completeError(const _Abandoned());
       return;
     }
@@ -995,6 +1077,7 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin,
       _pullBack();
     }
     _refresh();
+    _startTurnTimer(p);
     if (widget.autoplay) {
       Future<void>.delayed(Duration(milliseconds: (900 * _speed).round()), () async {
         if (_disposed || _prompt != p) return;
@@ -1011,11 +1094,101 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin,
     _schemeHint = false;
     _marks.clear();
     _pulse.stop();
+    _stopTurnTimer();
   }
 
-  void _submit(List<int> picks) {
+  // ------------------------------------------------------------------ the clock and forfeits
+
+  void _stopTurnTimer() {
+    _turnTimer?.cancel();
+    _turnTimer = null;
+    if (!_disposed && _countdown.value != null) _countdown.value = null;
+  }
+
+  /// Starts the clock for a decision of yours in a match against other people.
+  void _startTurnTimer(Prompt p) {
+    _stopTurnTimer();
+    if (!_timed || _ended || _result != null) return;
+    var left = _limit.inSeconds;
+    _countdown.value = left;
+    _turnTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (_disposed || _prompt != p) {
+        t.cancel();
+        return;
+      }
+      left--;
+      _countdown.value = left < 0 ? 0 : left;
+      if (left <= 0) {
+        t.cancel();
+        unawaited(_timeUp(p));
+      }
+    });
+  }
+
+  /// The clock ran out: the AI answers for you. Missing [afkStrikes] in a row in a 1 v 1 against a
+  /// person is leaving the match: you lose it.
+  Future<void> _timeUp(Prompt p) async {
+    _turnTimer = null;
+    if (_disposed || _ended || _prompt != p) return;
+    _strikes++;
+    final forfeits = _duelVsPerson && _strikes >= afkStrikes;
+    if (!forfeits) {
+      widget.net?.showToast(
+        _duelVsPerson
+            ? 'Time ran out, so the AI played for you (miss $_strikes of $afkStrikes and you forfeit the match).'
+            : 'Time ran out, so the AI played for you.',
+      );
+    }
+    final picks = await AiAgent(level: AiLevel.hard).decide(game, p);
+    if (_disposed || _ended || _prompt != p) return;
+    _submit(picks, auto: true);
+    if (forfeits) await _forfeitSelf('afk');
+  }
+
+  /// Someone else forfeited (the host tells every device): you won.
+  void _onForfeit() {
+    final f = widget.net?.forfeit.value;
+    if (f == null || _ended || _disposed || _result != null) return;
+    unawaited(_endByForfeit(f.seat, f.reason));
+  }
+
+  /// You leave a 1 v 1 against a person, run out of time too often or lose the connection: the
+  /// match ends here as your loss, is saved like any other result, and the others are told.
+  Future<void> _forfeitSelf(String reason, {bool announce = true}) async {
+    final net = widget.net;
+    if (net == null || !net.duelWithPerson || _ended || _disposed || _result != null) return;
+    await _endByForfeit(me.seat, reason);
+    if (announce) net.announceForfeit(reason);
+  }
+
+  Future<void> _endByForfeit(int loserSeat, String reason) async {
+    if (_ended || _disposed || _result != null) return;
+    _ended = true;
+    _forfeit = (seat: loserSeat, reason: reason);
+    final waiting = _answer;
+    _clearPrompt();
+    if (waiting != null && !waiting.isCompleted) waiting.completeError(const _Abandoned());
+    final loser = game.players.firstWhere((p) => p.seat == loserSeat);
+    final winner = game.players.firstWhere((p) => p.team != loser.team);
+    game
+      ..winner = winner
+      ..winningTeam = winner.team
+      ..over = true;
+    final mine = loser == me;
+    final who = mine ? 'You' : (loser.label.isEmpty ? loser.name : loser.label);
+    final text = switch (reason) {
+      'afk' => mine ? 'You were away too long.' : '$who was away too long.',
+      'disconnect' => mine ? 'You lost your connection.' : '$who lost their connection.',
+      _ => mine ? 'You left the match.' : '$who left the match.',
+    };
+    await _present(GameOver(winner, text));
+  }
+
+  void _submit(List<int> picks, {bool auto = false}) {
     final c = _answer;
     if (c == null || c.isCompleted) return;
+    // Answering yourself clears the misses; the AI answering for you does not.
+    if (!auto) _strikes = 0;
     debugLastPicks = picks;
     _clearPrompt();
     _refresh();
@@ -1370,14 +1543,22 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin,
         setState(() {});
       }
     } else if (r == 'leave') {
+      final duel = _duelVsPerson && _result == null && !_ended;
       final ok = await showConfirm(
         context,
         title: 'Leave the match?',
-        message: 'This match can\'t be resumed.',
+        message: duel ? 'Leaving counts as a loss, and it counts for your rating.' : 'This match can\'t be resumed.',
         confirm: 'Leave',
         danger: true,
       );
-      if (ok && mounted) _toMenu();
+      if (ok && mounted) {
+        if (duel) {
+          await _forfeitSelf('leave');
+          // Let the message reach the other player before the connection closes.
+          await Future<void>.delayed(const Duration(milliseconds: 300));
+        }
+        if (mounted) _toMenu();
+      }
     }
   }
 
@@ -1406,7 +1587,7 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin,
     if (_result != null) return 'Game over';
     if (p == null) {
       if (_thinking != null) return '${_thinking!.name} is thinking…';
-      if (game.turnNumber == 0) return 'Setting up the battlefield…';
+      if (game.turnNumber == 0) return game.players.any((p) => p.hand.isNotEmpty) ? 'Opening hands · choosing mulligans…' : 'Setting up the battlefield…';
       return game.active == me ? 'Resolving…' : "${game.active.name}'s turn";
     }
     if (p.ask == Ask.action) {
@@ -1443,7 +1624,7 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin,
     // between your plate and the action buttons.
     final pad = MediaQuery.paddingOf(context);
     final bigPlate = size.width >= 900 && size.height >= 550;
-    final menuButtons = (canToggleFullscreen && !isFullscreen ? 4 : 3) + (widget.net != null ? 1 : 0);
+    final menuButtons = (_fullscreenButton ? 4 : 3) + (widget.net != null ? 1 : 0);
     final menuW = (menuButtons * 44 * 1.16 + (menuButtons - 1) * 6) * ui;
     final camTop = 8 + 44 * ui + 10;
     final camBottom = camTop + 38 * ui;
@@ -1645,11 +1826,15 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin,
                         Alignment.topCenter,
                         ConstrainedBox(
                           constraints: BoxConstraints(maxWidth: c.maxWidth / ui),
-                          child: PromptBar(
-                            text: _promptText,
-                            mine: p != null,
-                            source: p?.source?.def.image,
-                            onSource: p?.source == null ? null : () => showCardZoom<void>(context, p!.source!.def.image),
+                          child: ValueListenableBuilder<int?>(
+                            valueListenable: _countdown,
+                            builder: (context, left, _) => PromptBar(
+                              // The last 30 seconds of your clock show in the bar.
+                              text: left != null && left <= 30 ? '$_promptText · ${left}s' : _promptText,
+                              mine: p != null,
+                              source: p?.source?.def.image,
+                              onSource: p?.source == null ? null : () => showCardZoom<void>(context, p!.source!.def.image),
+                            ),
                           ),
                         ),
                       ),
@@ -1685,16 +1870,14 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin,
                           const SizedBox(width: 6),
                           ChatButton(chat: net.chat, onPressed: _toggleChat),
                         ],
-                        if (canToggleFullscreen && !isFullscreen) ...[
+                        if (_fullscreenButton) ...[
                           const SizedBox(width: 6),
                           HexButton(
                             icon: Icons.fullscreen_rounded,
                             tooltip: 'Full screen',
                             size: 44,
-                            onPressed: () async {
-                              await toggleFullscreen();
-                              if (mounted) setState(() {});
-                            },
+                            // Called straight from the tap: the controller's API call is the gesture.
+                            onPressed: () => FullscreenHelpDialog.handlePress(context, _s.fullscreen),
                           ),
                         ],
                       ],
@@ -2228,6 +2411,20 @@ class MatchScreenState extends State<MatchScreen> with TickerProviderStateMixin,
   /// A panel for prompts that can't be answered on the board or from the hand.
   Widget? _choiceOverlay(Prompt p) {
     if (p.ask == Ask.action || _isFighterPrompt || _isBoardSpacePrompt || _isHandCardPrompt || _isPathPrompt) return null;
+    if (p.intent == Intent.mulligan && p.choices.length == 2) {
+      return Positioned.fill(
+        child: Container(
+          color: const Color(0x8C000000),
+          child: MulliganPanel(
+            key: ValueKey(p),
+            images: [for (final c in p.player.hand) c.def.image],
+            onMulligan: () => _submit(const [0]),
+            onKeep: () => _submit(const [1]),
+            onZoom: (i) => showCardZoom<void>(context, p.player.hand[i].def.image),
+          ),
+        ),
+      );
+    }
     final values = _values;
     String? image(Object? v) => v is Card ? v.def.image : null;
     final images = [for (final v in values) image(v)];

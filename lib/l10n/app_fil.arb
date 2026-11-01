@@ -1,0 +1,26 @@
+{
+  "@@locale": "fil",
+
+  "fsTitleIphone": "Full screen sa iPhone",
+  "fsTitleIpad": "Full screen sa iPad",
+  "fsBodyIphone": "Hindi kayang i-full screen ng Safari ang web page sa iPhone. Idagdag ang Unmatched sa iyong Home Screen at buksan doon: tatakbo ito nang walang mga bar ng Safari.",
+  "fsBodyIpad": "Idagdag ang Unmatched sa iyong Home Screen at buksan doon: tatakbo ito nang full screen at walang mga bar ng Safari.",
+  "fsStepShareIphoneSafari": "I-tap ang Share sa Safari",
+  "fsStepShareIpadSafari": "I-tap ang Share sa itaas na bar ng Safari",
+  "fsStepShareOther": "I-tap ang Share (o ang menu) sa iyong browser",
+  "fsStepAdd": "Piliin ang Add to Home Screen",
+  "fsStepOpen": "Buksan ang Unmatched mula sa iyong Home Screen",
+  "fsGotIt": "Sige",
+  "fsDialogLabel": "Idagdag ang Unmatched sa iyong Home Screen",
+  "fsStepNumber": "Hakbang {number}",
+
+  "fsButtonEnter": "Full screen",
+  "fsButtonExit": "Lumabas sa full screen",
+  "fsInstallApp": "Mas magandang full screen: i-install ang app",
+  "fsInstallAppHint": "Idagdag ang Unmatched sa iyong Home Screen para maglaro nang walang mga bar ng Safari.",
+
+  "rotateTitle": "I-ikot ang iyong telepono",
+  "rotateBody": "Nilalaro ang Unmatched nang pahalang.",
+  "largerTitle": "Palakihin ang window na ito",
+  "largerBody": "Kailangan ng Unmatched ng mas maluwag na espasyo. Iladlad ang window, o buksan ito nang full screen."
+}

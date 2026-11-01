@@ -134,6 +134,9 @@ class _Driver {
   Future<String> _perform(Prompt p, List<int> picks, String kind) async {
     final vs = [for (final c in p.choices) c.value];
     final overlay = find.byType(ChoicePanel).evaluate().isNotEmpty || find.byType(CardPicker).evaluate().isNotEmpty;
+    if (find.byType(MulliganPanel).evaluate().isNotEmpty) {
+      return await _tapKey(ValueKey(picks.first == 0 ? 'mulligan-take' : 'mulligan-keep')) ? 'mulligan panel' : 'no mulligan button';
+    }
     if (find.byType(CardPicker).evaluate().isNotEmpty) return _cardPicker(p, picks);
     if (find.byType(ChoicePanel).evaluate().isNotEmpty) {
       return await _tapKey(ValueKey(picks.isEmpty ? 'choice-skip' : 'choice-${picks.first}')) ? 'choice panel' : 'no option button';

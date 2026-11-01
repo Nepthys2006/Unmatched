@@ -66,6 +66,9 @@ enum Intent {
   boost,
   attackTarget,
   attacker,
+
+  /// The opening-hand choice: Mulligan (index 0) or Keep Hand (index 1).
+  mulligan,
 }
 
 class Choice<T> {

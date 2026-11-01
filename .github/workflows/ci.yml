@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  analyze-and-test:
+    name: Analyze, unit and widget tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter gen-l10n
+      - run: flutter analyze
+      # online_test.dart talks to a live Supabase project; fuzz_test.dart takes up to 90 minutes;
+      # the goldens are compared on Windows (below).
+      - name: Unit and widget tests
+        run: flutter test --exclude-tags golden,online $(ls test/*_test.dart | grep -v -e online_test -e fuzz_test -e all_heroes_ui)
+
+  golden:
+    name: Golden screenshots (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter test --tags golden test/golden
+
+  integration-chrome:
+    name: Integration tests in Chrome
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - uses: browser-actions/setup-chrome@v1
+        with:
+          chrome-version: stable
+      - run: flutter pub get
+      - run: flutter test integration_test/fullscreen_help_test.dart -d chrome
+
+  playwright:
+    name: Browser device emulation (Playwright)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: flutter pub get
+      # DEMO opens the menu without an account; no CDN so CanvasKit is served (and cached) locally.
+      - run: flutter build web --release --dart-define=DEMO=true --no-web-resources-cdn
+      # A second build that opens straight into a match, for the battle-music test.
+      - run: flutter build web --release --dart-define=QUICKMATCH=blossom:2:alice:3 --no-web-resources-cdn --output build/web_match
+      - working-directory: e2e
+        run: npm install
+      - working-directory: e2e
+        run: npx playwright install --with-deps webkit chromium
+      - working-directory: e2e
+        run: npm test
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: e2e/test-results
+
+  web-build-pwa:
+    name: Web build compiles with the PWA setup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter build web --release --no-web-resources-cdn
+      - name: PWA files are in the build
+        run: |
+          test -f build/web/manifest.json
+          test -f build/web/sw.js
+          for f in apple-touch-icon-180 apple-touch-icon-167 apple-touch-icon-152 Icon-192 Icon-512 Icon-maskable-192 Icon-maskable-512; do
+            test -f build/web/icons/$f.png
+          done

@@ -102,6 +102,27 @@ class _LobbyScreenState extends State<LobbyScreen> {
     if (id != null) s.pickHero(id);
   }
 
+  /// Host only: choose the hero an AI seat plays (the same hero grid and search as your own pick).
+  Future<void> _pickAiHero(int seat) async {
+    final h = s;
+    final l = s.lobby;
+    if (h is! HostSession || l == null || seat >= l.seats.length) return;
+    final data = context.services.data;
+    final map = data.maps[l.mapId] ?? data.maps.values.first;
+    final id = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (_) => HeroSelectScreen.pick(
+          map: map,
+          initial: l.seats[seat].hero,
+          taken: l.takenBy(seat),
+          title: 'AI hero · seat ${seat + 1}',
+          choose: 'for the AI',
+        ),
+      ),
+    );
+    if (id != null && mounted) h.setAiHero(seat, id);
+  }
+
   Future<void> _chat() => showChatSheet(
     context,
     chat: s.chat,
@@ -728,7 +749,10 @@ class _LobbyScreenState extends State<LobbyScreen> {
     final hero = seat.hero == null ? null : context.services.data.hero(seat.hero!);
     final (title, status) = switch (seat.kind) {
       SeatKind.open => ('Open seat', host != null ? 'Tap to make it an AI' : 'Tap to sit here'),
-      SeatKind.ai => ('AI ${s.lobby!.ai.label}', host != null ? 'Random hero · tap to open the seat' : 'Random hero'),
+      SeatKind.ai => (
+        'AI ${s.lobby!.ai.label}',
+        hero != null ? '${hero.name} · picked by the host' : (host != null ? 'Random hero · tap to open the seat' : 'Random hero'),
+      ),
       SeatKind.human => (
         '${seat.name ?? 'Player'}${me ? ' (you)' : ''}',
         hero == null ? 'Choosing a hero…' : '${hero.name}${i == 0 || seat.ready ? ' · ready' : ' · not ready'}',
@@ -792,6 +816,21 @@ class _LobbyScreenState extends State<LobbyScreen> {
                 ),
                 if ((i == 0 || seat.ready) && hero != null)
                   const Icon(Icons.check_circle_rounded, color: Palette.confirmHi, size: 22),
+              ],
+              if (host != null && seat.kind == SeatKind.ai) ...[
+                IconButton(
+                  key: ValueKey('ai-hero-$i'),
+                  tooltip: "Choose this AI's hero",
+                  icon: const Icon(Icons.person_search_rounded, color: Palette.gold, size: 22),
+                  onPressed: () => _pickAiHero(i),
+                ),
+                if (seat.hero != null)
+                  IconButton(
+                    key: ValueKey('ai-hero-random-$i'),
+                    tooltip: 'Random hero',
+                    icon: const Icon(Icons.casino_rounded, color: Palette.muted, size: 22),
+                    onPressed: () => host.setAiHero(i, null),
+                  ),
               ],
               if (host != null && seat.kind == SeatKind.human && !me)
                 IconButton(

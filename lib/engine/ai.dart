@@ -66,7 +66,7 @@ class AiAgent implements Agent {
       case Ask.yesNo:
         return [_pickYesNo(g, p)];
       case Ask.option:
-        return [_pickOption(g, p)];
+        return [p.intent == Intent.mulligan ? _pickMulligan(p) : _pickOption(g, p)];
       case Ask.number:
         return [_pickNumber(g, p)];
       case Ask.cards:
@@ -968,6 +968,15 @@ class AiAgent implements Agent {
       Intent.none => 0,
       _ => 0,
     };
+  }
+
+  /// Opening hand: index 0 is Mulligan, 1 is Keep Hand. Cards that can attack or defend win
+  /// fights; a hand with very few of them is thrown back (Easy only does it with none at all).
+  int _pickMulligan(Prompt p) {
+    final me = p.player;
+    final combat = me.hand.where((c) => (c.def.canAttack || c.def.canDefend) && me.alive.any((f) => me.script.fighterMayUse(c, f))).length;
+    final few = level == AiLevel.easy ? combat == 0 : combat * 2.5 < me.hand.length;
+    return few ? 0 : 1;
   }
 
   int _pickOption(Game g, Prompt p) {

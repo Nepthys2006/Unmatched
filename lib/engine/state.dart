@@ -125,6 +125,9 @@ class Player {
   bool eliminated = false;
   int turnsTaken = 0;
 
+  /// The opening-hand mulligan was offered (taken or declined). One per player per game.
+  bool mulliganUsed = false;
+
   /// The start space this player's hero was placed in.
   int startSpace = -1;
 

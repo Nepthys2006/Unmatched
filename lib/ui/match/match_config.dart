@@ -100,5 +100,19 @@ class MatchConfig {
     return [human, ...pool.take(players - 1)];
   }
 
+  /// Seat 0 is [human]; AI seat i (1-based) plays `chosen[i - 1]` when that is set, otherwise a
+  /// random hero. Nobody plays the same hero twice: a choice that repeats [human] or an earlier
+  /// choice is ignored (drawn at random instead).
+  static List<String> lineup(GameData data, String human, int players, {List<String?> chosen = const [], math.Random? rng}) {
+    final used = <String>{human};
+    final picks = <String?>[];
+    for (var i = 0; i < players - 1; i++) {
+      final c = i < chosen.length ? chosen[i] : null;
+      picks.add(c != null && data.heroes.containsKey(c) && used.add(c) ? c : null);
+    }
+    final pool = data.heroes.keys.where((h) => !used.contains(h)).toList()..shuffle(rng ?? math.Random());
+    return [human, for (final p in picks) p ?? pool.removeLast()];
+  }
+
   MatchConfig rematch() => MatchConfig(mode: mode, players: players, map: map, ai: ai, heroIds: heroIds, umccc: umccc);
 }

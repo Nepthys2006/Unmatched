@@ -7,6 +7,13 @@
 #                                                 %USERPROFILE%\release_backup_latest first
 #
 # Close the game before running: the release folder is cleared and refilled.
+#
+# Order matters for version compatibility:
+#   1. the LAN web runtime (build\web_lan) is built and copied into assets\webapp FIRST, so the
+#      Windows app and the APK carry the browser game of THIS release (a phone that joins a host through
+#      its browser then runs the same version as the host);
+#   2. the web builds get a fresh offline-cache name (tool\stamp_sw.py), so a returning player's
+#      browser replaces the old release instead of mixing it with the new one.
 param(
     [switch]$SkipAndroid,
     [switch]$SkipBackup
@@ -25,6 +32,11 @@ function Assert-Ok($what) {
 }
 
 if (-not (Test-Path "$ProjectDir\.env")) { throw ".env is missing in $ProjectDir (the builds read the Supabase keys from it)." }
+
+# Do not ship something that does not even analyze.
+Write-Host "=== Checking the code (flutter analyze) ===" -ForegroundColor Yellow
+flutter analyze --no-fatal-infos
+Assert-Ok 'flutter analyze'
 
 # The packaging step deletes the release folder's files. A running game holds them open, which
 # leaves the folder half-deleted and the running game without its images.
@@ -48,6 +60,12 @@ if (Test-Path "$FanMadeDir\Unmatched-Web.zip") { Remove-Item "$FanMadeDir\Unmatc
 if (Test-Path "$FanMadeDir\Web") { Remove-Item -Path "$FanMadeDir\Web\*" -Recurse -Force }
 if (Test-Path "$FanMadeDir\Windows") { Remove-Item -Path "$FanMadeDir\Windows\*" -Recurse -Force }
 
+Write-Host "`n=== 1b. Building the LAN web runtime and bundling it into the apps ===" -ForegroundColor Green
+flutter build web --release --no-web-resources-cdn --no-tree-shake-icons --dart-define-from-file=.env --output build/web_lan
+Assert-Ok 'LAN web runtime build'
+python tool/bundle_webapp.py
+Assert-Ok 'bundle_webapp.py'
+
 Write-Host "`n=== 2. Building Windows Desktop (Release) ===" -ForegroundColor Green
 flutter build windows --release --dart-define-from-file=.env
 Assert-Ok 'Windows build'
@@ -63,8 +81,8 @@ if ($SkipAndroid) {
 Write-Host "`n=== 4. Building Web (Release with full icons) ===" -ForegroundColor Green
 flutter build web --release --no-web-resources-cdn --no-tree-shake-icons --dart-define-from-file=.env
 Assert-Ok 'Web build'
-python tool/bundle_webapp.py
-Assert-Ok 'bundle_webapp.py'
+python tool/stamp_sw.py build/web
+Assert-Ok 'stamp_sw.py (web)'
 
 Write-Host "`n=== 5. Packaging fresh releases to Unmatched Fan Made ===" -ForegroundColor Cyan
 # APK
@@ -85,6 +103,8 @@ Compress-Archive -Path "$FanMadeDir\Windows\*" -DestinationPath "$FanMadeDir\Unm
 Write-Host "`n=== 6. Building Netlify Web Site (/play/ with full icons) ===" -ForegroundColor Green
 flutter build web --release --no-tree-shake-icons --base-href /play/ --dart-define-from-file=.env --output build/web_play
 Assert-Ok 'Netlify web build'
+python tool/stamp_sw.py build/web_play
+Assert-Ok 'stamp_sw.py (netlify web)'
 # build_site.py DELETES build\site and rebuilds it from ..\landing plus build\web_play.
 # Edit the website in the landing folder, never in build\site.
 python tool/build_site.py

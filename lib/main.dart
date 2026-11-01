@@ -2,9 +2,15 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart' show SemanticsBinding;
 import 'package:flutter/services.dart';
 
+import 'l10n/localization_setup.dart';
+import 'net/match_store.dart';
+import 'net/match_sync.dart';
 import 'ui/audio.dart';
+import 'ui/debug/debug_panel.dart';
+import 'ui/platform/viewport_guard.dart';
 import 'ui/invite_flow.dart';
 import 'ui/screens/loading_screen.dart';
 import 'ui/services.dart';
@@ -13,6 +19,8 @@ import 'ui/theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Browser tests (Playwright) find things through the accessibility tree: `?semantics=1` turns it on.
+  if (kIsWeb && Uri.base.queryParameters['semantics'] == '1') SemanticsBinding.instance.ensureSemantics();
   // Landscape only on phones and tablets. On the web the page handles orientation itself
   // (the JS rotate overlay and the Flutter RotatePrompt guide users to landscape; locking here
   // would prevent the overlay from ever appearing).
@@ -21,7 +29,8 @@ Future<void> main() async {
   }
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   final settings = await Settings.load();
-  runApp(UnmatchedApp(services: Services(settings: settings, audio: Audio(settings))));
+  final matches = await MatchStore.load();
+  runApp(UnmatchedApp(services: Services(settings: settings, audio: Audio(settings), matchStore: matches, matchBackend: SupabaseMatchBackend(), debugPanel: DebugPanel.enabled)));
 }
 
 class UnmatchedApp extends StatelessWidget {
@@ -39,10 +48,46 @@ class UnmatchedApp extends StatelessWidget {
           navigatorKey: appNavigatorKey,
           debugShowCheckedModeBanner: false,
           theme: buildTheme(),
-          builder: (context, child) => OrientationGuard(child: InviteListener(child: UiScale(child: child!))),
+          localizationsDelegates: appLocalizationsDelegates,
+          supportedLocales: appSupportedLocales,
+          localeListResolutionCallback: resolveAppLocale,
+          builder: (context, child) => SimulatedWindow(
+            child: SyncOnResume(child: OrientationGuard(child: InviteListener(child: UiScale(child: child!)))),
+          ),
           home: home ?? const LoadingScreen(),
         ),
       );
+}
+
+/// When the app comes back to the front (the phone may have been offline), saved matches get
+/// another try straight away instead of waiting for the retry timer.
+class SyncOnResume extends StatefulWidget {
+  const SyncOnResume({super.key, required this.child});
+  final Widget child;
+  @override
+  State<SyncOnResume> createState() => _SyncOnResumeState();
+}
+
+class _SyncOnResumeState extends State<SyncOnResume> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) ServicesScope.of(context).sync.nudge();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 /// Every screen is laid out for a landscape phone. On bigger screens the whole app is drawn at
@@ -79,7 +124,11 @@ class UiScale extends StatelessWidget {
           child: Stack(
             children: [
               child,
-              if (mq.size.height > mq.size.width && mq.size.shortestSide < 600) const Positioned.fill(child: RotatePrompt()),
+              // iPhone and phones held upright get "turn your phone"; an iPad never does (it works in
+              // both orientations); a window too small to play in says so instead of breaking.
+              if (viewportNotice(mq.size, ServicesScope.of(context).fullscreen.info) case final notice?)
+                Positioned.fill(child: ViewportNoticeView(notice: notice)),
+              const DebugPanelLauncher(),
             ],
           ),
         ),
@@ -88,30 +137,6 @@ class UiScale extends StatelessWidget {
   }
 }
 
-/// Shown when a phone is held upright: the game is landscape only.
-class RotatePrompt extends StatelessWidget {
-  const RotatePrompt({super.key});
-
-  @override
-  Widget build(BuildContext context) => Material(
-        color: Palette.bg,
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(32),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.screen_rotation_rounded, color: Palette.bone, size: 64),
-                const SizedBox(height: 20),
-                Text('TURN YOUR PHONE', textAlign: TextAlign.center, style: titleStyle(30, spacing: 2)),
-                const SizedBox(height: 8),
-                Text('Unmatched is played in landscape.', textAlign: TextAlign.center, style: bodyStyle(16, color: Palette.boneDim)),
-              ],
-            ),
-          ),
-        ),
-      );
-}
 
 /// Phones follow the sensor between landscape-left and landscape-right (flip the phone 180° and
 /// the game turns with it) but never go upright. The lock itself is declared in the Android

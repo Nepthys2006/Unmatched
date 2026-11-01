@@ -187,21 +187,29 @@ void main() {
   });
 
   group('ratings and win-rate books', () {
-    test('PvP moves the MMR, PvE never does', () {
+    test('the device never rates a match itself: only the servers rating is shown', () {
       final s = ProfileStats.instance;
       final before = s.mmr;
       s.recordMatch(won: true, heroId: 'medusa', opponentName: 'AI', opponentHeroId: 'alice', mapId: 'm', mode: 'local');
       expect(s.mmr, before);
       expect(s.pve.wins, 1);
       expect(s.pvp.matches, 0);
-      final gain = s.recordMatch(won: true, heroId: 'medusa', opponentName: 'Bob', opponentHeroId: 'alice', mapId: 'm', mode: 'online', pvp: true, opponentMmr: 1000);
-      expect(gain, 20); // first matches are provisional (K = 40), an even match
-      expect(s.mmr, before + 20);
+      final gain = s.recordMatch(won: true, heroId: 'medusa', opponentName: 'Bob', opponentHeroId: 'alice', mapId: 'm', mode: 'online', pvp: true);
+      expect(gain, 0, reason: 'MMR is calculated by the server when the match syncs');
+      expect(s.mmr, before);
       expect(s.pvp.wins, 1);
-      final loss = s.recordMatch(won: false, heroId: 'medusa', opponentName: 'Bob', opponentHeroId: 'alice', mapId: 'm', mode: 'online', pvp: true, opponentMmr: 1000);
-      expect(loss, lessThan(0));
+      s.recordMatch(won: false, heroId: 'medusa', opponentName: 'Bob', opponentHeroId: 'alice', mapId: 'm', mode: 'online', pvp: true);
+      expect(s.mmr, before);
       expect(s.profile.pvp.matches, 2);
       expect(s.profile.pve.matches, 1);
+      // What the server reports is what is shown.
+      s.applyServerProfile({'mmr': 1024, 'peak_mmr': 1030, 'ranked_matches': 3});
+      expect(s.mmr, 1024);
+      expect(s.peakMmr, 1030);
+      expect(s.rankedMatches, 3);
+      expect(s.profile.mmr, 1024);
+      s.applyServerProfile({'nonsense': true});
+      expect(s.mmr, 1024);
     });
 
     test('an older payload without the split reads as AI matches', () {

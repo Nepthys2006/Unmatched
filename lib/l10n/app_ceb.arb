@@ -1,0 +1,26 @@
+{
+  "@@locale": "ceb",
+
+  "fsTitleIphone": "Full screen sa iPhone",
+  "fsTitleIpad": "Full screen sa iPad",
+  "fsBodyIphone": "Dili mabutang sa Safari ang web page sa full screen sa iPhone. Idugang ang Unmatched sa imong Home Screen ug ablihi gikan didto: modagan kini nga walay mga bar sa Safari.",
+  "fsBodyIpad": "Idugang ang Unmatched sa imong Home Screen ug ablihi gikan didto: modagan kini sa full screen nga walay mga bar sa Safari.",
+  "fsStepShareIphoneSafari": "I-tap ang Share sa Safari",
+  "fsStepShareIpadSafari": "I-tap ang Share sa taas nga bar sa Safari",
+  "fsStepShareOther": "I-tap ang Share (o ang menu) sa imong browser",
+  "fsStepAdd": "Pilia ang Add to Home Screen",
+  "fsStepOpen": "Ablihi ang Unmatched gikan sa imong Home Screen",
+  "fsGotIt": "Okay",
+  "fsDialogLabel": "Idugang ang Unmatched sa imong Home Screen",
+  "fsStepNumber": "Lakang {number}",
+
+  "fsButtonEnter": "Full screen",
+  "fsButtonExit": "Gawas sa full screen",
+  "fsInstallApp": "Mas maayong full screen: i-install ang app",
+  "fsInstallAppHint": "Idugang ang Unmatched sa imong Home Screen aron makadula nga walay mga bar sa Safari.",
+
+  "rotateTitle": "Ilisdi ang imong telepono",
+  "rotateBody": "Gidula ang Unmatched nga pahigda.",
+  "largerTitle": "Padak-a kini nga window",
+  "largerBody": "Mas kinahanglan ug luna ang Unmatched. Gamaya ang window, o ablihi kini sa full screen."
+}

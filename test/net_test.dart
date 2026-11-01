@@ -30,6 +30,7 @@ class Copy {
       map: c.map,
       heroIds: c.heroIds,
       teams: c.teams,
+      mulligans: m.mulligans,
       random: PortableRandom(m.seed),
       presenter: (e) async {
         if (e.log.isNotEmpty) log.add(e.log);

@@ -252,6 +252,93 @@ void main() {
       expect(find.text('SOHO'), findsOneWidget);
     });
   });
+
+  group('LobbyScreen: choosing the hero of an AI seat (host only)', () {
+    Future<Services> boot(WidgetTester tester, Size size) async {
+      tester.view.physicalSize = size * 2;
+      tester.view.devicePixelRatio = 2;
+      addTearDown(tester.view.reset);
+      final s = Services(settings: Settings.memory(), audio: Audio(Settings.memory(), enabled: false), preloadImages: false);
+      await tester.runAsync(() => s.loadData());
+      return s;
+    }
+
+    for (final size in const [Size(740, 360), Size(1280, 800)]) {
+      testWidgets('the host picks, changes and clears an AI hero; the seat says who it is (${size.width.round()}x${size.height.round()})', (tester) async {
+        final s = await boot(tester, size);
+        final session = HostSession(_FakeHostLink(), data, name: 'HostTester', dataVersion: 'test');
+        addTearDown(session.dispose);
+        session.toggleSeat(1);
+        await tester.pumpWidget(UnmatchedApp(services: s, home: LobbyScreen(session: session)));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('ai-hero-1')), findsOneWidget);
+        expect(find.text('Random hero · tap to open the seat'), findsOneWidget);
+        expect(find.byKey(const ValueKey('ai-hero-random-1')), findsNothing);
+
+        await tester.ensureVisible(find.byKey(const ValueKey('ai-hero-1')));
+        await tester.tap(find.byKey(const ValueKey('ai-hero-1')));
+        await tester.pumpAndSettle();
+        // The same hero grid and search, titled for the AI seat.
+        expect(find.text('AI HERO · SEAT 2'), findsOneWidget);
+        expect(find.byKey(const ValueKey('hero-search')), findsOneWidget);
+        await tester.tap(find.byKey(const ValueKey('hero-tile-achilles')));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('CHOOSE ACHILLES FOR THE AI'));
+        await tester.tap(find.text('CHOOSE ACHILLES FOR THE AI'));
+        await tester.pumpAndSettle();
+        expect(session.lobby!.seats[1].hero, 'achilles');
+        expect(find.text('Achilles · picked by the host'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+
+        // Change it, then give it back to chance.
+        await tester.ensureVisible(find.byKey(const ValueKey('ai-hero-1')));
+        await tester.tap(find.byKey(const ValueKey('ai-hero-1')));
+        await tester.pumpAndSettle();
+        // Medusa is far down the grid: find her with the search, as a player would.
+        await tester.enterText(find.byKey(const ValueKey('hero-search')), 'medusa');
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('hero-tile-medusa')));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('CHOOSE MEDUSA FOR THE AI'));
+        await tester.tap(find.text('CHOOSE MEDUSA FOR THE AI'));
+        await tester.pumpAndSettle();
+        expect(session.lobby!.seats[1].hero, 'medusa');
+        await tester.ensureVisible(find.byKey(const ValueKey('ai-hero-random-1')));
+        await tester.tap(find.byKey(const ValueKey('ai-hero-random-1')));
+        await tester.pumpAndSettle();
+        expect(session.lobby!.seats[1].hero, isNull);
+        expect(find.text('Random hero · tap to open the seat'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      });
+    }
+
+    testWidgets('a guest sees the hero chosen for an AI seat but has no way to change it', (tester) async {
+      final s = await boot(tester, const Size(1280, 800));
+      final link = _FakeClientLink();
+      final session = ClientSession(link, data, name: 'GuestTester', dataVersion: 'test', address: '192.168.1.10:47400');
+      addTearDown(session.dispose);
+      link.emitMessage({'t': 'welcome', 'seat': 1});
+      link.emitMessage({
+        't': 'lobby',
+        'lobby': Lobby(
+          mode: GameMode.duel,
+          players: 2,
+          mapId: 'sherwood-forest',
+          ai: AiLevel.easy,
+          seats: [
+            LobbySeat(SeatKind.human, name: 'HostTester', hero: 'medusa', ready: true, host: true),
+            LobbySeat(SeatKind.ai, hero: 'achilles'),
+          ],
+        ).toJson(),
+      });
+      await tester.pumpWidget(UnmatchedApp(services: s, home: LobbyScreen(session: session)));
+      await tester.pumpAndSettle();
+      expect(find.text('Achilles · picked by the host'), findsOneWidget);
+      expect(find.byKey(const ValueKey('ai-hero-1')), findsNothing);
+      expect(find.byKey(const ValueKey('ai-hero-random-1')), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+  });
 }
 
 class _FakeHostLink implements HostLink {

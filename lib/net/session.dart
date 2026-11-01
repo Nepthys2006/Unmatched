@@ -23,15 +23,37 @@ import 'chat.dart';
 import 'link.dart';
 import 'lockstep.dart';
 import 'profile_stats.dart';
+import 'uuid.dart';
 
 /// Bumped whenever the messages or the rules change in a way older copies can't follow.
+///
+/// Features added later are not protocol bumps (that would lock older builds out). Each build
+/// lists what it can do in `caps` of its hello, and the host switches a feature on for a match
+/// only when every person at the table has it; the start message says which are on. A build that
+/// doesn't know a feature never sees it enabled, so builds of different ages play together.
 const netProtocol = 1;
+
+/// What this build can do beyond the base game.
+///   mulligan: the opening-hand mulligan decision (one more prompt per seat before turn 1).
+const netCaps = ['mulligan'];
 
 /// How long someone who drops out of a running match keeps their seat. Within it they can rejoin
 /// the same match; when it runs out an AI takes their seat for good and the match goes on. The
 /// same wait applies to the lobby host: if they do not come back, a remaining player takes over
 /// as host (or plays on alone against the AI). A variable only so tests can shorten it.
 Duration rejoinGrace = const Duration(minutes: 2);
+
+/// How long a player has for each decision in a match against other people. When it runs out the AI
+/// answers for them (a "strike"); [afkStrikes] strikes in a row in a 1 v 1 against a person and they
+/// have forfeited the match. A variable only so tests can shorten it.
+Duration turnLimit = const Duration(seconds: 90);
+
+/// Missed decisions in a row that make a player AFK.
+const afkStrikes = 3;
+
+/// The host's backstop for a device that never answers and never leaves (a modified or frozen
+/// client): longer than every strike put together.
+Duration afkLimit = const Duration(minutes: 6);
 
 /// How often a device retries reaching the host (or the new host) while waiting. Shortened by tests.
 Duration rejoinRetry = const Duration(seconds: 3);
@@ -74,6 +96,7 @@ class LobbySeat {
     this.stats,
     this.host = false,
     this.addr,
+    this.uid,
   });
 
   SeatKind kind;
@@ -98,6 +121,13 @@ class LobbySeat {
   /// LAN: where this player's device can be reached if it has to become the host.
   String? addr;
 
+  /// The player's account id on the server (null for guests and the AI): it goes into the
+  /// match record of whoever they play, so the server can rate the match.
+  String? uid;
+
+  /// Host only: the features this player's build announced (see [netCaps]); never sent on.
+  Set<String> caps = const {};
+
   bool get isReserved =>
       kind == SeatKind.reservedDisconnected &&
       reservedUntil != null &&
@@ -112,6 +142,7 @@ class LobbySeat {
     if (kind == SeatKind.reservedDisconnected) 'reserved': true,
     if (host) 'host': true,
     if (addr != null) 'addr': addr,
+    if (uid != null) 'uid': uid,
   };
 
   static LobbySeat fromJson(Msg m) => LobbySeat(
@@ -122,6 +153,7 @@ class LobbySeat {
     stats: m['stats'] is Map ? (m['stats'] as Map).cast<String, Object?>() : null,
     host: m['host'] == true,
     addr: m['addr'] as String?,
+    uid: m['uid'] is String ? m['uid'] as String : null,
   );
 }
 
@@ -169,11 +201,28 @@ class NetMatch {
     required this.seatStats,
     required this.chat,
     required this._say,
+    this.mulligans = false,
+    this.matchId = '',
+    this.online = false,
+    this.seatUids = const [],
   }) : names = ValueNotifier(names);
 
   final MatchConfig config;
   final int localSeat;
   final int seed;
+
+  /// The match opens with the mulligan decision. Decided by the host at the start from what every
+  /// player's build can do, so all devices run the same rules.
+  final bool mulligans;
+
+  /// The id both devices save this match under (so the server can tell they played the same one).
+  final String matchId;
+
+  /// Played over the internet (false: over the local network).
+  final bool online;
+
+  /// Each seat's account id (null: a guest or the AI).
+  final List<String?> seatUids;
 
   /// Whether this device is the authority. Becomes true when the lost host is replaced by this device.
   bool isHost;
@@ -197,6 +246,28 @@ class NetMatch {
   /// Subtle non-intrusive banner message shown during network delays or opponent absence.
   final ValueNotifier<String?> waitingNotice = ValueNotifier(null);
 
+  /// Set on every device when a player left, went AFK or dropped out of a 1 v 1 against another
+  /// person: that seat lost and the match is over.
+  final ValueNotifier<({int seat, String reason})?> forfeit = ValueNotifier(null);
+
+  /// A 1 v 1 between two people (two seats that started as players): leaving it is a loss. Team and
+  /// free-for-all matches go on with an AI in the seat instead.
+  bool get duelWithPerson => config.players == 2 && humanSeats.length == 2;
+
+  void Function(String reason)? _announceForfeit;
+
+  /// This device's player left, ran out of time too often or lost the connection: tell the others
+  /// (reason: `leave`, `afk` or `disconnect`).
+  void announceForfeit(String reason) => _announceForfeit?.call(reason);
+
+  void _setForfeit(int seat, String reason) {
+    if (forfeit.value != null) return;
+    forfeit.value = (seat: seat, reason: reason);
+  }
+
+  /// Host only: a remote player never answered within [afkLimit].
+  void Function(int seat)? _afk;
+
   /// The lobby's chat, carried on into the match.
   final ChatLog chat;
   void Function(String text) _say;
@@ -210,7 +281,14 @@ class NetMatch {
   Agent agentFor(int seat, {required Agent human, required Agent ai}) {
     if (seat == localSeat) return LocalSeatAgent(ls, seat, human);
     if (isHost && aiSeats.contains(seat)) return LocalSeatAgent(ls, seat, ai);
-    return _remotes[seat] = RemoteSeatAgent(ls, seat, host: isHost, onInvalid: _onInvalid);
+    return _remotes[seat] = RemoteSeatAgent(
+      ls,
+      seat,
+      host: isHost,
+      onInvalid: _onInvalid,
+      afkLimit: isHost && humanSeats.contains(seat) ? afkLimit : null,
+      onAfk: (s) => _afk?.call(s),
+    );
   }
 
   void Function(int seat)? _invalid;
@@ -291,7 +369,15 @@ abstract class LobbySession extends ChangeNotifier {
     super.dispose();
   }
 
-  NetMatch _makeMatch(Lobby l, List<String> heroes, int seed, int localSeat) {
+  /// Over the internet (set by the screen that opened the session).
+  bool online = false;
+
+  /// The id a match is saved under: the host's, or one worked out from the facts both sides share
+  /// when the host's build is too old to send one.
+  static String matchIdOf(Object? sent, int seed, List<String> heroes, String mapId) =>
+      sent is String && uuidPattern.hasMatch(sent) ? sent : uuidFromText('$seed|${heroes.join(',')}|$mapId');
+
+  NetMatch _makeMatch(Lobby l, List<String> heroes, int seed, int localSeat, {bool mulligans = false, Object? matchId}) {
     final map = data.maps[l.mapId]!;
     final config = MatchConfig(mode: l.mode, players: l.players, map: map, ai: l.ai, heroIds: heroes);
     return NetMatch._(
@@ -311,6 +397,10 @@ abstract class LobbySession extends ChangeNotifier {
       seatStats: [for (final s in l.seats) s.stats],
       chat: chat,
       say: say,
+      mulligans: mulligans,
+      matchId: matchIdOf(matchId, seed, heroes, l.mapId),
+      online: online,
+      seatUids: [for (final s in l.seats) s.kind == SeatKind.human || s.kind == SeatKind.reservedDisconnected ? s.uid : null],
     );
   }
 
@@ -327,6 +417,7 @@ class HostSession extends LobbySession {
     required this.dataVersion,
     String? playerId,
     String? reconnectToken,
+    String? accountId,
   }) {
     final duel = data.mapsFor('1v1');
     lobby = Lobby(
@@ -342,6 +433,7 @@ class HostSession extends LobbySession {
           playerId: playerId,
           reconnectToken: reconnectToken,
           stats: ProfileStats.instance.toSummaryPayload(),
+          uid: accountId != null && accountId.isNotEmpty ? accountId : null,
         ),
         LobbySeat(SeatKind.open),
       ],
@@ -372,6 +464,7 @@ class HostSession extends LobbySession {
     final level = adoptedLobby.ai;
     final solo = link is _NoLink;
     _wireMatch(running);
+    int? lostHost;
     for (var i = 0; i < _l.seats.length; i++) {
       final s = _l.seats[i];
       s.peer = null;
@@ -381,6 +474,7 @@ class HostSession extends LobbySession {
       }
       final wasHost = s.host;
       s.host = false;
+      if (wasHost) lostHost = i;
       if (s.kind == SeatKind.open) continue;
       final agent = running._remotes[i];
       if (s.kind == SeatKind.ai || wasHost || solo) {
@@ -394,6 +488,9 @@ class HostSession extends LobbySession {
         _beginAway(i);
       }
     }
+    // A 1 v 1 whose host is gone for good: the host lost it (the other player's connection is the
+    // one that works, they just took over).
+    if (lostHost != null && running.duelWithPerson) _declareForfeit(lostHost, 'disconnect');
     _sync();
   }
 
@@ -493,8 +590,13 @@ class HostSession extends LobbySession {
       // The token stays on the seat so a late return is told what happened.
       s.kind = SeatKind.ai;
       m._takeOver(seat, _l.ai);
-      link.broadcast({'t': 'seatAi', 'seat': seat});
-      _announce("${s.name ?? 'A player'} didn't come back in time. An AI plays their seat now.");
+      if (m.duelWithPerson && m.humanSeats.contains(seat)) {
+        // A 1 v 1: they didn't come back, so they lost it.
+        _declareForfeit(seat, 'disconnect');
+      } else {
+        link.broadcast({'t': 'seatAi', 'seat': seat});
+        _announce("${s.name ?? 'A player'} didn't come back in time. An AI plays their seat now.");
+      }
     }
     _tick();
     _sync();
@@ -531,10 +633,15 @@ class HostSession extends LobbySession {
     switch (m['t']) {
       case 'hello':
         if (seat != null) return;
-        if (m['v'] != netProtocol || m['data'] != dataVersion) {
-          return _reject(peer, 'Different game version. Update both devices to the same build.');
+        if (m['v'] != netProtocol) {
+          return _reject(peer, 'This device speaks an incompatible network version. Update the game on whichever device is older.');
         }
+        if (m['data'] != dataVersion) {
+          return _reject(peer, 'Different rules version (host $dataVersion, you ${m['data']}): the hero, card or map rules differ between these two builds. Update the older one.');
+        }
+        final caps = {for (final c in (m['caps'] is List ? m['caps'] as List : const [])) if (c is String) c};
         final clientPlayerId = m['playerId'] as String?;
+        final clientUid = m['uid'] is String && (m['uid'] as String).isNotEmpty ? m['uid'] as String : null;
         final clientToken = m['token'] as String?;
         final clientStats = m['stats'] is Map ? (m['stats'] as Map).cast<String, Object?>() : null;
         final name = '${m['name'] ?? ''}'.trim();
@@ -564,7 +671,14 @@ class HostSession extends LobbySession {
         }
 
         if (reconnectSeat >= 0) {
+          // This match opened with mulligans; a build without them would play a different game.
+          // The seat stays reserved for the same player on a build that has them.
+          if (match != null && match!.mulligans && !caps.contains('mulligan')) {
+            return _reject(peer, 'This match uses features your build does not have. Update the game to rejoin.');
+          }
           final s = _l.seats[reconnectSeat];
+          s.caps = caps;
+          if (clientUid != null) s.uid = clientUid;
           final old = s.peer;
           s.kind = SeatKind.human;
           s.peer = peer;
@@ -601,7 +715,8 @@ class HostSession extends LobbySession {
           reconnectToken: clientToken,
           stats: clientStats,
           addr: m['addr'] as String?,
-        );
+          uid: clientUid,
+        )..caps = caps;
         link.send(peer, {'t': 'welcome', 'seat': open});
         _sendChat(peer, 1);
         _sync();
@@ -635,6 +750,9 @@ class HostSession extends LobbySession {
           match!.ls.put(seq, (seat: who, picks: picks));
           match!.ls.publish?.call(seq, (seat: who, picks: picks));
         }
+      case 'forfeit' when seat != null && match != null:
+        final r = m['reason'];
+        _declareForfeit(seat, r is String ? r : 'leave');
       case 'chat' when seat != null:
         final text = m['text'];
         if (text is String) _post(seat, text, peer: peer);
@@ -769,6 +887,16 @@ class HostSession extends LobbySession {
     _sync();
   }
 
+  /// Host only: the hero an AI seat plays, or null to leave it to chance (drawn when the match
+  /// starts from the heroes nobody picked). Returns false when it can't be set.
+  bool setAiHero(int i, String? id) {
+    if (match != null || i < 0 || i >= _l.seats.length || _l.seats[i].kind != SeatKind.ai) return false;
+    if (id != null && (!data.heroes.containsKey(id) || _l.takenBy(i).contains(id))) return false;
+    _l.seats[i].hero = id;
+    _sync();
+    return true;
+  }
+
   /// Removes a player from the lobby.
   void kick(int i) {
     final p = _l.seats[i].peer;
@@ -808,14 +936,31 @@ class HostSession extends LobbySession {
     final heroes = [for (final s in _l.seats) s.hero ?? pool.removeLast()];
     // The match seed: decks are shuffled from it on every device. Fresh and secure each match.
     final seed = rng.nextInt(0x7FFFFFFF);
-    final m = match = _makeMatch(_l, heroes, seed, mySeat!);
+    // The mulligan is on only when every person at the table has a build that knows it.
+    final mulligans = _l.seats.every((s) => s.kind != SeatKind.human || s.peer == null || s.caps.contains('mulligan'));
+    final matchId = newUuid();
+    final m = match = _makeMatch(_l, heroes, seed, mySeat!, mulligans: mulligans, matchId: matchId);
     _wireMatch(m);
-    link.broadcast({'t': 'start', 'lobby': _l.toJson(), 'heroes': heroes, 'seed': seed});
+    link.broadcast({'t': 'start', 'lobby': _l.toJson(), 'heroes': heroes, 'seed': seed, 'mulligan': mulligans, 'matchId': matchId});
     link.lobbyChanged(info);
     _changed();
   }
 
   void takeOver(int seat, [AiLevel level = AiLevel.hard]) => match?._takeOver(seat, level);
+
+  /// A player of a 1 v 1 against another person left, went AFK or dropped out for good: they lose
+  /// and the match is over, for everyone. In any other match nothing ends here (an AI takes the seat).
+  void _declareForfeit(int seat, String reason) {
+    final m = match;
+    if (m == null || !m.duelWithPerson || !m.humanSeats.contains(seat) || m.forfeit.value != null) return;
+    const known = {'leave', 'afk', 'disconnect'};
+    final why = known.contains(reason) ? reason : 'leave';
+    m._setForfeit(seat, why);
+    link.broadcast({'t': 'forfeit', 'seat': seat, 'reason': why});
+  }
+
+  /// This device's own player forfeits (they left, ran out of time, lost the connection).
+  void forfeitSelf(String reason) => _declareForfeit(mySeat!, reason);
 
   /// Connects a match to this host: answers are relayed, illegal moves hand the seat to an AI.
   void _wireMatch(NetMatch m) {
@@ -832,6 +977,21 @@ class HostSession extends LobbySession {
     m._leave = () => unawaited(leave());
     m._report = (winner, players) => link.finished(winner: winner, players: players);
     m._say = say;
+    m._announceForfeit = (reason) => _declareForfeit(mySeat!, reason);
+    m._afk = (seat) {
+      // Nobody answered for [afkLimit]: in a 1 v 1 that is a forfeit; elsewhere an AI plays the seat.
+      if (match == null || seat >= _l.seats.length) return;
+      final name = _l.seats[seat].name ?? 'A player';
+      if (m.duelWithPerson) {
+        _declareForfeit(seat, 'afk');
+      } else {
+        _l.seats[seat].kind = SeatKind.ai;
+        m._takeOver(seat, _l.ai);
+        link.broadcast({'t': 'seatAi', 'seat': seat});
+        _announce('$name was away too long. An AI plays their seat now.');
+        _sync();
+      }
+    };
   }
 
   void _reconnectSeat(int seat, String peer) {
@@ -841,7 +1001,7 @@ class HostSession extends LobbySession {
     final heroes = [for (final s in _l.seats) s.hero!];
     final log = m.ls.since(0).toList();
     // `replay` tells the device how many decisions it has to play through quickly to catch up.
-    link.send(peer, {'t': 'start', 'lobby': _l.toJson(), 'heroes': heroes, 'seed': m.seed, 'replay': log.length});
+    link.send(peer, {'t': 'start', 'lobby': _l.toJson(), 'heroes': heroes, 'seed': m.seed, 'replay': log.length, 'mulligan': m.mulligans, 'matchId': m.matchId});
     _sendChat(peer, 1);
     // Seats that started with a person but are AI-run now (replaced after a grace period, or the
     // lost host's seat after a host change).
@@ -915,7 +1075,9 @@ class ClientSession extends LobbySession {
     required this.address,
     this.playerId,
     this.reconnectToken,
+    this.accountId,
     this.transport,
+    this.caps = netCaps,
   }) {
     _attach(link);
     _repair = Timer.periodic(const Duration(seconds: 2), (_) => _checkLost());
@@ -923,7 +1085,13 @@ class ClientSession extends LobbySession {
 
   ClientLink link;
   final String? playerId;
+
+  /// This player's account id on the server, shown to the others (null: a guest).
+  final String? accountId;
   final String? reconnectToken;
+
+  /// What this build can do beyond the base protocol; tests pass fewer to act as an older build.
+  final List<String> caps;
 
   /// How to reconnect, and how to take over as host, during a match. Without it a lost host ends
   /// the wait after [rejoinGrace] and this device plays on alone against the AI.
@@ -942,8 +1110,10 @@ class ClientSession extends LobbySession {
     't': 'hello',
     'v': netProtocol,
     'data': _dataVersion,
+    'caps': caps,
     'name': _name,
     if (playerId != null) 'playerId': playerId,
+    if (accountId != null && accountId!.isNotEmpty) 'uid': accountId,
     if (reconnectToken != null) 'token': reconnectToken,
     'stats': ProfileStats.instance.toSummaryPayload(),
     'addr': ?transport?.localAddress,
@@ -1009,7 +1179,8 @@ class ClientSession extends LobbySession {
       case 'start':
         final l = lobby = Lobby.fromJson((m['lobby'] as Map).cast<String, Object?>());
         final heroes = (m['heroes'] as List).cast<String>();
-        final mm = match = _makeMatch(l, heroes, m['seed'] as int, mySeat!);
+        // An older host doesn't send the flag: no mulligan, exactly as that build plays.
+        final mm = match = _makeMatch(l, heroes, m['seed'] as int, mySeat!, mulligans: m['mulligan'] == true, matchId: m['matchId']);
         mm.ls.replayTarget = (m['replay'] as num?)?.toInt() ?? 0;
         mm.ls.publish = (seq, a) {
           if (a.seat != mySeat) return;
@@ -1017,6 +1188,7 @@ class ClientSession extends LobbySession {
           link.send({'t': 'ans', 'seq': seq, 'picks': a.picks});
         };
         mm._leave = () => unawaited(leave());
+        mm._announceForfeit = (reason) => link.send({'t': 'forfeit', 'reason': reason});
         final early = List.of(_early);
         _early.clear();
         early.forEach(_onMessage);
@@ -1028,6 +1200,12 @@ class ClientSession extends LobbySession {
         if (seq is int && seat is int && picks is List) {
           _unacked.remove(seq);
           match!.ls.put(seq, (seat: seat, picks: picks.cast<int>()));
+        }
+      case 'forfeit':
+        final seat = m['seat'], reason = m['reason'];
+        final mm = match;
+        if (seat is int && mm != null && mm.duelWithPerson && mm.humanSeats.contains(seat)) {
+          mm._setForfeit(seat, reason is String ? reason : 'leave');
         }
       case 'seatAi':
         final seat = m['seat'];
@@ -1197,6 +1375,7 @@ class ClientSession extends LobbySession {
       dataVersion: _dataVersion,
       chat: chat,
     );
+    session.online = online;
     m.showToast(solo ? 'The host left. You play on against the AI.' : 'The host left. You are hosting the match now; an AI plays their seat.');
     // The old connection is of no use any more.
     try {

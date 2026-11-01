@@ -37,6 +37,25 @@ class FakePlayer extends Fake implements AudioPlayer {
   ReleaseMode loopMode = ReleaseMode.release;
   int plays = 0;
   int resumes = 0;
+
+  /// The web's `resume()` seeks to the start when the element was not paused through Dart: resuming a
+  /// player that is already playing restarts the track. Counted here so a test can forbid it.
+  int restarts = 0;
+
+  /// Where the track is (milliseconds), kept as it plays on and reset by a restart.
+  int positionMs = 0;
+
+  @override
+  PlayerState get state => playing != null ? PlayerState.playing : PlayerState.paused;
+
+  @override
+  Future<Duration?> getCurrentPosition() async => Duration(milliseconds: positionMs);
+
+  @override
+  Future<void> seek(Duration position) async {
+    await _tick();
+    positionMs = position.inMilliseconds;
+  }
   bool lostFocus = false;
   AudioContext? context;
 
@@ -53,6 +72,10 @@ class FakePlayer extends Fake implements AudioPlayer {
   Future<void> resume() async {
     await _tick();
     resumes++;
+    if (playing != null) {
+      restarts++; // what the web does
+      positionMs = 0;
+    }
     if (playing == null && lastSource != null) {
       playing = lastSource;
       lostFocus = false;
@@ -104,6 +127,7 @@ class FakePlayer extends Fake implements AudioPlayer {
     }
     playing = path;
     lastSource = path;
+    positionMs = 0;
     plays++;
     if (volume != null) level = volume;
   }
@@ -322,6 +346,63 @@ void main() {
       });
     });
 
+    test('REGRESSION: button presses and card taps never restart the music that is playing', () async {
+      for (final track in [Music.menu, Music.battle]) {
+        await run(() async {
+          audio.music(track);
+          await settle();
+          final startedOnce = music().plays;
+          music().positionMs = 42000; // well into the song
+          // Play on: many presses over many seconds (the throttle lets a resume through every 2 s).
+          for (var i = 0; i < 12; i++) {
+            audio.userGesture();
+            audio.sfx(Sfx.click, volume: 0.45);
+            audio.sfx(Sfx.card);
+            await settle(40);
+          }
+          await Future<void>.delayed(const Duration(milliseconds: 2100));
+          audio.userGesture();
+          audio.ensureMusic();
+          await settle(100);
+          expect(music().restarts, 0, reason: '${track.name}: a press restarted it');
+          expect(music().positionMs, 42000, reason: '${track.name}: the song went back to the start');
+          expect(music().plays, startedOnce, reason: '${track.name}: it was started again');
+          expect(music().resumes, 0, reason: 'a track that is playing is not even asked to resume');
+        });
+      }
+      expect(unexpected, isEmpty);
+    });
+
+    test('a track that is still loading is not started again by a press', () async {
+      await run(() async {
+        audio.music(Music.menu);
+        // Presses while the first sound is still on its way (nothing is "blocked", it is only slow).
+        for (var i = 0; i < 6; i++) {
+          audio.userGesture();
+          await Future<void>.delayed(const Duration(milliseconds: 3));
+        }
+        await settle();
+        expect(music().plays, 1, reason: 'one start, however many presses came meanwhile');
+        expect(music().playing, 'audio/menu_theme.mp3');
+      });
+      expect(unexpected, isEmpty);
+    });
+
+    test('a track the system paused is resumed from where it was, not from the start', () async {
+      await run(() async {
+        audio.music(Music.battle);
+        await settle();
+        final p = music();
+        p.positionMs = 61000;
+        p.playing = null; // paused by a call
+        audio.userGesture();
+        await settle();
+        expect(p.playing, 'audio/battle_theme.mp3');
+        expect(p.positionMs, 61000, reason: 'it carries on, it does not begin again');
+      });
+      expect(unexpected, isEmpty);
+    });
+
     test('if the system pauses the music anyway, the next tap brings it back', () async {
       await run(() async {
         audio.music(Music.battle);
@@ -339,6 +420,7 @@ void main() {
       await run(() async {
         audio.music(Music.battle);
         await settle();
+        music().playing = null; // the system paused it
         for (var i = 0; i < 30; i++) {
           audio.ensureMusic();
         }

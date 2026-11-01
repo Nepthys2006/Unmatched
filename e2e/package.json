@@ -1,0 +1,13 @@
+{
+  "name": "unmatched-e2e",
+  "private": true,
+  "type": "module",
+  "description": "Browser tests for the Full Screen help, the PWA files and offline use, against the built web app.",
+  "scripts": {
+    "test": "playwright test",
+    "install-browsers": "playwright install --with-deps webkit chromium"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0"
+  }
+}

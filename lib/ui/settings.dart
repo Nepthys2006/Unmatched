@@ -220,6 +220,10 @@ class Settings extends ChangeNotifier {
   /// The signed-in account's session token (empty: not signed in). The username above is then
   /// the account's name.
   String accountToken = '';
+
+  /// The signed-in account's id on the server (what match records and lobbies carry; empty until
+  /// the server has told this device).
+  String accountId = '';
   bool get signedIn => accountToken.isNotEmpty;
   /// High everywhere: the 3D board's frame-rate governor keeps phones at 60 fps by itself.
   Quality quality = Quality.high;
@@ -316,6 +320,7 @@ class Settings extends ChangeNotifier {
     final expStr = p.getString('reconnect_expires');
     if (expStr != null) reconnectExpiresAt = DateTime.tryParse(expStr);
     accountToken = p.getString('accountToken') ?? '';
+    accountId = p.getString('accountId') ?? '';
     applyPreset(_pick(Quality.values, p.getInt('quality')) ?? quality);
     animSpeed = _pick(AnimSpeed.values, p.getInt('animSpeed')) ?? animSpeed;
     combatPace = _pick(CombatPace.values, p.getInt('combatPace')) ?? combatPace;
@@ -346,6 +351,7 @@ class Settings extends ChangeNotifier {
       await p.setString('username', username);
       await p.setString('playerId', playerId);
       await p.setString('accountToken', accountToken);
+      await p.setString('accountId', accountId);
       await p.setInt('quality', quality.index);
       await p.setInt('animSpeed', animSpeed.index);
       await p.setInt('combatPace', combatPace.index);

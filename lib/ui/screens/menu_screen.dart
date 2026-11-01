@@ -7,11 +7,14 @@ import 'package:flutter/material.dart';
 
 import '../../engine/defs.dart';
 import '../audio.dart';
+import '../dialogs/fullscreen_help_dialog.dart';
+import '../sync_indicator.dart';
 import '../match/fullscreen_button.dart';
 import '../services.dart';
 import '../shapes.dart';
 import '../theme.dart';
 import '../widgets.dart';
+import 'match_history_screen.dart';
 import 'settings_screen.dart';
 import 'multiplayer_screen.dart';
 import 'setup_screen.dart';
@@ -31,6 +34,7 @@ class _MenuScreenState extends State<MenuScreen> with SingleTickerProviderStateM
   late final AnimationController _intro = AnimationController(vsync: this, duration: const Duration(milliseconds: 900))..forward();
   List<HeroDef> _trio = const [];
   bool _musicAsked = false;
+  Timer? _helpTimer;
 
   @override
   void didChangeDependencies() {
@@ -42,6 +46,9 @@ class _MenuScreenState extends State<MenuScreen> with SingleTickerProviderStateM
     if (!_musicAsked) {
       _musicAsked = true;
       s.audio.music(Music.menu);
+      // iPhone and iPad in a browser: once, shortly after the menu is up, tell the player how to get
+      // real full screen. Never during a match, never again once closed.
+      _helpTimer = Timer(const Duration(milliseconds: 900), () => _maybeShowFullscreenHelp(s));
     }
     if (_trio.isEmpty && s.loaded) {
       final all = s.data.heroes.values.toList()..shuffle(math.Random());
@@ -55,8 +62,18 @@ class _MenuScreenState extends State<MenuScreen> with SingleTickerProviderStateM
     );
   }
 
+  Future<void> _maybeShowFullscreenHelp(Services s) async {
+    if (!mounted) return;
+    final c = s.fullscreen;
+    await c.load();
+    // The menu stays mounted under a match: only when it is the screen on top.
+    if (!mounted || !(ModalRoute.of(context)?.isCurrent ?? false) || !c.shouldAutoShowHelp) return;
+    await FullscreenHelpDialog.showFor(context, c);
+  }
+
   @override
   void dispose() {
+    _helpTimer?.cancel();
     _intro.dispose();
     super.dispose();
   }
@@ -185,25 +202,46 @@ class _MenuScreenState extends State<MenuScreen> with SingleTickerProviderStateM
               Positioned(
                 right: 16,
                 top: 12,
-                child: HexButton(
-                  icon: Icons.people_alt_rounded,
-                  tooltip: 'Active Players',
-                  size: 48,
-                  onPressed: () => ActivePlayersDrawer.show(context),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    HexButton(
+                      key: const ValueKey('menu-history'),
+                      icon: Icons.history_rounded,
+                      tooltip: 'Match history',
+                      size: 48,
+                      onPressed: () => _open(const MatchHistoryScreen()),
+                    ),
+                    const SizedBox(width: 10),
+                    HexButton(
+                      icon: Icons.people_alt_rounded,
+                      tooltip: 'Active Players',
+                      size: 48,
+                      onPressed: () => ActivePlayersDrawer.show(context),
+                    ),
+                  ],
                 ),
               ),
               // Bottom left: who is playing.
               Positioned(
                 left: 16,
                 bottom: 12,
-                child: _NamePlate(
-                  name: s.settings.username,
-                  onTap: () => PlayerProfileModal.show(
-                    context,
-                    name: s.settings.username,
-                    statsPayload: ProfileStats.instance.toSummaryPayload(),
-                    isSelf: true,
-                  ),
+                right: size.width * 0.5,
+                child: Row(
+                  children: [
+                    _NamePlate(
+                      name: s.settings.username,
+                      onTap: () => PlayerProfileModal.show(
+                        context,
+                        name: s.settings.username,
+                        statsPayload: ProfileStats.instance.toSummaryPayload(),
+                        isSelf: true,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    // How many matches are still waiting to reach the server.
+                    Flexible(child: SyncIndicator(onTap: () => _open(const MatchHistoryScreen()))),
+                  ],
                 ),
               ),
             ],

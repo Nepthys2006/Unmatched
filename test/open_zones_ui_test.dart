@@ -299,7 +299,7 @@ void main() {
         final asked = find.textContaining('Reveal another MISERY');
         for (var i = 0; i < 9000 && asked.evaluate().isEmpty; i++) {
           await t.pump(const Duration(milliseconds: 20));
-          for (final label in ['SKIP', 'NO DEFENSE']) {
+          for (final label in ['SKIP', 'NO DEFENSE', 'KEEP HAND']) {
             final skip = find.text(label);
             if (skip.evaluate().isNotEmpty) await t.tap(skip.first);
           }

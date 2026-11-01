@@ -55,8 +55,10 @@ void main() {
       for (var i = 0; i < 6000 && yourTurn.evaluate().isEmpty; i++) {
         await t.pump(const Duration(milliseconds: 20));
         // Start-of-turn choices (Go Nuts!) are optional: skip them.
-        final skip = find.text('SKIP');
-        if (skip.evaluate().isNotEmpty) await t.tap(skip.first);
+        for (final label in ['SKIP', 'KEEP HAND']) {
+          final skip = find.text(label);
+          if (skip.evaluate().isNotEmpty) await t.tap(skip.first);
+        }
       }
       if (yourTurn.evaluate().isEmpty) await shot(t, '${sizeName(size)}-0-stuck');
       expect(yourTurn, findsOneWidget);

@@ -13,6 +13,7 @@ import '../../net/link.dart';
 import '../../net/online.dart';
 import '../../net/session.dart';
 import '../../net/transports.dart';
+import '../keep_focus_visible.dart';
 import '../services.dart';
 import '../shapes.dart';
 import '../theme.dart';
@@ -150,7 +151,8 @@ class _MultiplayerScreenState extends State<MultiplayerScreen> {
         dataVersion: s.dataVersion,
         playerId: s.settings.playerId,
         reconnectToken: token,
-      );
+        accountId: s.settings.accountId,
+      )..online = _online;
       await _openLobby(session);
     } catch (e) {
       _error(_online ? e : 'Could not start hosting: $e');
@@ -179,6 +181,7 @@ class _MultiplayerScreenState extends State<MultiplayerScreen> {
         address: target,
         playerId: s.settings.playerId,
         reconnectToken: token,
+        accountId: s.settings.accountId,
         transport: LanTransport(target, await firstLocalAddress(), hostName: s.settings.username),
       );
       await _openLobby(session);
@@ -211,8 +214,9 @@ class _MultiplayerScreenState extends State<MultiplayerScreen> {
         address: l.name,
         playerId: s.settings.playerId,
         reconnectToken: token,
+        accountId: s.settings.accountId,
         transport: link.topic == null ? null : OnlineTransport(link.topic!, hostName: s.settings.username),
-      );
+      )..online = true;
       await _openLobby(session);
     } catch (e) {
       _error(e);
@@ -242,8 +246,9 @@ class _MultiplayerScreenState extends State<MultiplayerScreen> {
           address: lobbyId,
           playerId: s.settings.playerId,
           reconnectToken: token,
+          accountId: s.settings.accountId,
           transport: (topic != null && topic.isNotEmpty) ? OnlineTransport(topic, hostName: s.settings.username) : null,
-        );
+        )..online = true;
         await _openLobby(session);
       } else {
         await _joinLan(lobbyId);
@@ -293,7 +298,10 @@ class _MultiplayerScreenState extends State<MultiplayerScreen> {
   @override
   Widget build(BuildContext context) {
     final canHost = _online || canHostLan;
+    // The keyboard overlays the screen instead of squeezing it; the panels scroll above it.
+    final keyboard = MediaQuery.viewInsetsOf(context).bottom;
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       body: TableBackground(
         child: SafeArea(
           child: Column(
@@ -312,17 +320,19 @@ class _MultiplayerScreenState extends State<MultiplayerScreen> {
               ),
               Expanded(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+                  padding: EdgeInsets.fromLTRB(24, 8, 24, 24 + keyboard),
                   child: Center(
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 980),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(child: _hostPanel(canHost)),
-                          const SizedBox(width: 20),
-                          Expanded(child: _joinPanel()),
-                        ],
+                      child: KeepFocusVisible(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(child: _hostPanel(canHost)),
+                            const SizedBox(width: 20),
+                            Expanded(child: _joinPanel()),
+                          ],
+                        ),
                       ),
                     ),
                   ),

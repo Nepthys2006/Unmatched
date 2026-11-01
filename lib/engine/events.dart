@@ -50,6 +50,16 @@ class CardsDrawn extends GameEvent {
   String get log => '${player.name} draws ${cards.length} card${cards.length == 1 ? '' : 's'}.';
 }
 
+/// A player's opening-hand choice: [took] the mulligan (hand shuffled back, same-size hand drawn)
+/// or kept the hand.
+class Mulliganed extends GameEvent {
+  const Mulliganed(this.player, this.took);
+  final Player player;
+  final bool took;
+  @override
+  String get log => took ? '${player.name} takes a mulligan and draws a new hand.' : '${player.name} keeps their hand.';
+}
+
 class Exhausted extends GameEvent {
   const Exhausted(this.player);
   final Player player;

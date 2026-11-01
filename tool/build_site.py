@@ -43,6 +43,15 @@ NETLIFY_TOML = """# Unmatched, fan edition: landing page at /, the Flutter web g
   for = "/play/flutter_bootstrap.js"
   [headers.values]
     Cache-Control = "no-cache"
+# The offline worker and the install manifest must always be re-checked, or a new release never arrives.
+[[headers]]
+  for = "/play/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+[[headers]]
+  for = "/play/manifest.json"
+  [headers.values]
+    Cache-Control = "no-cache"
 
 [[redirects]]
   from = "/play"

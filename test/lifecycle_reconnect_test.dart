@@ -117,7 +117,7 @@ void main() {
   }
 
   group('Host: a player who drops out keeps their seat for 2 minutes, then an AI takes it', () {
-    testWidgets('the match waits with a countdown, then the AI takes over', (tester) async {
+    testWidgets('the match waits with a countdown, then (a 1 v 1) they have lost it', (tester) async {
       final (link, host) = startedHost();
       try {
         final match = host.match!;
@@ -133,16 +133,17 @@ void main() {
         expect(match.names.value[1], isNot(endsWith('(AI)')));
         expect(host.lobby!.seats[1].kind, SeatKind.reservedDisconnected);
 
-        // The 2 minutes are up: an AI plays the seat, everyone is told, the notice goes.
+        // The 2 minutes are up. This is a 1 v 1 against another person, so they forfeit it (a loss
+        // that counts); in a team match an AI would take the seat instead (see forfeit_test.dart).
         await tester.pump(const Duration(seconds: 60));
         expect(host.lobby!.seats[1].kind, SeatKind.ai);
         expect(match.names.value[1], endsWith('(AI)'));
         expect(match.waitingNotice.value, isNull);
-        expect(match.toast.value, contains('An AI plays their seat'));
-        expect(link.broadcasted.any((m) => m['t'] == 'seatAi' && m['seat'] == 1), isTrue);
-        // And nothing else happens later (no redirect, no second takeover).
+        expect(match.forfeit.value, (seat: 1, reason: 'disconnect'));
+        expect(link.broadcasted.any((m) => m['t'] == 'forfeit' && m['seat'] == 1 && m['reason'] == 'disconnect'), isTrue);
+        // And nothing else happens later (no redirect, no second forfeit).
         await tester.pump(const Duration(minutes: 6));
-        expect(match.toast.value, isNull);
+        expect(link.broadcasted.where((m) => m['t'] == 'forfeit'), hasLength(1));
       } finally {
         host.dispose();
       }

@@ -22,6 +22,86 @@ Last updated: 2026-10-28. For the full engine/API reference see `HANDOFF.md`.
 | Checked in a browser | ✅ Chrome (desktop and phone-sized): 1v1, 2v2, 3v3 on the 3D maps |
 | Android / iOS / Windows app | ⚠️ Not run on a device yet (no phone or Visual Studio on this PC) |
 
+## Done (2026-10-30, latest): mulligan, choose the AI hero, deck viewer, builds that differ still pair
+
+- **Mulligan** (once per player per game, vs AI, LAN and online): after the starting hands, `Game.offerMulligan`
+  asks Mulligan / Keep Hand (`Intent.mulligan`); Mulligan shuffles the whole hand back, redraws the same
+  number (Black Widow's mission card comes back first), and is never offered again (`Player.mulliganUsed`).
+  The AI mulligans a hand with very few attack/defense cards (`AiAgent._pickMulligan`; Easy only with none).
+  UI: `MulliganPanel` (hud.dart). `Game(mulligans:)` is off by default so engine tests and the AI arena
+  are unchanged; UI tests that drive a match press KEEP HAND.
+- **Choose the AI opponent** (hero select): Random (default, drawn at match start, never your hero) or Choose
+  hero (same grid + search in a popup, chosen heroes shown by portrait and name; every AI seat in 2v2, 3v3 and
+  free-for-all). `MatchConfig.lineup`. Lobbies: only the host can pick an AI seat's hero (`HostSession.setAiHero`,
+  buttons on the seat); guests see it.
+- **Deck viewer**: tap the hero's big card -> read-only popup of the whole deck (`deck_viewer.dart`): thumbnails
+  with quantities, details (type, value, boost, text, copies, art), type filter, X / Esc / click outside.
+  The zoom badge on the card still reads the character card.
+- **Builds of different ages play together**: `netProtocol` stays 1. New features are negotiated: the hello
+  carries `caps`, the host switches the mulligan on only if every person's build has it and says so in `start`.
+  The rules fingerprint (`lib/net/rules_version.dart`) ignores text, art, names, line endings and key order but not
+  values, copies, paths or the hero roster. Still needs the same build: any rules change in the engine scripts.
+- Tests: `mulligan_test.dart`, `mulligan_net_test.dart`, `hero_select_features_test.dart`, `lobby_inspect_qr_test.dart`.
+  **Do not run `test/online_test.dart` casually: it creates and removes a lobby on the live Supabase.**
+
+## Done (2026-10-31): the music no longer restarts on every button press
+
+- **Cause**: every tap runs `Audio.userGesture()` -> `ensureMusic()` -> `AudioPlayer.resume()`. On the web audioplayers'
+  `resume()` seeks to `_pausedAt ?? 0`, so resuming a track that was already playing jumped it back to the start (at most
+  every 2 s, i.e. on nearly every press), menu theme and battle theme alike. The comment said resuming a playing player
+  was harmless; that is false on the web.
+- **Fix** (`lib/ui/audio.dart`): `ensureMusic` leaves a playing track alone, resumes a paused one from where it was
+  (position read first, seek after), and a press while a track is still loading no longer starts it again.
+- **Tests**: `test/audio_switching_test.dart` (fake now behaves like the web; 3 new regression tests) and a real-browser
+  check, `e2e/music.spec.mjs`: it watches every write to an audio element's `currentTime` while pressing buttons. On the old
+  code the song went from 13.9 s back to 2.5 s after the first press; on the fixed build it plays on, in the menu and in battle.
+
+## Done (2026-10-31, latest): leaving / AFK / dropping out is a loss that counts; Full Screen help for iPhone and iPad
+
+- **Forfeits** (1 v 1 against another person only; team matches put an AI in the seat): a 90 s clock on every decision
+  (the AI answers when it runs out, a countdown shows in the last 30 s), 3 misses in a row = AFK = forfeit; Leave match
+  asks "Leaving counts as a loss"; a player not back within the 2-minute grace period forfeits; the host also has a
+  6-minute backstop for a device that neither answers nor leaves; a lost host forfeits the match to the player who
+  takes over. Record fields `ended_by` (forfeit_me / forfeit_opponent), `forfeit_reason` (leave / afk / disconnect),
+  `turns`. Server (`supabase/match_sync.sql`): both sides send their side and it rates normally; if the leaver never
+  does, the winner's claim stands after 15 minutes if the match had at least 6 turns and 2 minutes (else `void`).
+  Tests: `test/forfeit_test.dart`, 24 SQL checks (`tool/sql_test`).
+- **Full Screen help** (iPhone / iPad): `FullscreenHelpDialog` (lib/ui/dialogs), `PlatformInfo` + `PlatformInfoService`
+  (web code behind conditional imports), `FullscreenController`, storage, debug panel (`?debug=1`), PWA files
+  (`web/manifest.json`, `web/sw.js`, touch icons), strings in `lib/l10n/*.arb` (en, fil, ceb; `flutter gen-l10n`).
+  Rotate screen only for phones; iPad windows too small show "Make this window larger". See TESTING.md.
+- Flutter 3.47 has no `--pwa-strategy` / `flutter_service_worker.js` any more: `web/sw.js` is the offline worker. Build with
+  `--no-web-resources-cdn` so CanvasKit is cached too. Flutter's engine overwrites the viewport meta tag; index.html puts it back.
+
+## Done (2026-10-31): offline match cache + auto sync, server-side MMR
+
+- **Every finished match is saved on the device first** (`lib/net/match_store.dart`, record in `match_record.dart`:
+  match_id, mode AI/LAN/ONLINE, my_user_id, opponent_user_id, heroes, winner, played_at, duration, sync_status).
+  Nothing is removed until the server confirmed it; only the oldest *confirmed* ones are trimmed past 300.
+- **Sync** (`lib/net/match_sync.dart`): oldest first, one at a time, retried with 5 s -> 15 min backoff, idempotent
+  (the server returns the stored result for a repeat). Triggers: match finished, app start/resume, sign-in, a
+  connectivity signal if one is plugged in (`MatchSyncService.connectivity`; no platform plugin is bundled, being
+  online is noticed by the attempts themselves). Indicator chip `SyncIndicator`, `MatchHistoryScreen`, menu button.
+- **MMR is the server's** (`supabase/match_sync.sql`, **not applied yet**: paste it in the Supabase SQL editor after
+  schema.sql). Elo 1000 / K 32 (48 for the first 10), only for a 1v1 LAN/ONLINE match between two registered accounts
+  where BOTH devices submitted and agree; AI, team games and guests are saved with delta 0; matches are rated in
+  played_at order (a late LAN match replays everything after it); a LAN match more than 7 days old when verified expires.
+  The app no longer computes MMR itself; it shows the rating the server returns.
+- LAN/online matches share a host-made `matchId` in the start message and carry each player's account id (`uid`) in the
+  hello/lobby; older builds fall back to a derived id and no uid (their matches are saved, just never ranked).
+- Tests: `test/match_sync_test.dart`, `match_id_net_test.dart`, `match_history_ui_test.dart`, and the SQL itself on an
+  in-memory Postgres: `cd tool/sql_test && npm install && npm test` (16 checks; never touches a real server).
+
+## Done (2026-10-30, latest): keyboard overlays sign-in / create account and the LAN screen
+
+- `resizeToAvoidBottomInset: false` on `UsernameScreen` and `MultiplayerScreen`: the keyboard is drawn over the
+  screen, nothing is squeezed (the hero picture, title, tabs and fields keep their size). The form's scroll view
+  gets bottom padding as tall as the keyboard and `KeepFocusVisible` (lib/ui/keep_focus_visible.dart) scrolls
+  the focused field into the free area above the keys. The tab plates and the sign-in button no longer overflow
+  in narrow columns (tablet / iPad upright). `web/index.html` viewport has `interactive-widget=overlays-content`
+  so Chrome on Android overlays the keyboard instead of shrinking the page (not checkable here: no Android device).
+- Test: `test/keyboard_overlay_test.dart` (Android phones, iPhone, tablets, iPad both orientations, web tablet).
+
 ## Done (2026-10-30, later): black outline on heroes, new soundtrack, softer click
 
 - **Black outline round heroes** (web on phones, iPhone, iPad, tablets; any non-premultiplied filtering):

@@ -136,9 +136,15 @@ class LocalSeatAgent implements Agent {
 /// A seat answered on another device. On the host, answers are checked, relayed to everyone,
 /// and an AI takes over if the player leaves or sends something illegal.
 class RemoteSeatAgent implements Agent {
-  RemoteSeatAgent(this.ls, this.seat, {this.host = false, this.onInvalid});
+  RemoteSeatAgent(this.ls, this.seat, {this.host = false, this.onInvalid, this.afkLimit, this.onAfk});
   final Lockstep ls;
   final int seat;
+
+  /// Host only: how long to wait for this player's answer before [onAfk] is called (once). A real
+  /// player's own device handles its timer long before this; it is the backstop for one that doesn't.
+  final Duration? afkLimit;
+  final void Function(int seat)? onAfk;
+  bool _afkFired = false;
 
   /// Whether this device is the authority (checks and relays answers). A player's device becomes
   /// the host when the host is lost for good (see [becomeHost]).
@@ -185,7 +191,21 @@ class RemoteSeatAgent implements Agent {
         final a = await Future.any<Answer?>([ls.wait(seq), changed.then((_) => null)]);
         if (a != null) return a.picks;
       } else {
-        final picks = await Future.any<List<int>?>([ls.waitOffer(seq, seat), changed.then((_) => null)]);
+        Timer? afkTimer;
+        final afk = Completer<List<int>?>();
+        if (afkLimit != null && !_afkFired) {
+          afkTimer = Timer(afkLimit!, () {
+            _afkFired = true;
+            onAfk?.call(seat);
+            if (!afk.isCompleted) afk.complete(null);
+          });
+        }
+        final List<int>? picks;
+        try {
+          picks = await Future.any<List<int>?>([ls.waitOffer(seq, seat), changed.then((_) => null), afk.future]);
+        } finally {
+          afkTimer?.cancel();
+        }
         if (picks != null) {
           if (validPicks(prompt, picks)) {
             final a = (seat: seat, picks: picks);

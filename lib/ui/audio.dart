@@ -56,19 +56,25 @@ class Audio {
   /// held it (the music) with a permanent "focus lost", which the plugin handles by pausing it for
   /// good. So every click or hit sound silenced the music until the next track change. Mixing
   /// with others means no sound can pause another. (On the web and Windows this is ignored.)
-  static final AudioContext _mix = AudioContextConfig(focus: AudioContextConfigFocus.mixWithOthers).build();
+  static final AudioContext _mix = AudioContextConfig(
+    focus: AudioContextConfigFocus.mixWithOthers,
+  ).build();
 
   AudioPlayer? _music;
   Music? _current;
   bool _musicStarted = false;
   bool _musicPrepared = false;
+
+  /// A track is being loaded and started right now (the first sound can take a moment).
+  bool _starting = false;
   DateTime _lastEnsure = DateTime.fromMillisecondsSinceEpoch(0);
 
   /// The track loaded in the player (its trim applies to the volume), which may differ from
   /// [_current] while a change is under way.
   Music? _track;
 
-  double get _musicLevel => (settings.musicVolume * (_track?.gain ?? 1)).clamp(0.0, 1.0);
+  double get _musicLevel =>
+      (settings.musicVolume * (_track?.gain ?? 1)).clamp(0.0, 1.0);
 
   /// Bumped by every track change, so a slower earlier change notices it was overtaken and stops.
   int _generation = 0;
@@ -107,32 +113,42 @@ class Audio {
     if (_current == m && _musicStarted) return;
     _current = m;
     final gen = ++_generation;
+    _starting = true;
     _guard(() async {
-      final p = _music ??= _newPlayer('music');
-      if (!_musicPrepared) {
-        _musicPrepared = true;
-        await _mixWithOthers(p);
-      }
-      if (_musicStarted) await _fadeOut(p, gen);
-      if (gen != _generation) return;
-      await p.stop();
-      if (gen != _generation) return;
-      _musicStarted = false;
-      await p.setReleaseMode(m.loop ? ReleaseMode.loop : ReleaseMode.stop);
-      if (gen != _generation) return;
-      _track = m;
       try {
-        await p.play(AssetSource('audio/${m.file}'), volume: 0);
-      } catch (_) {
-        // The mp3 won't play here: use the plain wav. If that fails too (autoplay blocked), the
-        // error ends this call and the next tap retries from the top.
-        if (gen != _generation) return;
-        await p.play(AssetSource('audio/${m.fallback}'), volume: 0);
+        await _switchTo(m, gen);
+      } finally {
+        // Only the newest change owns the flag (an older one that was overtaken leaves it alone).
+        if (gen == _generation) _starting = false;
       }
-      if (gen != _generation) return;
-      _musicStarted = true;
-      await _fadeIn(p, gen);
     });
+  }
+
+  Future<void> _switchTo(Music m, int gen) async {
+    final p = _music ??= _newPlayer('music');
+    if (!_musicPrepared) {
+      _musicPrepared = true;
+      await _mixWithOthers(p);
+    }
+    if (_musicStarted) await _fadeOut(p, gen);
+    if (gen != _generation) return;
+    await p.stop();
+    if (gen != _generation) return;
+    _musicStarted = false;
+    await p.setReleaseMode(m.loop ? ReleaseMode.loop : ReleaseMode.stop);
+    if (gen != _generation) return;
+    _track = m;
+    try {
+      await p.play(AssetSource('audio/${m.file}'), volume: 0);
+    } catch (_) {
+      // The mp3 won't play here: use the plain wav. If that fails too (autoplay blocked), the
+      // error ends this call and the next tap retries from the top.
+      if (gen != _generation) return;
+      await p.play(AssetSource('audio/${m.fallback}'), volume: 0);
+    }
+    if (gen != _generation) return;
+    _musicStarted = true;
+    await _fadeIn(p, gen);
   }
 
   Future<void> _fadeIn(AudioPlayer p, int gen) async {
@@ -159,15 +175,19 @@ class Audio {
       ensureMusic();
       return;
     }
+    // A track that is still loading is not "blocked": starting it again would only restart it.
+    if (_starting) return;
     final m = _current!;
     _current = null;
     music(m);
   }
 
   /// Puts the music back if the system paused or stopped it without us asking (a phone call, another
-  /// app taking over the audio, the app coming back from the background). Resuming a player that
-  /// is already playing does nothing, so this is safe to call at any time. Looping tracks only:
-  /// the victory theme plays once and must not start again. At most once every 2 seconds.
+  /// app taking over the audio, the app coming back from the background). A track that is playing is
+  /// never touched: `resume()` on a playing player is NOT harmless (on the web it seeks to the start,
+  /// which made the music restart on every button press). A paused one is resumed from where it was.
+  /// Looping tracks only: the victory theme plays once and must not start again. At most once every
+  /// 2 seconds.
   void ensureMusic() {
     final m = _current;
     final p = _music;
@@ -178,7 +198,19 @@ class Audio {
     final gen = _generation;
     _guard(() async {
       if (gen != _generation) return;
+      if (p.state == PlayerState.playing) return;
+      Duration? at;
+      try {
+        at = await p.getCurrentPosition();
+      } catch (_) {}
+      if (gen != _generation) return;
       await p.resume();
+      // The web restarts a track it didn't pause itself from 0: put it back where it was.
+      if (at != null && at > Duration.zero) {
+        try {
+          await p.seek(at);
+        } catch (_) {}
+      }
     });
   }
 
@@ -186,6 +218,7 @@ class Audio {
     if (!enabled) return;
     _current = null;
     _musicStarted = false;
+    _starting = false;
     _generation++;
     _guard(() async => _music?.stop());
   }
@@ -208,7 +241,10 @@ class Audio {
       await _poolReady[i]; // set up (and mixing with others) before its first sound
       final p = _pool[i];
       await p.stop();
-      await p.play(AssetSource('audio/${s.name}.wav'), volume: (settings.sfxVolume * volume).clamp(0, 1));
+      await p.play(
+        AssetSource('audio/${s.name}.wav'),
+        volume: (settings.sfxVolume * volume).clamp(0, 1),
+      );
     });
   }
 }

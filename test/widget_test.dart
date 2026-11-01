@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:unmatched_game/engine/ai.dart';
 import 'package:unmatched_game/main.dart';
+import 'package:unmatched_game/net/match_record.dart';
 import 'package:unmatched_game/ui/widgets.dart';
 import 'package:unmatched_game/ui/audio.dart';
 import 'package:unmatched_game/ui/match/hud.dart';
@@ -156,7 +157,7 @@ void main() {
         await t.pump(const Duration(milliseconds: 500));
         await t.tap(find.text('CHOOSE HERO'));
         await pumpUntil(t, () => find.text('CHOOSE YOUR HERO').evaluate().isNotEmpty, frames: 20);
-        await t.tap(find.text('RANDOM'));
+        await t.tap(find.byKey(const ValueKey('hero-random')));
         await t.pump(const Duration(milliseconds: 400));
         await t.tap(find.textContaining('FIGHT AS'));
         await pumpUntil(t, () => find.byType(MatchScreen).evaluate().isNotEmpty, frames: 60);
@@ -193,6 +194,15 @@ void main() {
         expect(turns, greaterThan(3), reason: 'a real match takes several turns');
         // ignore: avoid_print
         print('$name: $turns turns');
+        // The match was saved on the device the moment it ended, ready to sync.
+        expect(s.matches.length, 1);
+        final saved = s.matches.all.single;
+        expect(saved.mode, MatchMode.ai);
+        expect(saved.myHero, heroes.first);
+        expect(saved.players, players);
+        expect(saved.syncStatus, SyncStatus.pending);
+        expect(saved.opponentUserId, isNull, reason: 'the AI has no account');
+        expect(find.text('VICTORY').evaluate().isNotEmpty, saved.won, reason: 'the record says what the result screen says');
         await t.pump(const Duration(seconds: 1));
         await t.pumpWidget(const SizedBox());
       }, timeout: const Timeout(Duration(minutes: 6)));

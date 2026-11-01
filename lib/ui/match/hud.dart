@@ -901,6 +901,95 @@ class ChoicePanel extends StatelessWidget {
   }
 }
 
+/// The opening-hand choice: your cards, then Mulligan or Keep Hand. It is asked once, so there is
+/// no second mulligan; both buttons close the panel.
+class MulliganPanel extends StatelessWidget {
+  const MulliganPanel({super.key, required this.images, required this.onMulligan, required this.onKeep, required this.onZoom});
+  final List<String> images;
+  final VoidCallback onMulligan;
+  final VoidCallback onKeep;
+  final void Function(int i) onZoom;
+
+  @override
+  Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    final fit = images.isEmpty ? 1 : images.length;
+    // Cards as large as the screen allows, but all of the hand visible without scrolling.
+    final byHeight = size.height * 0.3 * cardAspect;
+    final byWidth = (size.width - 80 - 10.0 * (fit - 1)) / fit;
+    final w = math.min(byHeight, byWidth).clamp(44.0, 150.0);
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOutCubic,
+      builder: (context, t, child) => Opacity(opacity: t, child: Transform.scale(scale: 0.94 + 0.06 * t, child: child)),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: size.width - 24, maxHeight: size.height - 16),
+          child: Panel(
+            padding: const EdgeInsets.all(16),
+            cut: 14,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('OPENING HAND', textAlign: TextAlign.center, style: titleStyle(20, spacing: 1.4)),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Keep it, or take your one mulligan: it all goes back into the deck and you draw ${images.length} new cards. The new hand is final.',
+                    textAlign: TextAlign.center,
+                    style: bodyStyle(13, color: Palette.boneDim),
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      for (var i = 0; i < images.length; i++)
+                        GestureDetector(
+                          key: ValueKey('mulligan-card-$i'),
+                          onTap: () => onZoom(i),
+                          child: CardImage(images[i], width: w),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 12,
+                    runSpacing: 10,
+                    children: [
+                      PlateButton(
+                        key: const ValueKey('mulligan-take'),
+                        label: 'Mulligan',
+                        icon: Icons.autorenew_rounded,
+                        style: PlateStyle.secondary,
+                        height: 46,
+                        fontSize: 17,
+                        onPressed: onMulligan,
+                      ),
+                      PlateButton(
+                        key: const ValueKey('mulligan-keep'),
+                        label: 'Keep Hand',
+                        icon: Icons.check_rounded,
+                        style: PlateStyle.confirm,
+                        height: 46,
+                        fontSize: 17,
+                        onPressed: onKeep,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Pick one or several cards that are not in your hand (discard pile, revealed cards), or
 /// several from your hand (discard down to the hand limit).
 class CardPicker extends StatefulWidget {
