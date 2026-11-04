@@ -43,16 +43,28 @@ class LittleRed extends HeroScript {
   @override
   Map<String, CardScript> get cards => {
         'NEVER LEAVE THE PATH': CardScript(effect: (x) async {
-          if (has('W')) {
+          // The basket (🌟) counts as any ONE symbol: with it, choose which effect resolves.
+          var symbol = basket;
+          if (symbol == '*') {
+            final opts = <(String, String)>[
+              ('W', '🐺 Place Little Red in any space. Gain 1 action.'),
+              if (x.hero.onBoard && enemiesInZone(x, x.hero).isNotEmpty)
+                ('A', "⚔️ Deal 2 damage to each opposing fighter in Little Red's zone."),
+              ('R', '🌹 Draw 3 cards.'),
+            ];
+            final i = await x.option([for (final o in opts) o.$2], 'Your basket counts as one symbol: choose an effect');
+            symbol = opts[i].$1;
+          }
+          if (symbol == 'W') {
             await x.place(x.hero, x.allSpaces, text: 'Place Little Red in any space');
             x.gainActions(1);
           }
-          if (has('A')) {
+          if (symbol == 'A') {
             for (final f in enemiesInZone(x, x.hero).toList()) {
               await x.damage(f, 2);
             }
           }
-          if (has('R')) await x.draw(3);
+          if (symbol == 'R') await x.draw(3);
         }),
         'A GRIMM TALE': CardScript(effect: (x) => x.heal(x.hero, has('W') ? 4 : 2)),
         'ONCE UPON A TIME': CardScript(after: (x) async {

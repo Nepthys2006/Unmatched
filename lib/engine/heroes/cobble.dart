@@ -279,8 +279,9 @@ class InvisibleMan extends HeroScript {
   @override
   Future<void> afterHeroPlaced() async {
     for (var i = 0; i < 3; i++) {
-      final spaces = game.board.zoneOf(im.space!).where((s) => game.isEmpty(s) && !onFog(s)).toList();
-      final options = spaces.isNotEmpty ? spaces : game.emptySpaces().where((s) => !onFog(s)).toList();
+      // "Separate spaces in his zone": any space (his own too, even with a fighter), one token each.
+      final spaces = game.board.zoneOf(im.space!).where((s) => !onFog(s)).toList();
+      final options = spaces.isNotEmpty ? spaces : game.board.spaceIds.where((s) => !onFog(s)).toList();
       final t = Token('fog', me);
       final s = await game.chooseSpace(me, options, 'Place fog token ${i + 1} in Invisible Man\'s zone', intent: Intent.moveOwn, subject: t);
       t.space = s;

@@ -604,7 +604,10 @@ class Game {
       await m.beforeDefense(this, c);
     }
     final defOptions = o.hand.where((x) => canDefendWith(x, c.defender.fighter)).toList();
-    final d = await chooseCard(o, defOptions, 'Play a defense card or skip', optional: true, skipLabel: 'No defense',
+    final told = c.toldAttackValue;
+    final d = await chooseCard(
+        o, defOptions, told == null ? 'Play a defense card or skip' : "Spidey-Sense: their card's printed value is $told. Play a defense card or skip",
+        optional: true, skipLabel: 'No defense',
         intent: Intent.defenseCard, subject: c, autoSingle: false);
     if (d != null) {
       o.hand.remove(d);

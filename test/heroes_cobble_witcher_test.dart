@@ -254,6 +254,17 @@ void main() {
       expect(asks.every((p) => p.ask == Ask.space && p.subject is Token), isTrue, reason: 'picked on the board, the token as subject');
     });
 
+    test("a fog token may go on Invisible Man's own space (separate spaces, not empty ones)", () async {
+      final s = Scenario('invisible-man', 'medusa');
+      final im = s.p1.script as InvisibleMan;
+      s.place(s.hero(s.p1), 5);
+      s.place(s.hero(s.p2), 10);
+      s.a1.then(sp(5));
+      await im.afterHeroPlaced();
+      expect(im.onFog(), isTrue);
+      expect(s.a1.asked.first.choices.map((c) => c.value), contains(5));
+    });
+
     test('fog is picked on the board: the token choice offers each fog by its space', () async {
       final s = Scenario('invisible-man', 'medusa');
       final im = setupFog(s, [2, 6, 9]);
@@ -421,18 +432,61 @@ void main() {
       expect(s.hero(s.p2).hp, 14 - 2 - 3);
     });
 
-    test('Never Leave the Path resolves each matching line (basket: any)', () async {
+    test('Never Leave the Path with the basket (any ONE symbol): only the chosen line resolves', () async {
       final s = Scenario('little-red', 'medusa');
       s.place(s.hero(s.p1), 4);
       s.place(s.hero(s.p2), 6);
       s.deck(s.p1, ['A Grimm Tale', 'A Grimm Tale', 'A Grimm Tale', 'A Grimm Tale']);
       s.game.actions = 0;
+      s.a1.then('🐺 Place Little Red in any space. Gain 1 action.');
       s.a1.then(sp(5));
       await s.game.playScheme(s.p1, s.give(s.p1, 'Never Leave the Path'));
       expect(s.hero(s.p1).space, 5);
       expect(s.game.actions, 1);
-      expect(s.hero(s.p2).hp, 14);
+      expect(s.hero(s.p2).hp, s.hero(s.p2).maxHp, reason: 'the Axes line must not resolve too');
+      expect(s.p1.hand, isEmpty, reason: 'the Rose line (draw 3) must not resolve too');
+    });
+
+    test("Never Leave the Path after What's That In My Basket?: choose Rose, only draw", () async {
+      final s = Scenario('little-red', 'medusa');
+      s.place(s.hero(s.p1), 4);
+      s.place(s.hero(s.p2), 6);
+      s.deck(s.p1, ['A Grimm Tale', 'A Grimm Tale', 'A Grimm Tale', 'A Grimm Tale']);
+      s.discardPile(s.p1, ["What's That In My Basket?"]);
+      s.game.actions = 0;
+      s.a1.then('🌹 Draw 3 cards.');
+      await s.game.playScheme(s.p1, s.give(s.p1, 'Never Leave the Path'));
+      expect(s.hero(s.p1).space, 4, reason: 'not placed: the Wolf line did not resolve');
+      expect(s.game.actions, 0);
       expect(s.p1.hand, hasLength(3));
+    });
+
+    test('Never Leave the Path with a Wolf basket resolves only the Wolf line', () async {
+      final s = Scenario('little-red', 'medusa');
+      s.place(s.hero(s.p1), 4);
+      s.place(s.hero(s.p2), 6);
+      s.deck(s.p1, ['A Grimm Tale', 'A Grimm Tale', 'A Grimm Tale']);
+      s.discardPile(s.p1, ['What Big Eyes You Have']); // wolf
+      s.game.actions = 0;
+      s.a1.then(sp(5));
+      await s.game.playScheme(s.p1, s.give(s.p1, 'Never Leave the Path'));
+      expect(s.hero(s.p1).space, 5);
+      expect(s.p1.hand, isEmpty);
+    });
+
+    test('Stones in the Belly: printed value 2, plus the BOOST of a random discard with Axes', () async {
+      final s = Scenario('little-red', 'medusa');
+      s.place(s.hero(s.p1), 4);
+      s.place(s.hero(s.p2), 5);
+      s.discardPile(s.p1, ['A Grimm Tale']); // rose: no effect
+      var c = await s.fight(s.hero(s.p1), s.hero(s.p2), 'Stones in the Belly', null);
+      expect(c.attackValue, 2);
+      s.discardPile(s.p1, ["The Wolf's Skin"]); // axes
+      s.p2.hand.clear();
+      s.give(s.p2, 'Feint'); // BOOST 2
+      c = await s.fight(s.hero(s.p1), s.hero(s.p2), 'Stones in the Belly', null);
+      expect(c.attackValue, 2 + 2);
+      expect(s.p2.hand, isEmpty);
     });
 
     test('What Big Ears can defend only with Axes in the basket', () {

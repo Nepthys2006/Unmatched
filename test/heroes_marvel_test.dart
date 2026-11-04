@@ -1,7 +1,9 @@
 // Card-by-card tests: She-Hulk, Spider-Man, Black Panther, Winter Soldier (Marvel).
 // Board: line 0-11 (+12 off 5); zones a=0..3, b=3..7+12, c=8..11.
 import 'package:flutter_test/flutter_test.dart';
+import 'package:unmatched_game/engine/combat.dart';
 import 'package:unmatched_game/engine/events.dart';
+import 'package:unmatched_game/engine/prompt.dart';
 
 import 'support.dart';
 
@@ -102,6 +104,24 @@ void main() {
       expect(told, isNotEmpty);
       final i = s.events.indexOf(told.first), r = s.events.indexWhere((e) => e is CardsRevealed);
       expect(i, lessThan(r));
+    });
+
+    test('Spidey-Sense: the value is in his defense prompt, and only when Spider-Man defends', () async {
+      final s = Scenario('medusa', 'spiderman');
+      s.place(s.hero(s.p1), 4);
+      s.place(s.hero(s.p2), 5);
+      s.give(s.p2, 'Web Shooters');
+      await s.fight(s.hero(s.p1), s.hero(s.p2), 'Snipe', null);
+      final ask = s.a2.asked.firstWhere((p) => p.intent == Intent.defenseCard);
+      expect(ask.text, contains("printed value is 3"));
+      expect((ask.subject as Combat).toldAttackValue, 3);
+
+      final t = Scenario('spiderman', 'medusa');
+      t.place(t.hero(t.p1), 4);
+      t.place(t.hero(t.p2), 5);
+      t.give(t.p2, 'Feint');
+      await t.fight(t.hero(t.p1), t.hero(t.p2), 'Thwip!', null);
+      expect(t.a2.asked.firstWhere((p) => p.intent == Intent.defenseCard).text, isNot(contains('Spidey')));
     });
 
     test('Web Shooters caps his combat damage at 2; Counter-Attack and Spider-Sense Tingling react to 4+', () async {

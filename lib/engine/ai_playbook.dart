@@ -256,6 +256,7 @@ bool _mayBeLethal(Combat c) {
   final extra = a.ops.fold(0, (s, o) => s + (o.isSet ? 0 : o.amount));
   final known = a.card != null && (a.faceUp || c.defender.player.script.known.contains(a.card));
   if (known) return a.card!.def.value != null && a.card!.def.value! + extra >= f.hp;
+  if (c.toldAttackValue != null) return c.toldAttackValue! + extra + 2 >= f.hp; // Spidey-Sense; + 2 for abilities
   final best = a.player.hero.cards.where((d) => d.canAttack).map((d) => d.value ?? 0).fold(0, (x, y) => x > y ? x : y);
   return best + extra + 2 >= f.hp; // + 2 for abilities that add to attacks
 }

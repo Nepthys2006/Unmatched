@@ -125,9 +125,10 @@ class SpiderMan extends HeroScript {
 
   @override
   Future<void> beforeDefense(Game g, Combat c) async {
-    if (c.defender.fighter != spidey || c.attacker.card == null) return;
-    final v = c.attacker.card!.def.value;
-    await g.emit(StatusChanged(me, 'Spidey-Sense: the attack card\'s printed value is ${v ?? 0}.'));
+    if (c.defender.fighter != spidey || c.attacker.card == null || !c.attacker.player.isEnemyOf(me)) return;
+    // Told to the defender before they choose a defense card: the prompt shows it, the AI uses it.
+    c.toldAttackValue = c.attacker.printed;
+    await g.emit(StatusChanged(me, "Spidey-Sense: the attack card's printed value is ${c.toldAttackValue}."));
   }
 
   int _oppValue(Fx x) => x.oppCard == null ? 0 : x.game.valueOf(x.oppSide).total;

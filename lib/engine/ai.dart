@@ -350,6 +350,16 @@ class AiAgent implements Agent {
       threat = _estimatedValue(g, c, c.attacker, attCard);
       maxThreat = threat;
       threatKnown = true;
+    } else if (c.toldAttackValue != null) {
+      // Spidey-Sense: the printed value was told; the rest (boosts, abilities) is on the table.
+      threat = c.toldAttackValue! + c.attacker.ops.fold(0, (a, o) => a + (o.isSet ? 0 : o.amount));
+      for (final m in g.allMods) {
+        for (final o in m.valueOps(g, c.attacker)) {
+          if (!o.isSet) threat += o.amount;
+        }
+      }
+      maxThreat = threat + 1; // a DURING COMBAT effect may still add a little
+      threatKnown = true;
     } else {
       threat = tracker.expectedAttack(attFighter, extra: 1).round();
       maxThreat = tracker.maxAttack(attFighter);

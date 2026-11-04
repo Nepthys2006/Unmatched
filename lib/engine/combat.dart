@@ -92,6 +92,10 @@ class Combat {
   /// Combat-wide flags: 'preventAll', 'reflect' and so on.
   final Map<String, Object?> flags = {};
 
+  /// The attack card's printed value the defender was told before choosing a defense card
+  /// (Spider-Man's Spidey-Sense), or null if they weren't told.
+  int? toldAttackValue;
+
   Side sideOf(Player p) => attacker.player == p ? attacker : defender;
   Side sideOfFighter(Fighter f) => attacker.fighter == f ? attacker : defender;
   bool involves(Fighter f) => attacker.fighter == f || defender.fighter == f;

@@ -116,6 +116,9 @@
    },
    "11": {
     "title": "I've Been Hacked!"
+   },
+   "8": {
+    "value": 0
    }
   }
  },
@@ -323,6 +326,48 @@
   },
   "hero": {
    "ability": "Bubbling Brew\nYour cards go into your cauldron instead of your discard pile.\nAfter you attack, you may cast one spell that you have the ingredients for. If you do, discard all the cards in your cauldron."
+  }
+ },
+ "little-red": {
+  "cards": {
+   "4": {
+    "value": 2
+   }
+  }
+ },
+ "black-widow": {
+  "cards": {
+   "7": {
+    "value": 0
+   }
+  }
+ },
+ "dr-sattler": {
+  "cards": {
+   "7": {
+    "value": 0
+   }
+  }
+ },
+ "she-hulk": {
+  "cards": {
+   "4": {
+    "value": 0
+   }
+  }
+ },
+ "ghost-rider": {
+  "cards": {
+   "1": {
+    "value": 0
+   }
+  }
+ },
+ "luke-cage": {
+  "cards": {
+   "2": {
+    "value": 0
+   }
   }
  }
 }
