@@ -51,6 +51,7 @@ app.*.map.json
 .env
 .env.*
 *.env
+!.env.example
 Private.md
 *.sql
 /supabase/

@@ -2,4 +2,7 @@ tags:
   golden:
     # Pixel exact: compared on one operating system only (see test/golden).
   online:
+    # Talks to the live Supabase project (creates and wipes a lobby): run it only on purpose with
+    # flutter test --run-skipped --tags online test/online_test.dart
+    skip: "live Supabase test; run with --run-skipped --tags online"
     timeout: 5m
