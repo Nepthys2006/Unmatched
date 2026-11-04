@@ -21,7 +21,7 @@ foreach ($need in @("$ProjectDir\build\web\index.html", "$WindowsBuild\Unmatched
 
 # The offline worker of a web build must carry its own cache name (tool\stamp_sw.py, run by the
 # rebuild script); an unstamped one would keep returning players on an old release.
-foreach ($web in @("$ProjectDiruild\web", "$ProjectDiruild\web_play")) {
+foreach ($web in @("$ProjectDir\build\web", "$ProjectDir\build\web_play")) {
     $sw = "$web\sw.js"
     if ((Test-Path $sw) -and (Select-String -Path $sw -SimpleMatch '__BUILD__' -Quiet)) {
         throw "$sw is not stamped (still has __BUILD__) - run rebuild_and_release_all.ps1, or: python tool/stamp_sw.py build/web build/web_play"
