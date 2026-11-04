@@ -17,16 +17,19 @@ import 'common.dart';
 /// move value becomes 4, he may move through opposing fighters, and each one he moves through
 /// takes 1 damage.
 class GhostRider extends HeroScript {
-  int hellfire = 5;
+  /// Hellfire never goes above this, whatever adds it.
+  static const maxHellfire = 5;
+  int hellfire = maxHellfire;
   Fighter get rider => me.heroFighter;
 
   @override
   List<String> status() => ['Hellfire $hellfire'];
 
   Future<void> gain(int n) async {
-    if (n <= 0) return;
-    hellfire += n;
-    await game.emit(StatusChanged(me, 'Ghost Rider gains $n Hellfire ($hellfire).'));
+    final got = math.min(n, maxHellfire - hellfire);
+    if (got <= 0) return;
+    hellfire += got;
+    await game.emit(StatusChanged(me, 'Ghost Rider gains $got Hellfire ($hellfire).'));
   }
 
   Future<bool> spend(int n, String why) async {
@@ -98,8 +101,8 @@ class GhostRider extends HeroScript {
       }
     }),
     'CHAINS OF HELLFIRE': CardScript(effect: (x) async {
-      hellfire = 5;
-      await x.game.emit(StatusChanged(x.me, 'Hellfire is set to 5.'));
+      hellfire = maxHellfire;
+      await x.game.emit(StatusChanged(x.me, 'Hellfire is set to $maxHellfire.'));
     }),
     'I FINALLY ESCAPED HELL': CardScript(after: (x) async {
       if (rider.onBoard && hellfire >= 1 && await x.yesNo('Spend 1 Hellfire to move Ghost Rider up to 2?') && await spend(1, 'move')) {

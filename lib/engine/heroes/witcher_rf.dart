@@ -63,8 +63,11 @@ class Eredin extends HeroScript {
             final f = await x.chooseFighter(friends, 'Eredin swaps with an adjacent friendly fighter, who becomes the defender', intent: Intent.none);
             if (f != null && await x.game.swap(eredin, f)) x.mySide.fighter = f;
           },
+          // The fighter Eredin swapped in may fall in the combat; the draw is still Eredin's.
+          // Losing his last Red Rider that way is exactly what makes him ENRAGED.
+          resolvesOnDefeat: true,
           after: (x) async {
-            if (enraged) await x.draw(2);
+            if (enraged && eredin.alive) await x.draw(2);
           },
         ),
         'ICY GUILE': CardScript(
