@@ -70,8 +70,9 @@ class Loki extends HeroScript {
           during: (x) async {
             if (x.me != me || x.oppCard == null) return;
             final mine = x.game.valueOf(x.mySide).total, theirs = x.game.valueOf(x.oppSide).total;
-            x.setValue(theirs, "Freyja's Rescue: swapped");
-            x.game.addOp(x.oppSide, ValueOp.set(mine, "Freyja's Rescue: swapped"));
+            // The whole values swap, BOOSTs included.
+            x.game.addOp(x.mySide, ValueOp.total(theirs, "Freyja's Rescue: swapped"));
+            x.game.addOp(x.oppSide, ValueOp.total(mine, "Freyja's Rescue: swapped"));
           },
           after: (x) async {
             if (x.me != me) await x.heal(loki, 3);

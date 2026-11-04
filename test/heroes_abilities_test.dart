@@ -3,6 +3,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:unmatched_game/engine/combat.dart';
 import 'package:unmatched_game/engine/hero_script.dart';
+import 'package:unmatched_game/engine/heroes/redemption_row.dart';
 import 'package:unmatched_game/engine/prompt.dart';
 import 'package:unmatched_game/engine/state.dart';
 
@@ -252,6 +253,61 @@ void main() {
     }
     expect(labels(s, e, s.hero(s.p2), 'Backhand'), contains('Eredin is ENRAGED'));
     expect(s.game.moveValueOf(e), 3);
+  });
+
+  test('Ghost Rider · Hellfire never goes above 5', () async {
+    final s = duel('ghost-rider');
+    final gr = s.p1.script as GhostRider;
+    gr.hellfire = 4;
+    await gr.gain(3);
+    expect(gr.hellfire, 5);
+    // Stoke the Flames: lose a combat, gain Hellfire equal to the damage taken (none above 5).
+    await s.fight(s.hero(s.p2), s.hero(s.p1), 'Second Shot', 'Stoke The Flames');
+    expect(s.hero(s.p1).hp, lessThan(17));
+    expect(gr.hellfire, 5);
+  });
+
+  test("Sun Wukong · 72 Transformations: a Clone defeated in the combat still takes a FORM back", () async {
+    final s = Scenario('sun-wukong', 'annie-christmas');
+    final clone = s.sidekick(s.p1);
+    s.place(s.hero(s.p1), 0);
+    s.place(clone, 4);
+    s.place(s.hero(s.p2), 5);
+    s.discardPile(s.p1, ['Ox Form']);
+    // Striking Beauty deals 1 damage to the opposing fighter after combat: the Clone falls.
+    await s.fight(clone, s.hero(s.p2), '72 Transformations', 'Striking Beauty', then1: [card('Ox Form')]);
+    expect(clone.defeated, isTrue);
+    expect(s.p1.hand.map((c) => c.title), ['Ox Form']);
+  });
+
+  // Eredin (at 4) defends against Medusa (at 5) by swapping with a Red Rider at 3, who takes the
+  // hit and is defeated.
+  group('Eredin · Portal Defense: the Red Rider swapped in falls', () {
+    test('the last one: Eredin is now ENRAGED and draws 2', () async {
+      final s = duel('eredin');
+      final rider = s.p1.fighters.firstWhere((f) => f.isSidekick);
+      for (final r in s.p1.fighters.where((f) => f.isSidekick && f != rider)) {
+        r.defeated = true;
+      }
+      s.place(rider, 3);
+      await s.fight(s.hero(s.p2), s.hero(s.p1), 'Second Shot', 'Portal defense', then2: [rider]);
+      expect(rider.defeated, isTrue);
+      expect(s.hero(s.p1).space, 3);
+      expect(s.p1.hand, hasLength(2));
+    });
+
+    test('not the last one: not ENRAGED, no draw', () async {
+      final s = duel('eredin');
+      final riders = s.p1.fighters.where((f) => f.isSidekick).toList();
+      for (final r in riders.skip(2)) {
+        r.defeated = true;
+      }
+      s.place(riders[0], 3);
+      s.place(riders[1], 10);
+      await s.fight(s.hero(s.p2), s.hero(s.p1), 'Second Shot', 'Portal defense', then2: [riders[0]]);
+      expect(riders[0].defeated, isTrue);
+      expect(s.p1.hand, isEmpty);
+    });
   });
 
   test('Philippa · Two Steps Ahead: at the end of the turn, draw up to 4 cards', () async {

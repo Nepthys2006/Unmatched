@@ -760,16 +760,27 @@ class Game {
     }
     var v = s.printed;
     if (!s.lockPrinted) {
+      // The card's own value and what is added to it are kept apart: "value is 7 instead" replaces
+      // the first and keeps the second (a BOOST still counts). See [ValueOp].
+      var base = s.printed, added = 0;
       void apply(ValueOp op) {
-        final before = v;
-        v = op.apply(v);
-        lines.add((op.isSet ? '${op.label} (set to ${op.amount})' : op.label, v - before));
+        final before = base + added;
+        if (op.isTotal) {
+          base = op.amount;
+          added = 0;
+        } else if (op.isSet) {
+          base = op.amount;
+        } else {
+          added += op.amount;
+        }
+        lines.add((op.isSet ? '${op.label} (set to ${op.amount})' : op.label, base + added - before));
       }
 
       s.ops.forEach(apply);
       for (final m in allMods) {
         m.valueOps(this, s).forEach(apply);
       }
+      v = base + added;
     } else {
       lines.add(('Printed value only', 0));
     }

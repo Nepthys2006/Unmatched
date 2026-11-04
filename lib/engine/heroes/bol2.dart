@@ -292,11 +292,17 @@ class SunWukong extends HeroScript {
         'TORTOISE FORM': CardScript(during: (x) async {
           await x.game.boostCard(x.oppSide, text: 'Tortoise Form: you may BOOST your attack');
         }),
-        '72 TRANSFORMATIONS': CardScript(after: (x) async {
-          final forms = x.me.discard.where((c) => _forms.contains(c.def.upperTitle));
-          final c = await x.game.chooseCard(x.me, forms, 'Return a FORM card to your hand', intent: Intent.gainOwn);
-          if (c != null) await x.game.toHand(c, reason: ' (72 Transformations)');
-        }),
+        // Returns the card to the player's hand: it still happens if the fighter who played it
+        // (a Clone, say) was defeated in the combat.
+        '72 TRANSFORMATIONS': CardScript(
+          resolvesOnDefeat: true,
+          after: (x) async {
+            if (!x.hero.alive) return;
+            final forms = x.me.discard.where((c) => _forms.contains(c.def.upperTitle));
+            final c = await x.game.chooseCard(x.me, forms, 'Return a FORM card to your hand', intent: Intent.gainOwn);
+            if (c != null) await x.game.toHand(c, reason: ' (72 Transformations)');
+          },
+        ),
         'SLY MONKEY': CardScript(after: (x) async {
           final sw = x.hero;
           if (x.fighter != sw || !sw.onBoard) return;

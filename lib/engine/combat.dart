@@ -5,15 +5,26 @@ import 'state.dart';
 
 enum Phase { choose, reveal, immediately, during, damage, after, done }
 
-/// One change to a card's value, kept in order: "value is 5 instead" overwrites earlier boosts
-/// (official ruling), later additions stack on top.
+/// One change to a card's value. "This card's value is 5 instead" ([ValueOp.set]) replaces the
+/// card's own value only: BOOSTs and other additions ([ValueOp.add]) count on top of it whether
+/// they came before or after. [ValueOp.total] replaces the whole value built so far (Freyja's
+/// Rescue swaps the two cards' values); additions after it still count.
 class ValueOp {
-  const ValueOp.add(this.amount, this.label) : isSet = false;
-  const ValueOp.set(this.amount, this.label) : isSet = true;
+  const ValueOp.add(this.amount, this.label)
+      : isSet = false,
+        isTotal = false;
+  const ValueOp.set(this.amount, this.label)
+      : isSet = true,
+        isTotal = false;
+  const ValueOp.total(this.amount, this.label)
+      : isSet = true,
+        isTotal = true;
   final int amount;
+
+  /// Sets the value ([ValueOp.set] or [ValueOp.total]) rather than adding to it.
   final bool isSet;
+  final bool isTotal;
   final String label;
-  int apply(int v) => isSet ? amount : v + amount;
 }
 
 class Side {

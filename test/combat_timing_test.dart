@@ -107,7 +107,7 @@ void main() {
     expect(s.game.isUncancelable(combat.attacker), isTrue);
   });
 
-  test('Value is X instead (ValueOp.set) overrides earlier boost, later boosts stack', () async {
+  test('Value is X instead (ValueOp.set) replaces the card value; boosts before and after both stack', () async {
     final s = Scenario('tomoe-gozen', 'medusa');
     final tomoe = s.hero(s.p1);
     final medusa = s.hero(s.p2);
@@ -121,13 +121,13 @@ void main() {
     s.game.addOp(c.attacker, const ValueOp.add(2, 'Early boost'));
     expect(s.game.valueOf(c.attacker).total, 5); // 3 + 2 = 5
 
-    // Now apply "value is 5 instead"
+    // Now apply "value is 5 instead": the card's 3 becomes 5, the earlier boost still counts
     s.game.addOp(c.attacker, const ValueOp.set(5, 'A Worthy Opponent (Hero)'));
-    expect(s.game.valueOf(c.attacker).total, 5); // Overwritten to 5
+    expect(s.game.valueOf(c.attacker).total, 7); // 5 + 2 = 7
 
     // Now apply later boost +2
     s.game.addOp(c.attacker, const ValueOp.add(2, 'Later boost'));
-    expect(s.game.valueOf(c.attacker).total, 7); // 5 + 2 = 7
+    expect(s.game.valueOf(c.attacker).total, 9); // 5 + 2 + 2 = 9
   });
 
   test('Defeated fighter AFTER COMBAT effects do NOT resolve', () async {
