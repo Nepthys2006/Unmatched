@@ -4,6 +4,7 @@ import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:unmatched_game/engine/ai.dart';
+import 'package:unmatched_game/engine/ai_playbook.dart';
 import 'package:unmatched_game/engine/game.dart';
 import 'package:unmatched_game/engine/heroes/registry.dart';
 import 'package:unmatched_game/engine/prompt.dart';
@@ -51,6 +52,87 @@ void main() {
       s.place(s.hero(s.p2), 11);
       expect(await AiAgent(level: AiLevel.insane).decide(s.game, boostPrompt(s.p1)), isEmpty);
     });
+
+    test('with the cheapest card big enough to get there, never a scheme', () async {
+      s.p1.hand.clear();
+      for (final t in ['Crash Through the Trees', 'Hoax', 'Larger Than Life', 'Savagery']) {
+        s.give(s.p1, t);
+      }
+      s.place(s.hero(s.p1), 0);
+      s.place(s.hero(s.p2), 7); // Bigfoot (move 3) needs a BOOST of 3 to reach space 6
+      final p = boostPrompt(s.p1);
+      final [i] = await AiAgent(level: AiLevel.insane).decide(s.game, p);
+      expect((p.choices[i].value as Card).title, 'Savagery');
+    });
+
+    test('at the hand limit only when a card would be discarded anyway', () async {
+      s.game.actions = 0;
+      s.place(s.hero(s.p1), 0);
+      s.place(s.hero(s.p2), 11);
+      for (final t in ['Hoax', 'Skirmish', 'Feint', 'Regroup']) {
+        s.give(s.p1, t);
+      }
+      expect(s.p1.hand, hasLength(7));
+      expect(await AiAgent(level: AiLevel.insane).decide(s.game, boostPrompt(s.p1)), isEmpty);
+      s.give(s.p1, 'Crash Through the Trees');
+      final p = boostPrompt(s.p1);
+      final [i] = await AiAgent(level: AiLevel.insane).decide(s.game, p);
+      expect((p.choices[i].value as Card).def.isScheme, isFalse);
+    });
+
+    test('Easy never throws a card away on a pointless BOOST', () async {
+      s.give(s.p1, 'Crash Through the Trees');
+      s.place(s.hero(s.p1), 0);
+      s.place(s.hero(s.p2), 11);
+      for (var seed = 0; seed < 200; seed++) {
+        expect(await AiAgent(level: AiLevel.easy, seed: seed).decide(s.game, boostPrompt(s.p1)), isEmpty);
+      }
+    });
+  });
+
+  group('ground rules', () {
+    test('a BOOST with a scheme card breaks them; with a dead one it does not', () {
+      final s = Scenario('bigfoot', 'medusa');
+      s.place(s.hero(s.p1), 0);
+      s.place(s.hero(s.p2), 11);
+      s.give(s.p1, 'Crash Through the Trees');
+      s.give(s.p1, 'Jackalope Horns'); // the Jackalope isn't on the board: no one can play it
+      final p = boostPrompt(s.p1);
+      final ai = AiAgent(level: AiLevel.insane);
+      expect(ai.obeysRules(s.game, p, [0]), isFalse);
+      expect(ai.obeysRules(s.game, p, [1]), isTrue);
+      expect(ai.obeysRules(s.game, p, const []), isTrue);
+    });
+
+    test('every rule and hero in the playbooks exists', () {
+      final heroes = loadData().heroes;
+      expect(groundRules, isNotEmpty);
+      for (final id in [...playbooks.keys, ...counterplays.keys]) {
+        expect(heroes, contains(id));
+      }
+    });
+  });
+
+  test('a counterplay: Bullseye shoots from 5 spaces away', () async {
+    final s = Scenario('bigfoot', 'bullseye');
+    final bigfoot = s.hero(s.p1);
+    s.place(bigfoot, 6);
+    s.place(s.hero(s.p2), 0);
+    bigfoot.hp = 4;
+    s.give(s.p2, 'Feint');
+    s.game.actions = 0;
+    // Bullseye (move 2) can get to space 3 and shoot anything up to space 8.
+    final options = s.game.reachable(bigfoot, 3).keys.toList()..sort();
+    final p = Prompt(
+      player: s.p1,
+      ask: Ask.space,
+      text: 'Move Bigfoot',
+      choices: [for (final o in options) Choice('Space $o', o)],
+      intent: Intent.moveOwn,
+      subject: bigfoot,
+    );
+    final [i] = await AiAgent(level: AiLevel.insane).decide(s.game, p);
+    expect(options[i], 9);
   });
 
   test('a hurt hero ends the turn where no enemy can strike next turn', () async {

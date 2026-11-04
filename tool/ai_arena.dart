@@ -6,8 +6,11 @@
 //     dart run tool/ai_arena.dart --heroes=medusa,bigfoot --maps=sarpedon
 //     --verbose (one line per game), --heroes-table (A's wins with each hero), --seed=N
 //
-// Agents: easy, medium, hard, insane (the current AI), baseline or baseline:<level> (the frozen
-// copy in tool/ai/baseline_ai.dart; insane by default), random.
+// Agents: easy, medium, hard, insane (the current AI), insane-plain etc. (the current AI without
+// the hero playbooks and counterplays in lib/engine/ai_playbook.dart), baseline or
+// baseline:<level> (the frozen copy in tool/ai/baseline_ai.dart; insane by default), random.
+//
+// What a playbook entry is worth: dart run tool/ai_arena.dart --b=insane-plain --heroes=<them>,...
 //
 // Games come in pairs with the same heroes, map, shuffle and first player but the seats
 // swapped, so luck and hero strength even out. A side's win rate is only meaningful outside
@@ -22,6 +25,7 @@ import 'package:unmatched_game/engine/events.dart';
 import 'package:unmatched_game/engine/game.dart';
 import 'package:unmatched_game/engine/heroes/registry.dart';
 import 'package:unmatched_game/engine/prompt.dart';
+import 'package:unmatched_game/engine/state.dart';
 
 import 'ai/baseline_ai.dart';
 
@@ -35,6 +39,7 @@ Agent makeAgent(String spec, int seed) {
   return switch (name) {
     'random' => RandomAgent(seed),
     'baseline' => BaselineAgent(level: level(rest.isEmpty ? 'insane' : rest.first), seed: seed),
+    _ when name.endsWith('-plain') => AiAgent(level: level(name.replaceFirst('-plain', '')), seed: seed, heroKnowledge: false),
     _ => AiAgent(level: level(name), seed: seed),
   };
 }
@@ -51,6 +56,7 @@ class _Counting implements Agent {
     final key = switch (p.ask) {
       Ask.action when r.isNotEmpty => (p.choices[r.first].value as ActionChoice).kind.name,
       Ask.card when p.intent == Intent.defenseCard => r.isEmpty ? 'no defense' : 'defense',
+      Ask.card when p.intent == Intent.boost && r.isNotEmpty => (p.choices[r.first].value as Card).def.isScheme ? 'scheme boost' : 'boost',
       _ => null,
     };
     if (key != null) counts[key] = (counts[key] ?? 0) + 1;
@@ -148,8 +154,10 @@ Future<void> main(List<String> args) async {
   String acts(Map<String, int> m) {
     int c(String k) => m[k] ?? 0;
     final actions = max(1, c('maneuver') + c('attack') + c('scheme'));
+    final boosts = c('boost') + c('scheme boost');
     return '${[for (final k in ['maneuver', 'attack', 'scheme']) '$k ${pct(c(k) / actions)}'].join(', ')}; '
-        'attacked without defending ${pct(c('no defense') / max(1, c('defense') + c('no defense')))}';
+        'attacked without defending ${pct(c('no defense') / max(1, c('defense') + c('no defense')))}; '
+        '${(boosts / max(1, games)).toStringAsFixed(1)} BOOSTs a game (${pct(c('scheme boost') / max(1, boosts))} with a scheme)';
   }
 
   stdout.writeln('Actions  A: ${acts(aActs)}\n         B: ${acts(bActs)}');

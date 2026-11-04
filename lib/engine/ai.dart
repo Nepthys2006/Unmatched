@@ -3,28 +3,39 @@
 /// cards it hasn't legitimately seen), the odds of the opponent's hand, where each enemy can
 /// strike next turn, and when a BOOST actually buys something.
 ///
+/// Ground rules (choices it never makes), hero playbooks and counterplays are in
+/// ai_playbook.dart.
+///
 /// Measure any change with `dart run tool/ai_arena.dart` (whole AI-vs-AI matches against a
 /// frozen copy of an older AI) and watch one match with `dart run tool/ai_watch.dart`.
 library;
 
 import 'dart:math';
 
+import 'ai_playbook.dart';
 import 'combat.dart';
 import 'defs.dart';
 import 'game.dart';
 import 'prompt.dart';
 import 'state.dart';
 
-/// Insane plays its best every time; the others also make careless choices (any legal one)
-/// 10% (Hard), 25% (Medium) or 55% (Easy) of the time. In the arena Insane beats Hard 59%,
-/// Medium 70% and Easy 87% of games.
+/// Insane plays its best every time; the others also make careless choices 25% (Hard), 55%
+/// (Medium) or 85% (Easy) of the time: any choice the ground rules allow, but never a BOOST.
+/// In the arena Insane beats Hard 59%, Medium 70% and Easy 82% of games.
 enum AiLevel { easy, medium, hard, insane }
 
 class AiAgent implements Agent {
-  AiAgent({this.level = AiLevel.medium, int? seed}) : _rng = Random(seed);
+  AiAgent({this.level = AiLevel.medium, int? seed, this.heroKnowledge = true}) : _rng = Random(seed);
 
   final AiLevel level;
   final Random _rng;
+
+  /// Use the hero playbooks and counterplays (ai_playbook.dart). Off only to measure what they
+  /// are worth: `dart run tool/ai_arena.dart --b=insane-plain`.
+  final bool heroKnowledge;
+
+  Playbook? _book(Player p) => heroKnowledge ? playbooks[p.hero.id] : null;
+  Counterplay? _counter(Player p) => heroKnowledge ? counterplays[p.hero.id] : null;
 
   /// Jitter / noise scaled by difficulty level:
   /// - insane: 0.0 noise (pure, deterministic optimal play)
@@ -40,12 +51,13 @@ class AiAgent implements Agent {
 
   double _jitter() => _noise == 0.0 ? 0.0 : (_rng.nextDouble() - 0.5) * _noise;
 
-  /// How often a choice is a careless one (any legal choice). Noise alone barely changed any
-  /// decision: every level won 50% against Insane in the arena (tool/ai_arena.dart).
+  /// How often a choice is a careless one (any choice the ground rules allow). Noise alone
+  /// barely changed any decision: every level won 50% against Insane in the arena
+  /// (tool/ai_arena.dart). The rates are high because the rules already stop the worst mistakes.
   double get _blunder => switch (level) {
-        AiLevel.easy => 0.55,
-        AiLevel.medium => 0.25,
-        AiLevel.hard => 0.10,
+        AiLevel.easy => 0.85,
+        AiLevel.medium => 0.55,
+        AiLevel.hard => 0.25,
         AiLevel.insane => 0.0,
       };
 
@@ -57,12 +69,72 @@ class AiAgent implements Agent {
   List<int> _decide(Game g, Prompt p) {
     final n = p.choices.length;
     if (n == 0) return const [];
-    if (_blunder > 0 && const {Ask.action, Ask.card, Ask.space, Ask.fighter}.contains(p.ask) && _rng.nextDouble() < _blunder) {
-      return p.optional && _rng.nextInt(n + 1) == n ? const [] : [_rng.nextInt(n)];
-    }
+    // Careless choices, but never a BOOST: throwing a random card away looks like a bug, not a
+    // beginner's mistake.
+    final careless = _blunder > 0 &&
+        p.intent != Intent.boost &&
+        const {Ask.action, Ask.card, Ask.space, Ask.fighter}.contains(p.ask) &&
+        _rng.nextDouble() < _blunder;
+    final answer = careless ? (p.optional && _rng.nextInt(n + 1) == n ? const <int>[] : [_rng.nextInt(n)]) : _judge(g, p);
+    return _withinRules(g, p, answer);
+  }
+
+  /// The ground rules [me] plays by: everyone's (ai_playbook.dart), my hero's, and those for
+  /// playing against my opponents' heroes.
+  List<GroundRule> rulesFor(Game g, Player me) => [
+        ...groundRules,
+        ...?_book(me)?.rules,
+        for (final o in g.players)
+          if (o.isEnemyOf(me) && !o.eliminated) ...?_counter(o)?.rules,
+      ];
+
+  /// Whether [answer] to [p] keeps to the ground rules (the UMCCC Model checks its own picks).
+  bool obeysRules(Game g, Prompt p, List<int> answer) {
+    final rules = rulesFor(g, p.player);
+    bool bad(Object? v) => rules.any((r) => r.forbids(g, p, v));
+    return answer.isEmpty ? !bad(null) : !answer.any((i) => bad(p.choices[i].value));
+  }
+
+  /// [answer], or the best choice the ground rules allow instead. A rule gives way only when
+  /// nothing else is allowed.
+  List<int> _withinRules(Game g, Prompt p, List<int> answer) {
+    final rules = rulesFor(g, p.player);
+    bool bad(Object? v) => rules.any((r) => r.forbids(g, p, v));
+    if (answer.isEmpty ? !bad(null) : !answer.any((i) => bad(p.choices[i].value))) return answer;
+    final allowed = [for (var i = 0; i < p.choices.length; i++) if (!bad(p.choices[i].value)) i];
+    final mayDecline = (p.optional || p.min == 0) && !bad(null);
+    if (allowed.isEmpty) return mayDecline ? const [] : answer;
+    if (allowed.length < p.min) return answer;
+    // These pickers answer by position (yes = 0, mulligan = 0...): take the allowed one.
+    if (const {Ask.yesNo, Ask.option, Ask.number}.contains(p.ask)) return [allowed.first];
+    final sub = Prompt(
+      player: p.player,
+      ask: p.ask,
+      text: p.text,
+      choices: [for (final i in allowed) p.choices[i]],
+      optional: p.optional && mayDecline,
+      skipLabel: p.skipLabel,
+      min: min(p.min, allowed.length),
+      max: min(p.max, allowed.length),
+      intent: p.intent,
+      subject: p.subject,
+      source: p.source,
+    );
+    return [for (final i in _judge(g, sub)) allowed[i]];
+  }
+
+  /// The AI's considered answer, before the ground rules.
+  List<int> _judge(Game g, Prompt p) {
+    final n = p.choices.length;
     switch (p.ask) {
       case Ask.action:
-        return [_best(n, (i) => _actionScore(g, p.player, p.choices[i].value as ActionChoice))];
+        final book = _book(p.player)?.action;
+        return [
+          _best(n, (i) {
+            final a = p.choices[i].value as ActionChoice;
+            return _actionScore(g, p.player, a) + (book?.call(g, p.player, a) ?? 0);
+          })
+        ];
       case Ask.yesNo:
         return [_pickYesNo(g, p)];
       case Ask.option:
@@ -254,7 +326,7 @@ class AiAgent implements Agent {
 
   /// What spending [c] on a BOOST costs, in damage. Cheap: in the arena, keeping cards back
   /// (skipping defenses, saving boosts) lost more games than spending them.
-  double _boostCost(Card c, Player p) => worth(c, p) * 0.19;
+  double _boostCost(Card c, Player p) => worth(c, p) * 0.19 * (_book(p)?.boostCost ?? 1.0);
 
   /// What defeating [f] is worth: the game, if it's the last hero of its player.
   double _killValue(Fighter f) {
@@ -380,66 +452,75 @@ class AiAgent implements Agent {
         final i = _best(cards.length, gain);
         return gain(i) > 0 || !p.optional ? [i] : const [];
       } else {
-        // Defense boost: boost to prevent lethal damage
-        final currentDef = g.valueOf(s).total;
-        final attVal = g.valueOf(s.other).total;
-        if (currentDef >= attVal && p.optional) {
-          return const []; // No damage being taken anyway
+        // Defense boost: worth it for the damage it stops (or the defeat it prevents).
+        final f = s.combat.defender.fighter;
+        final hurt = g.valueOf(s.other).total - g.valueOf(s).total;
+        if (hurt <= 0 && p.optional) return const []; // No damage being taken anyway
+        double gain(int i) {
+          final b = g.boostValueOf(cards[i]);
+          final saved = min(b, max(0, hurt)) * _dmgWeight(f) + (hurt >= f.hp && hurt - b < f.hp ? _killValue(f) : 0.0);
+          return saved - _boostCost(cards[i], me);
         }
-        return [
-          _best(cards.length, (i) {
-            final b = g.boostValueOf(cards[i]);
-            return b * 2.5 - worth(cards[i], me);
-          })
-        ];
+
+        final i = _best(cards.length, gain);
+        return gain(i) > 0 || !p.optional ? [i] : const [];
       }
     }
 
-    // Maneuver boost: decide if boosting movement is worth a card
+    // Maneuver boost: only for something the normal move can't do, paid with the cheapest card
+    // that is big enough to do it. (Boosting whenever the hand was big, or with whichever card
+    // had the best boost for its worth, threw away scheme cards and boosts too small to matter.)
     if (p.optional) {
-      final handLen = me.hand.length;
       final hero = me.heroFighter;
       final foes = g.enemyFighters(me).where((e) => e.onBoard).toList();
-
-      // Boosting must buy something the normal move doesn't (boosting whenever the hand was big,
-      // or to "escape" without checking the extra spaces reach safety, wasted cards).
       final most = cards.map(g.boostValueOf).fold(0, max);
+      // The least BOOST that reaches the goal, or null if the normal move already does or no boost will.
+      int? least(Fighter f, bool Function(int s) goal) {
+        if (g.reachable(f, g.moveAllowance(f)).keys.any(goal)) return null;
+        for (var b = 1; b <= most; b++) {
+          if (g.reachable(f, g.moveAllowance(f) + b).keys.any(goal)) return b;
+        }
+        return null;
+      }
 
-      // Reach a space to attack from, keeping an attack card to attack with.
-      bool canReachAttack = false;
+      // Cards that buy something: each must leave an attack card to attack with, or get a hurt
+      // hero to a space no enemy can strike next turn.
+      final useful = <int>{};
       if (g.actions > 0 && foes.isNotEmpty) {
         for (final f in me.onBoard) {
           final attacks = me.hand.where((c) => g.canAttackWith(c, f)).toList();
-          if (attacks.isEmpty || (attacks.length == 1 && cards.length == 1 && cards.single == attacks.single)) continue;
+          if (attacks.isEmpty) continue;
           final spots = _strikeSpots(g, f, foes);
-          if (g.reachable(f, g.moveAllowance(f)).keys.any(spots.contains)) continue;
-          if (g.reachable(f, g.moveAllowance(f) + most).keys.any(spots.contains)) {
-            canReachAttack = true;
-            break;
+          final need = least(f, spots.contains);
+          if (need == null) continue;
+          for (var i = 0; i < cards.length; i++) {
+            if (g.boostValueOf(cards[i]) >= need && attacks.any((a) => a != cards[i])) useful.add(i);
           }
         }
       }
-
-      // A hurt hero ending the turn: reach a space no enemy can strike next turn.
-      bool needEscape = false;
       if (g.actions == 0 && hero.onBoard && hero.hp <= 6 && foes.isNotEmpty) {
-        bool safe(int s) => foes.every((e) => !_strikeZones(g, e).$2.contains(s));
-        needEscape = !g.reachable(hero, g.moveAllowance(hero)).keys.any(safe) &&
-            g.reachable(hero, g.moveAllowance(hero) + most).keys.any(safe);
+        final need = least(hero, (s) => foes.every((e) => !_strikeZones(g, e).$2.contains(s)));
+        if (need != null) {
+          for (var i = 0; i < cards.length; i++) {
+            if (g.boostValueOf(cards[i]) >= need) useful.add(i);
+          }
+        }
       }
+      // Cards that cost nothing: no fighter can play them, or the hand limit discards one anyway.
+      final spare = overHandLimit(g, me);
+      final free = {for (var i = 0; i < cards.length; i++) if (spare || isDeadCard(cards[i], me)) i};
 
-      // Overfull hand: boost to cycle cards and avoid hand limit discard
-      final overflow = handLen >= 7;
-
-      // Has dead cards (sidekick dead)
-      final hasDeadCard = cards.any((c) => !me.alive.any((f) => me.script.fighterMayUse(c, f)));
-
-      if (!canReachAttack && !needEscape && !overflow && !hasDeadCard) {
-        return const []; // Conserve hand cards!
-      }
+      final pool = useful.isNotEmpty ? useful : free;
+      if (pool.isEmpty) return const [];
+      return [
+        pool.reduce((a, b) {
+          double cost(int i) => (isDeadCard(cards[i], me) ? 0.0 : _boostCost(cards[i], me)) + g.boostValueOf(cards[i]) * 0.01;
+          return cost(b) < cost(a) ? b : a;
+        })
+      ];
     }
 
-    // Pick the card with the highest boost-to-worth ratio, favoring dead cards
+    // A BOOST that can't be declined: the card with the most boost for its worth.
     return [
       _best(cards.length, (i) {
         final c = cards[i];
@@ -580,11 +661,12 @@ class AiAgent implements Agent {
 
     var score = 0.0;
 
+    final reach = f.isHero ? _book(f.owner)?.reach ?? 0 : 0;
     for (final e in foes) {
       final d = _walk(g, s, e.space!);
       final adj = g.board.adjacent(s, e.space!);
       final sharesZone = g.board.sharesZone(s, e.space!);
-      final canHit = adj || (f.isRanged && sharesZone);
+      final canHit = adj || (f.isRanged && sharesZone) || (reach > 0 && _near(g, s, reach).contains(e.space));
       final eCanHit = adj || (e.isRanged && sharesZone);
       final weight = e.isHero ? 2.5 : 1.0;
 
@@ -690,12 +772,36 @@ class AiAgent implements Agent {
       score += (3 - zoneCount) * 0.6; // Single zone provides better cover than multi-zone
     }
 
+    // 7. Hero knowledge (ai_playbook.dart): my hero's playbook, and how to face theirs.
+    if (actionsLeft == 0) score += _book(f.owner)?.endTurnAt?.call(g, f, s) ?? 0;
+    for (final e in foes) {
+      final cp = _counter(e.owner);
+      if (cp == null) continue;
+      if (actionsLeft == 0) score += cp.endTurnAt?.call(g, f, s, e) ?? 0;
+      if (f.onBoard) score += cp.moveTo?.call(g, f, s, e) ?? 0;
+    }
+
     return score;
   }
 
   /// Spaces from which [f] could attack one of [foes].
-  Set<int> _strikeSpots(Game g, Fighter f, Iterable<Fighter> foes) => {
-        for (final foe in foes) ...{...g.board.neighbours(foe.space!), if (f.isRanged) ...g.board.zoneOf(foe.space!)},
+  Set<int> _strikeSpots(Game g, Fighter f, Iterable<Fighter> foes) {
+    final reach = f.isHero ? _book(f.owner)?.reach ?? 0 : 0;
+    return {
+      for (final foe in foes) ...{
+        ...g.board.neighbours(foe.space!),
+        if (f.isRanged) ...g.board.zoneOf(foe.space!),
+        if (reach > 0) ..._near(g, foe.space!, reach),
+      },
+    };
+  }
+
+  static final _nears = Expando<Map<(int, int), Set<int>>>();
+
+  /// Spaces within [r] spaces of [s], ignoring fighters and zones ("attack from up to r spaces away").
+  Set<int> _near(Game g, int s, int r) => (_nears[g.board.def] ??= {})[(s, r)] ??= {
+        for (final x in g.board.spaceIds)
+          if (g.board.distance(s, x) <= r) x,
       };
 
   static final _walks = Expando<Map<int, Map<int, int>>>();
@@ -727,15 +833,24 @@ class AiAgent implements Agent {
 
   /// Where [e] can attack from: now (without moving), and after one maneuver (its move
   /// value plus a typical BOOST, following arrows and +1 paths and blocked by fighters).
+  /// Counterplays (ai_playbook.dart) add long reach and moves at the start of their turn.
   (Set<int>, Set<int>) _strikeZones(Game g, Fighter e) {
     final key = (g.log.length, e.space);
     final cached = _zones[e];
     if (cached != null && cached.$1 == key.$1 && cached.$2 == key.$2) return (cached.$3, cached.$4);
-    Set<int> from(int s) => {s, ...g.board.neighbours(s), if (e.isRanged) ...g.board.zoneOf(s)};
-    final now = from(e.space!);
+    final cp = _counter(e.owner);
+    final reach = e.isHero ? cp?.reach ?? 0 : 0;
+    final startMove = cp?.startMove ?? 0;
+    Set<int> from(int s) => {
+          s,
+          ...g.board.neighbours(s),
+          if (e.isRanged) ...g.board.zoneOf(s),
+          if (reach > 0) ..._near(g, s, reach),
+        };
+    final now = <int>{for (final s in startMove > 0 ? g.reachable(e, startMove).keys : [e.space!]) ...from(s)};
     final later = <int>{...now};
     final boost = e.owner.hand.isEmpty ? 0 : 1;
-    for (final s in g.reachable(e, g.moveAllowance(e) + boost).keys) {
+    for (final s in g.reachable(e, g.moveAllowance(e) + boost + startMove).keys) {
       later.addAll(from(s));
     }
     _zones[e] = (key.$1, key.$2, now, later);

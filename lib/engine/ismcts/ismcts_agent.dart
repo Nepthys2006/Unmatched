@@ -85,11 +85,14 @@ class IsmctsAgent implements Agent {
     // Only whole-turn action choices with a real decision are searched (see the class comment).
     // Everything else, including a single optional choice that may be declined, is answered by
     // the helper unless the search planned a better answer for it.
+    // Search picks still keep to the AI's ground rules (ai_playbook.dart).
     if (prompt.ask != Ask.action || prompt.choices.length < 2 || game.turnNumber == 0) {
       final answer = await _helper.decide(game, prompt);
       if (_plan.isNotEmpty && prompt.ask != Ask.action) {
         final step = _plan[_planOrdinal++];
-        if (step != null && step.signature == promptSignature(prompt)) return step.answer;
+        if (step != null && step.signature == promptSignature(prompt) && _helper.obeysRules(game, prompt, step.answer)) {
+          return step.answer;
+        }
       }
       return answer;
     }
@@ -118,6 +121,10 @@ class IsmctsAgent implements Agent {
     }
     _plan = engine.lastPlan;
     _planOrdinal = 0;
+    if (!_helper.obeysRules(game, prompt, choice)) {
+      _plan = const {};
+      return _helper.decide(game, prompt);
+    }
     return choice;
   }
 }
