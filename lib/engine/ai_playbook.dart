@@ -16,6 +16,7 @@
 library;
 
 import 'combat.dart';
+import 'defs.dart';
 import 'game.dart';
 import 'prompt.dart';
 import 'state.dart';
@@ -91,19 +92,42 @@ class Counterplay {
 
 // =============================================================================== ground rules
 
+/// The maneuver BOOST ground rule, for every level but Pro.
+final maneuverBoostRule = GroundRule(
+  "Don't BOOST a maneuver without a reason. The only reasons: get my hurt hero out of every "
+  "enemy's reach (their move without a BOOST, then an attack) as the turn ends; or the hand limit would "
+  'discard a card at the end of the turn anyway (maneuvering again would go over it, and no '
+  'attack or scheme this turn would keep it under). Not to reach an attack: in the arena that '
+  'lost games (49% against the old AI, 58% without it).',
+  (g, p, c) => c is Card && isManeuverBoost(p) && !maneuverBoost(g, p.player).allows(g, c),
+);
+
+/// Pro's maneuver BOOST rule: the same reasons, plus reaching an attack on the first action
+/// when maneuvering twice would go over the hand limit ([reachAttack]).
+final proManeuverBoostRule = GroundRule(
+  "Don't BOOST a maneuver without a reason: get my hurt hero out of reach as the turn ends; the "
+  'hand limit would discard a card anyway; or, on the first action, reach an attack for the second '
+  'when maneuvering twice would go over the hand limit (not a hurt hero with no defense, and only '
+  'with a card worth attacking with).',
+  (g, p, c) => c is Card && isManeuverBoost(p) && !maneuverBoost(g, p.player, reach: true).allows(g, c),
+);
+
+final schemeBoostRule = GroundRule(
+  "Don't BOOST with a scheme card: play it instead. Except when no fighter can play it, when "
+  'the hand limit would discard a card at the end of this turn anyway, or when the BOOST '
+  'decides a fight (it can defeat their hero, or saves mine).',
+  (g, p, c) =>
+      p.intent == Intent.boost &&
+      c is Card &&
+      c.def.isScheme &&
+      !isDeadCard(c, p.player) &&
+      spareCards(g, p.player) == 0 &&
+      !_decisiveBoost(g, p, c),
+);
+
 final groundRules = <GroundRule>[
-  GroundRule(
-    "Don't BOOST with a scheme card: play it instead. Except when no fighter can play it, when "
-    'the hand limit would discard a card at the end of this turn anyway, or when the BOOST '
-    'decides a fight (it can defeat their hero, or saves mine).',
-    (g, p, c) =>
-        p.intent == Intent.boost &&
-        c is Card &&
-        c.def.isScheme &&
-        !isDeadCard(c, p.player) &&
-        !overHandLimit(g, p.player) &&
-        !_decisiveBoost(g, p, c),
-  ),
+  maneuverBoostRule,
+  schemeBoostRule,
   GroundRule(
     'Always defend a hero that the attack could defeat.',
     (g, p, c) => c == null && p.intent == Intent.defenseCard && _mayBeLethal(p.subject as Combat),
@@ -127,6 +151,15 @@ final groundRules = <GroundRule>[
 // ================================================================================== playbooks
 
 final playbooks = <String, Playbook>{
+  // Spear Throw (his only scheme) deals 2 damage to an opposing fighter in Achilles' zone: with
+  // nobody there it does nothing.
+  'achilles': Playbook(rules: [
+    GroundRule(
+      "Don't play Spear Throw with no opposing fighter in Achilles' zone.",
+      (g, p, c) => c is ActionChoice && c.kind == ActionKind.scheme && c.card!.title == 'Spear Throw' && spearTargets(g, p.player).isEmpty,
+    ),
+  ]),
+
   // At the start of her turn Medusa may deal 1 damage to an opposing fighter in her zone.
   'medusa': Playbook(
     endTurnAt: (g, f, s) => f.isHero && _foes(g, f.owner).any((e) => g.board.sharesZone(s, e.space!)) ? 2.0 : 0.0,
@@ -218,8 +251,179 @@ int handLimit(Game g, Player p) {
   return limit;
 }
 
-/// More cards than the hand limit on the last action: the extra ones get discarded anyway.
-bool overHandLimit(Game g, Player p) => g.actions == 0 && p.hand.length > handLimit(g, p);
+/// Cards the hand limit will discard at the end of this turn whatever [p] does with the actions
+/// left: each one could BOOST for free. The other actions shed a card each if [p] can attack
+/// (after moving normally) or play a scheme, and draw one each (maneuvering) if not.
+int spareCards(Game g, Player p) {
+  var hand = p.hand.length;
+  final left = g.actions;
+  if (left > 0) {
+    final canPlay = g.legalActions(p).any((a) => a.kind == ActionKind.scheme) || _canAttackAfterMoving(g, p);
+    hand += canPlay ? -left : (p.deck.length < left ? p.deck.length : left);
+  }
+  final over = hand - handLimit(g, p);
+  return over > 0 ? over : 0;
+}
+
+/// Whether [p] can attack this turn after moving normally (no BOOST).
+bool _canAttackAfterMoving(Game g, Player p) {
+  final foes = _foes(g, p).toList();
+  if (foes.isEmpty) return false;
+  return p.onBoard.any((f) =>
+      p.hand.any((c) => g.canAttackWith(c, f)) && _strikeSpots(g, f, foes).any(g.reachable(f, g.moveAllowance(f)).containsKey));
+}
+
+// ============================================================================ maneuver BOOSTs
+
+/// A hero with this much health or less BOOSTs a maneuver to get out of reach. (In the arena,
+/// escaping at any health boosted twice as often and won 57% instead of 58% of games.)
+const escapeHealth = 6;
+
+/// Whether [p] asks for the BOOST of a maneuver.
+bool isManeuverBoost(Prompt p) => p.intent == Intent.boost && p.ask == Ask.card && p.text == Game.maneuverBoostText;
+
+/// What a maneuver BOOST could buy [me] right now (the ground rule above).
+class ManeuverBoost {
+  ManeuverBoost._(this.spare, this.escape, this.reach);
+
+  /// Cards the hand limit discards at the end of the turn anyway ([spareCards]).
+  final int spare;
+
+  /// Getting the hero out of reach: the hero, the least BOOST that does it, and which spaces are
+  /// safe (null if the normal move already gets there, no BOOST would, or it isn't the last action).
+  final (Fighter, int, bool Function(int))? escape;
+
+  /// Reaching an attack for the turn's other action, when maneuvering again would go over the
+  /// hand limit: the fighter, the least BOOST that gets it there, and the spaces it can attack
+  /// from ([reachAttack]).
+  final (Fighter, int, Set<int>)? reach;
+
+  /// Whether boosting with [c] buys something.
+  bool allows(Game g, Card c) => spare > 0 || (escape != null && g.boostValueOf(c) >= escape!.$2) || reaches(g, c);
+
+  /// Whether boosting with [c] gets [reach]'s fighter to an attack, with a card left worth it.
+  bool reaches(Game g, Card c) {
+    final r = reach;
+    if (r == null || g.boostValueOf(c) < r.$2) return false;
+    return r.$1.owner.hand.any((a) => a != c && g.canAttackWith(a, r.$1) && worthAttacking(a));
+  }
+
+  /// Where to move each fighter after boosting with [c], to get what the BOOST was for (none
+  /// for a spare card).
+  Map<Fighter, Set<int>> goals(Game g, Card c) {
+    final b = g.boostValueOf(c);
+    final r = reach;
+    if (r != null && reaches(g, c)) {
+      return {r.$1: g.reachable(r.$1, g.moveAllowance(r.$1) + b).keys.where(r.$3.contains).toSet()};
+    }
+    final e = escape;
+    if (e == null || b < e.$2) return const {};
+    return {e.$1: g.reachable(e.$1, g.moveAllowance(e.$1) + b).keys.where(e.$3).toSet()};
+  }
+}
+
+/// A card worth attacking with: an attack card, or a versatile one of value 3 or more.
+bool worthAttacking(Card c) => c.def.type == CardType.attack || (c.def.value ?? 0) >= 3;
+
+/// The third reason to BOOST a maneuver: on the first action, when a second maneuver would go
+/// over the hand limit (a card lost anyway), BOOST this one to get next to them and attack with
+/// the other action instead. Not when nothing in hand is worth attacking with, nor for a hurt
+/// hero with nothing to defend with (it would rather keep away).
+(Fighter, int, Set<int>)? reachAttack(Game g, Player me) {
+  if (g.actions != 1 || me.hand.length + 1 <= handLimit(g, me)) return null;
+  final hero = me.heroFighter;
+  if (hero.onBoard && hero.hp <= escapeHealth && !me.hand.any((c) => g.canDefendWith(c, hero))) return null;
+  final foes = _foes(g, me).toList();
+  if (foes.isEmpty) return null;
+  final most = g.boostOptions(me).map(g.boostValueOf).fold(0, (a, b) => a > b ? a : b);
+  for (final f in me.onBoard) {
+    if (!me.hand.any((c) => g.canAttackWith(c, f) && worthAttacking(c))) continue;
+    final spots = _strikeSpots(g, f, foes);
+    // Within the normal move: no BOOST needed.
+    if (g.reachable(f, g.moveAllowance(f)).keys.any(spots.contains)) return null;
+    for (var b = 1; b <= most; b++) {
+      if (g.reachable(f, g.moveAllowance(f) + b).keys.any(spots.contains)) return (f, b, spots);
+    }
+  }
+  return null;
+}
+
+final _boostCache = Expando<(Object, ManeuverBoost)>();
+
+/// What a maneuver BOOST could buy [me] now (worked out once per game state). [reach]: also
+/// reaching an attack (Pro only).
+ManeuverBoost maneuverBoost(Game g, Player me, {bool reach = false}) {
+  final key = (g.log.length, g.actions, reach, Object.hashAll(me.hand), Object.hashAll(g.fighters.map((f) => (f.space, f.hp))));
+  final cached = _boostCache[me];
+  if (cached != null && cached.$1 == key) return cached.$2;
+  final foes = _foes(g, me).toList();
+  (Fighter, int, bool Function(int))? escape;
+  final hero = me.heroFighter;
+  // Only a hurt hero runs: escaping at any health boosted twice as often and won fewer games.
+  if (g.actions == 0 && hero.onBoard && hero.hp <= escapeHealth && foes.isNotEmpty) {
+    // Their reach next turn without a BOOST: move (and any free move first), then attack. The
+    // hero is about to move, so it doesn't block their way.
+    final Set<int> danger;
+    hero.offBoard = true;
+    try {
+      danger = {
+        for (final e in foes)
+          if (e.owner.hand.isNotEmpty || e.owner.deck.isNotEmpty) ..._enemyReach(g, e),
+      };
+    } finally {
+      hero.offBoard = false;
+    }
+    bool safe(int s) => !danger.contains(s);
+    // The least BOOST that gets the hero to a safe space, if the normal move doesn't.
+    if (!g.reachable(hero, g.moveAllowance(hero)).keys.any(safe)) {
+      final most = g.boostOptions(me).map(g.boostValueOf).fold(0, (a, b) => a > b ? a : b);
+      for (var b = 1; b <= most; b++) {
+        if (g.reachable(hero, g.moveAllowance(hero) + b).keys.any(safe)) {
+          escape = (hero, b, safe);
+          break;
+        }
+      }
+    }
+  }
+
+  final mb = ManeuverBoost._(spareCards(g, me), escape, reach ? reachAttack(g, me) : null);
+  _boostCache[me] = (key, mb);
+  return mb;
+}
+
+/// Spaces [e] can attack next turn without boosting: from wherever its move (and any move at the
+/// start of its turn, from its counterplay) takes it.
+Set<int> _enemyReach(Game g, Fighter e) {
+  final cp = counterplays[e.owner.hero.id];
+  final reach = e.isHero ? cp?.reach ?? 0 : 0;
+  return {
+    for (final s in g.reachable(e, g.moveAllowance(e) + (cp?.startMove ?? 0)).keys) ..._attackable(g, s, e.isRanged, reach),
+  };
+}
+
+/// Spaces [f] could attack one of [foes] from (with its playbook's long reach).
+Set<int> _strikeSpots(Game g, Fighter f, Iterable<Fighter> foes) {
+  final reach = f.isHero ? playbooks[f.owner.hero.id]?.reach ?? 0 : 0;
+  return {for (final foe in foes) ..._attackable(g, foe.space!, f.isRanged, reach)};
+}
+
+/// Spaces a fighter in [s] can attack (or, the same thing, attack [s] from): adjacent ones, its
+/// zone if ranged, and any within [reach] spaces.
+Set<int> _attackable(Game g, int s, bool ranged, int reach) => {
+      s,
+      ...g.board.neighbours(s),
+      if (ranged) ...g.board.zoneOf(s),
+      if (reach > 0)
+        for (final x in g.board.spaceIds)
+          if (g.board.distance(s, x) <= reach) x,
+    };
+
+/// Opposing fighters Achilles' Spear Throw could hit: in Achilles' zone.
+Iterable<Fighter> spearTargets(Game g, Player achilles) {
+  final hero = achilles.heroFighter;
+  if (!hero.onBoard) return const [];
+  return _foes(g, achilles).where((e) => g.board.sharesZone(hero.space!, e.space!));
+}
 
 /// No living fighter of [p] can play [c]: it is only good for a BOOST.
 bool isDeadCard(Card c, Player p) => !p.alive.any((f) => p.script.fighterMayUse(c, f));

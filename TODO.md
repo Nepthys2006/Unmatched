@@ -22,7 +22,107 @@ Last updated: 2026-11-04. For the full engine/API reference see `HANDOFF.md`.
 | Checked in a browser | ✅ Chrome (desktop and phone-sized): 1v1, 2v2, 3v3 on the 3D maps |
 | Android / iOS / Windows app | ⚠️ Not run on a device yet (no phone or Visual Studio on this PC) |
 
-## Done (2026-11-04, latest): no more wasted BOOSTs; AI ground rules, hero playbooks, counterplays
+## Done (2026-11-04, latest): a new AI level, Pro
+
+- `AiLevel.pro` (offered next to Easy … Insane in setup and lobbies): Insane's judgement plus a game plan
+  chosen at each action (`lib/engine/ai_pro.dart`; every Pro rule is gated on the level, the other four
+  play exactly as before). Your four rules: (1) apart, maneuver until the hand is full, out of the
+  opponent's reach; (2) head to head, press the attack only with more cards than them and a defense card
+  to spare, make distance when they have more; (3) an opponent who let an attack through and hasn't drawn
+  since is out of defenses: hit hard, prefer attacks that gain an action, finish them; (4) prefer attacks
+  that draw (my hand low) or make them discard (theirs low).
+- Pro's heroes: `proHeroes` (Achilles for now). A Random AI hero for Pro is drawn from them.
+- Measured (4000 games vs Insane on random heroes): Pro playing Achilles 83.0%, Insane playing Achilles
+  83.4%; over all heroes Pro and Insane are even (51.6% ± 2.2%). Holding back after the hand is full lost
+  (72.7%), so Pro engages once its hand is full. Hero-specific plays are next.
+- Arena: `--a-hero=achilles` makes side A always play that hero (the hero table then lists who A played).
+- **Achilles plays** (`_achilles` in `ai_pro.dart`, Pro only unless noted): no Spear Throw without an
+  opposing fighter in his zone (every level: `playbooks['achilles']`, Insane was wasting it); Patroclus
+  leads the attacks with his own cards, Achilles close behind; Under Achilles' Helm whenever Patroclus
+  lives; all out once Patroclus falls (at their hero, Wily Fighting where it catches 1-health fighters);
+  Spear Throw only to finish their hero or with a full hand and nobody to attack; Achilles' Heel only
+  against attacks that can't beat 4, unless it's his only defense (holding it back then lost games).
+  Then: Battle Hardened is kept and takes back Spear Throw (their hero low enough to finish), else the
+  other Battle Hardened (the pair recycle each other; 90.9% / 89.6% on seeds 41 / 47, from 90.6% / 89.2%), else Brothers In Arms (Patroclus alive) or Feint (vs Wukong, Jekyll & Hyde, Geralt: `_cancelWorthy`), and late in the game
+  defends rather than attacks; Test For Weakness once Patroclus falls (Patroclus may spend one to draw out
+  defenses); Brothers In Arms first against sidekicks, Patroclus' own cards on the last action.
+  Pro playing Achilles: 83.0% → 89.5% → 90.6% / 89.2% on two seeds (Insane playing Achilles 84.7%).
+  New hooks for hero plays: `takeBack` (which card to return from the discard pile) and `keep`.
+- **General rules for every hero** (Pro only, `ai_pro.dart` rules 5-7):
+  (5) moves during combat (Skirmish, Dash...) look at whose action comes next: theirs (defending
+  their first action) → get my fighters out of reach, or move theirs away from mine, most of all one
+  next to several of mine; mine → line up attacks (adjacent, next to several, a ranged fighter in
+  zone but out of melee) or corner them. With Skirmish, Pro now picks which fighter to move (the other
+  levels still always move their own). Pro's spacing during the opponent's turn counts my actions correctly
+  (it used to read their remaining actions as mine).
+  (6) a sidekick that matters (more than 1 health, not Patroclus or the Red Riders: `_spentSidekicks`)
+  ends the turn out of reach when no card in hand lets it defend, more so if it has cards of its own.
+  (7) making distance with fewer cards than them: beyond their move (passives included), reach and
+  range, the further the fewer cards I hold (up to 4 spaces of margin).
+  On vs off (4000 games vs Insane, seeds 41 / 47): random heroes 53.3% / 53.3% vs 51.7% / 52.3%;
+  Pro playing Achilles 91.1% / 90.0% vs 90.9% / 89.6%.
+- **A third maneuver BOOST reason, Pro only** (`reachAttack` and `proManeuverBoostRule` in
+  `ai_playbook.dart`; the other levels keep `maneuverBoostRule`): on the first
+  action, when a second maneuver would go over the hand limit, BOOST this maneuver to get next to them
+  and attack with the second action, instead of maneuvering twice and boosting the second. Not when
+  nothing in hand is worth attacking with (an attack card, or a versatile one of 3+), nor for a hurt
+  hero (health ≤ 6) with nothing to defend with. Pro attacks with the second action. Against the
+  baseline AI it costs a little (Pro 61.5% / 62.3% vs 63.2% / 63.2% without; for Insane it measured
+  58.7% / 58.1% vs 59.2% / 58.6%, so it was limited to Pro); only reaching their hero, or only with a
+  defense card to spare, didn't win it back. Kept from playtesting.
+- **Sherlock Holmes plays, schemes** (`_sherlock` in `ai_pro.dart`; Sherlock added to `proHeroes`):
+  Confirm Suspicion names the value with the best expected result, from the cards Holmes has seen in
+  their hand (Eliminate the Impossible, Study Methods, an earlier miss) or else the odds over what they
+  may hold; priority (a) high BOOST, (b) takes cards back, (c) heals, (d) makes him discard, (e) 6+
+  damage, with 6+ damage first when Holmes is low (≤ 6) and heals / high BOOSTs first when their hero
+  is (≤ 5). Eliminate the Impossible before it, only against 5+ cards (or to strip a low, adjacent
+  hero's last defense before a 5-value attack), schemes first, high BOOSTs left to Confirm Suspicion.
+  Administer Aid as soon as Holmes is hurt and not in reach (more so with Watson away from him).
+  Master of Disguise only to finish a 1-health hero or escape a crowd, else first to discard or BOOST
+  (Pro's scheme-BOOST rule lets a scheme with a negative `keep` BOOST). A known hand with no defense in
+  it puts Pro in finish mode. New hooks: `number` and `discardTheirs`.
+  Pro playing Sherlock vs Insane: 73.3% / 73.4% (39% without the plays; Insane playing Sherlock 32.5%).
+  The other levels still name 8 for Confirm Suspicion (number prompts take the highest).
+- **Sherlock Holmes plays, cards and the hold** (`ai_pro.dart` Sherlock notes 5-12): a new `ProMode.hold`
+  (no attacks unless he holds 3 cards more than them or they're out of defenses; maneuver away, then a
+  scheme, keeping 7 cards; Master of Disguise first against a hero with no sidekicks on the board);
+  Counterpunch on defense against an adjacent melee attacker; Study Methods on defense (Watson attacks
+  with it only at a sure target); Elementary predicts from what Holmes has seen (strongest attack; their
+  hero low: heal, else escape; blind: most damage blocked on average); The Game is Afoot attacks; Fixed
+  Point when the heal lands (Holmes ≤ 10, or both hurt), on defense; Service Revolver whenever Watson can;
+  Deduce Strategy on attack if they may hold value changers; Education Never Ends on defense, Watson's
+  bluff. Pro playing Sherlock vs Insane: 76.5% / 77.3% (73.3% / 73.4% with the schemes alone); the hold
+  measures even against Insane (77.2% / 77.0% without it).
+- **Sherlock, round 3** (notes 13-15): Holmes and Watson stay adjacent, the defenseless one shielded by the
+  other (fewer spaces they can attack him from); fewer than 3 schemes in hand (shed by playing, discarding,
+  BOOSTing; Master of Disguise BOOSTs a defenseless Holmes away); at 7 cards with a scheme he attacks, The
+  Game is Afoot first, its move out of reach. New hooks: `moveFirst`, `freeBoost`. 75.9% / 76.3% (even).
+  Loss probe (`tool/sherlock_probe.dart`, temporary): undefended hits on Holmes fell (2.3 → 1.8 a lost
+  game) but losses after an exhausted deck rose (57 → 98 of ~230). Attacking once the deck is low, or not
+  maneuvering to hold, didn't change the rate (75.7-77.5%).
+- **Playtest fixes** (general rule 8, Sherlock note 16): a holding Pro turn positions every maneuver as if
+  ending the turn, even the first of two or one followed by a scheme (it was scored as if an attack
+  followed, pulling the hero next to them), and Insane's "close in at the end of the turn" is off for it;
+  past their plain reach, up to 3 spaces more count (a BOOSTed escape uses the whole move). No Study
+  Methods on defense against a passive attack bonus unless it is the only defense. Sherlock 78.8% / 76.5%
+  (was 75.9% / 76.3%). Applied to building and retreating turns too, it cost the other heroes (random
+  49.1% vs 52.8%, Achilles 89.0% vs 90.9%), so it is for holding only (only Sherlock holds).
+- `test/ai_pro_test.dart`: each rule, each Achilles play, the general rules, and the Random hero draw.
+
+## Done (2026-11-04, later): maneuver BOOSTs only for a reason
+
+- A ground rule (`lib/engine/ai_playbook.dart`, every level and the UMCCC Model) now allows a maneuver
+  BOOST for only two reasons: get a hurt hero (health ≤ `escapeHealth`, 6) out of every enemy's reach
+  (their move without a BOOST, then an attack) as the turn ends, after which it moves to a space out of
+  reach; or the hand limit would discard a card anyway (`spareCards`: maneuvering again would go over it
+  and no attack or scheme this turn keeps it under). It used to boost whenever a card was "dead" (a
+  defeated sidekick's cards, often +3) and to reach a space to attack from.
+- Measured against the previous AI: no BOOST to reach an attack 49% → 58% of games; escaping only with
+  a hurt hero ~1.5 points better than at any health and half the BOOSTs. Insane now beats the baseline
+  57.8% ± 1.5% with 1.1 BOOSTs a game (baseline 3.3); levels still 58% / 72% / 84%.
+- Fixed with it: the enemy's reach was worked out with the escaping hero still blocking their path.
+
+## Done (2026-11-04): no more wasted BOOSTs; AI ground rules, hero playbooks, counterplays
 
 - **BOOSTs**: a maneuver BOOST now needs a purpose (reach a space to attack from, or get a hurt hero out
   of reach) and is paid with the cheapest card big enough for it. Before, it picked the card with the

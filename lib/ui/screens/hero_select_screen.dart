@@ -170,6 +170,7 @@ class _HeroSelectScreenState extends State<HeroSelectScreen> {
         _hero.id,
         widget.players,
         chosen: _aiChoose ? _aiPicks : const [],
+        preferred: widget.ai == AiLevel.pro ? proHeroes : const [],
       ),
     );
     Navigator.of(context).push(

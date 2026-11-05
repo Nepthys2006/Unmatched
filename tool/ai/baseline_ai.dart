@@ -30,7 +30,7 @@ class BaselineAgent implements Agent {
         AiLevel.easy => 1.8,
         AiLevel.medium => 0.6,
         AiLevel.hard => 0.12,
-        AiLevel.insane => 0.0,
+        AiLevel.insane || AiLevel.pro => 0.0,
       };
 
   double _jitter() => _noise == 0.0 ? 0.0 : (_rng.nextDouble() - 0.5) * _noise;
@@ -41,7 +41,7 @@ class BaselineAgent implements Agent {
         AiLevel.easy => 0.55,
         AiLevel.medium => 0.25,
         AiLevel.hard => 0.10,
-        AiLevel.insane => 0.0,
+        AiLevel.insane || AiLevel.pro => 0.0,
       };
 
   @override

@@ -42,18 +42,21 @@ extension AiLevelX on AiLevel {
     AiLevel.medium => 'Medium',
     AiLevel.hard => 'Hard',
     AiLevel.insane => 'Insane',
+    AiLevel.pro => 'Pro',
   };
   String get blurb => switch (this) {
     AiLevel.easy => 'Makes mistakes. Good for learning a hero.',
     AiLevel.medium => 'Solid play with the odd slip.',
     AiLevel.hard => 'Manages its hand and picks its fights.',
     AiLevel.insane => 'Near-perfect choices. No mercy.',
+    AiLevel.pro => 'Plays like a seasoned player: builds its hand, waits for you to commit, then punishes.',
   };
   Color get color => switch (this) {
     AiLevel.easy => const Color(0xFF6BD08A),
     AiLevel.medium => Palette.brass,
     AiLevel.hard => const Color(0xFFF08A3C),
     AiLevel.insane => Palette.danger,
+    AiLevel.pro => const Color(0xFFB57BFF),
   };
 }
 
@@ -101,16 +104,22 @@ class MatchConfig {
   }
 
   /// Seat 0 is [human]; AI seat i (1-based) plays `chosen[i - 1]` when that is set, otherwise a
-  /// random hero. Nobody plays the same hero twice: a choice that repeats [human] or an earlier
-  /// choice is ignored (drawn at random instead).
-  static List<String> lineup(GameData data, String human, int players, {List<String?> chosen = const [], math.Random? rng}) {
+  /// random hero, drawn from [preferred] first (the heroes the Pro AI knows, [proHeroes]).
+  /// Nobody plays the same hero twice: a choice that repeats [human] or an earlier choice is
+  /// ignored (drawn at random instead).
+  static List<String> lineup(GameData data, String human, int players,
+      {List<String?> chosen = const [], List<String> preferred = const [], math.Random? rng}) {
     final used = <String>{human};
     final picks = <String?>[];
     for (var i = 0; i < players - 1; i++) {
       final c = i < chosen.length ? chosen[i] : null;
       picks.add(c != null && data.heroes.containsKey(c) && used.add(c) ? c : null);
     }
-    final pool = data.heroes.keys.where((h) => !used.contains(h)).toList()..shuffle(rng ?? math.Random());
+    final random = rng ?? math.Random();
+    final pool = data.heroes.keys.where((h) => !used.contains(h)).toList()..shuffle(random);
+    // Seats are filled from the end of the pool: put the preferred heroes there.
+    final best = [for (final h in preferred) if (pool.remove(h)) h]..shuffle(random);
+    pool.addAll(best);
     return [human, for (final p in picks) p ?? pool.removeLast()];
   }
 

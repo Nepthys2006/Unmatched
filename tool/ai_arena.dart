@@ -4,6 +4,7 @@
 //     dart run tool/ai_arena.dart                          (insane vs baseline, 200 games)
 //     dart run tool/ai_arena.dart --a=hard --b=medium --games=400
 //     dart run tool/ai_arena.dart --heroes=medusa,bigfoot --maps=sarpedon
+//     dart run tool/ai_arena.dart --a=pro --b=insane --a-hero=achilles   (A always plays Achilles)
 //     --verbose (one line per game), --heroes-table (A's wins with each hero), --seed=N
 //
 // Agents: easy, medium, hard, insane (the current AI), insane-plain etc. (the current AI without
@@ -91,8 +92,9 @@ Future<void> main(List<String> args) async {
   final aActs = <String, int>{}, bActs = <String, int>{};
   final watch = Stopwatch()..start();
 
+  final aHero = opt['a-hero'];
   for (var k = 0; k < pairs; k++) {
-    final h1 = heroes[rng.nextInt(heroes.length)];
+    final h1 = aHero ?? heroes[rng.nextInt(heroes.length)];
     var h2 = heroes[rng.nextInt(heroes.length)];
     if (heroes.length > 1) {
       while (h2 == h1) {
@@ -103,10 +105,12 @@ Future<void> main(List<String> args) async {
     final seed = rng.nextInt(1 << 30);
     for (final aSeat in [0, 1]) {
       final specs = aSeat == 0 ? [aSpec, bSpec] : [bSpec, aSpec];
+      // With --a-hero, A plays that hero in both games of the pair; otherwise the heroes stay put.
+      final ids = aHero == null ? [h1, h2] : (aSeat == 0 ? [h1, h2] : [h2, h1]);
       final g = Game(
         data: data,
         map: map,
-        heroIds: [h1, h2],
+        heroIds: ids,
         agents: [for (var i = 0; i < 2; i++) _Counting(makeAgent(specs[i], seed + i), i == aSeat ? aActs : bActs)],
         seed: seed,
         firstSeat: seed & 1,
@@ -125,7 +129,8 @@ Future<void> main(List<String> args) async {
         } else {
           bWins++;
         }
-        final hero = [h1, h2][aSeat];
+        // The table lists A's hero, or with --a-hero the hero A played against.
+        final hero = aHero == null ? ids[aSeat] : 'vs ${ids[1 - aSeat]}';
         final (n, won) = byHero[hero] ?? (0, 0);
         byHero[hero] = (n + 1, won + (aWon ? 1 : 0));
         result = aWon ? 'A' : 'B';
@@ -134,7 +139,7 @@ Future<void> main(List<String> args) async {
         draws++;
         result = 'draw';
       }
-      if (verbose) stdout.writeln('${games.toString().padLeft(4)}  ${map.id.padRight(22)} A=${[h1, h2][aSeat].padRight(16)} B=${[h1, h2][1 - aSeat].padRight(16)} $result');
+      if (verbose) stdout.writeln('${games.toString().padLeft(4)}  ${map.id.padRight(22)} A=${ids[aSeat].padRight(16)} B=${ids[1 - aSeat].padRight(16)} $result');
     }
     if (!verbose && (k + 1) % 10 == 0) stdout.write('\r$games games...');
   }
