@@ -15,7 +15,7 @@ import 'support.dart';
 Prompt boostPrompt(Player p) => Prompt(
       player: p,
       ask: Ask.card,
-      text: 'Discard a card to BOOST your movement?',
+      text: Game.maneuverBoostText,
       choices: [for (final c in p.hand) Choice(c.title, c)],
       optional: true,
       intent: Intent.boost,
@@ -38,10 +38,10 @@ void main() {
       expect(await AiAgent(level: AiLevel.insane).decide(s.game, boostPrompt(s.p1)), isEmpty);
     });
 
-    test('when only the boosted move reaches the enemy', () async {
+    test('not just to reach the enemy (that lost games in the arena)', () async {
       s.place(s.hero(s.p1), 0);
       s.place(s.hero(s.p2), 6);
-      expect(await AiAgent(level: AiLevel.insane).decide(s.game, boostPrompt(s.p1)), hasLength(1));
+      expect(await AiAgent(level: AiLevel.insane).decide(s.game, boostPrompt(s.p1)), isEmpty);
     });
 
     test('not just because the hand is big', () async {
@@ -58,8 +58,13 @@ void main() {
       for (final t in ['Crash Through the Trees', 'Hoax', 'Larger Than Life', 'Savagery']) {
         s.give(s.p1, t);
       }
-      s.place(s.hero(s.p1), 0);
-      s.place(s.hero(s.p2), 7); // Bigfoot (move 3) needs a BOOST of 3 to reach space 6
+      s.give(s.p2, 'Second Shot');
+      s.game.actions = 0;
+      s.place(s.hero(s.p1), 2);
+      s.hero(s.p1).hp = 5;
+      // Medusa (move 3, ranged) can shoot anything up to space 7 next turn: hurt Bigfoot (move 3)
+      // needs a BOOST of 3 to get out of reach. Hoax (+2) is too small.
+      s.place(s.hero(s.p2), 0);
       final p = boostPrompt(s.p1);
       final [i] = await AiAgent(level: AiLevel.insane).decide(s.game, p);
       expect((p.choices[i].value as Card).title, 'Savagery');
@@ -90,14 +95,89 @@ void main() {
     });
   });
 
-  group('ground rules', () {
-    test('a BOOST with a scheme card breaks them; with a dead one it does not', () {
-      final s = Scenario('bigfoot', 'medusa');
-      s.place(s.hero(s.p1), 0);
+  // The only reasons to BOOST a maneuver (the first ground rule): get a hurt hero out of the
+  // enemy's reach as the turn ends, or a card the hand limit would discard anyway.
+  group('maneuver BOOST reasons', () {
+    late Scenario s;
+    late Fighter bigfoot;
+    setUp(() {
+      s = Scenario('bigfoot', 'medusa');
+      bigfoot = s.hero(s.p1);
+      s.give(s.p2, 'Second Shot');
+    });
+
+    Future<List<int>> decide(AiAgent ai) => ai.decide(s.game, boostPrompt(s.p1));
+
+    test('not with a card no fighter can play, just because no one can play it', () async {
+      s.give(s.p1, 'Jackalope Horns'); // the Jackalope isn't on the board
+      s.give(s.p1, 'Savagery');
+      s.place(bigfoot, 0);
       s.place(s.hero(s.p2), 11);
-      s.give(s.p1, 'Crash Through the Trees');
-      s.give(s.p1, 'Jackalope Horns'); // the Jackalope isn't on the board: no one can play it
+      final ai = AiAgent(level: AiLevel.insane);
+      expect(await decide(ai), isEmpty);
+      expect(ai.obeysRules(s.game, boostPrompt(s.p1), [0]), isFalse, reason: 'UMCCC may not do it either');
+    });
+
+    test('to get a hurt hero out of reach as the turn ends, then it moves out of reach', () async {
+      s.game.actions = 0;
+      s.give(s.p1, 'Hoax');
+      // Medusa (move 3, ranged) can shoot anything up to space 7 next turn; Bigfoot (move 3) at 4
+      // needs a BOOST of 1 to get to 8.
+      s.place(bigfoot, 4);
+      s.place(s.hero(s.p2), 0);
+      final ai = AiAgent(level: AiLevel.insane);
+      expect(await decide(ai), isEmpty, reason: 'healthy: not worth a card');
+      bigfoot.hp = escapeHealth;
+      expect(await decide(ai), [0]);
+      final options = s.game.reachable(bigfoot, 3 + 2).keys.toList()..sort();
+      final p = Prompt(
+          player: s.p1,
+          ask: Ask.space,
+          text: 'Move Bigfoot',
+          choices: [for (final o in options) Choice('Space $o', o)],
+          intent: Intent.moveOwn,
+          subject: bigfoot);
+      final [i] = await ai.decide(s.game, p);
+      expect(options[i], greaterThanOrEqualTo(8));
+    });
+
+    test('not to escape when no BOOST gets out of reach', () async {
+      s.game.actions = 0;
+      s.give(s.p1, 'Hoax');
+      bigfoot.hp = 3;
+      s.place(bigfoot, 1);
+      s.place(s.hero(s.p2), 0);
+      expect(await decide(AiAgent(level: AiLevel.insane)), isEmpty);
+    });
+
+    test('with a card the hand limit would discard: two maneuvers would go over it, and no attack or scheme can', () async {
+      s.game.actions = 1; // one action after this maneuver
+      for (final t in ['Hoax', 'Hoax', 'Skirmish', 'Skirmish', 'Feint', 'Regroup', 'Regroup']) {
+        s.give(s.p1, t);
+      }
+      s.place(bigfoot, 0);
+      s.place(s.hero(s.p2), 11); // too far to attack after this maneuver
       final p = boostPrompt(s.p1);
+      final [i] = await AiAgent(level: AiLevel.insane).decide(s.game, p);
+      expect((p.choices[i].value as Card).title, 'Regroup', reason: 'the least useful card');
+      // A scheme it could play instead keeps the hand at the limit: no BOOST.
+      s.p1.hand.removeLast();
+      s.give(s.p1, 'Crash Through the Trees');
+      expect(await decide(AiAgent(level: AiLevel.insane)), isEmpty);
+    });
+  });
+
+  group('ground rules', () {
+    test('a BOOST with a scheme card breaks them', () {
+      final s = Scenario('bigfoot', 'medusa');
+      s.game.actions = 0;
+      s.place(s.hero(s.p1), 4);
+      s.hero(s.p1).hp = 5;
+      s.place(s.hero(s.p2), 0);
+      s.give(s.p2, 'Second Shot');
+      s.give(s.p1, 'Crash Through the Trees');
+      s.give(s.p1, 'Hoax');
+      final p = boostPrompt(s.p1); // a BOOST of 1 gets hurt Bigfoot out of reach
       final ai = AiAgent(level: AiLevel.insane);
       expect(ai.obeysRules(s.game, p, [0]), isFalse);
       expect(ai.obeysRules(s.game, p, [1]), isTrue);

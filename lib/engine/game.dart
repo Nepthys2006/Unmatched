@@ -411,6 +411,9 @@ class Game {
 
   // --------------------------------------------------------------------------------- maneuver
 
+  /// The prompt text of the maneuver BOOST (the AI tells it apart from other BOOST prompts by it).
+  static const maneuverBoostText = 'Discard a card to BOOST your movement?';
+
   Future<void> maneuver(Player p) async {
     turn.maneuvers++;
     await emit(ActionTaken(p, 'Maneuver', ''));
@@ -423,7 +426,7 @@ class Game {
     Card? boost;
     final boostable = boostOptions(p);
     if (boostable.isNotEmpty) {
-      boost = await chooseCard(p, boostable, 'Discard a card to BOOST your movement?',
+      boost = await chooseCard(p, boostable, maneuverBoostText,
           optional: true, skipLabel: "Don't boost", intent: Intent.boost);
       if (boost != null) {
         await discardForBoost(p, boost);

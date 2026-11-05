@@ -34,7 +34,7 @@ class IsmctsAgent implements Agent {
           AiLevel.easy => IsmctsBudget.easy,
           AiLevel.medium => IsmctsBudget.medium,
           AiLevel.hard => IsmctsBudget.hard,
-          AiLevel.insane => IsmctsBudget.insane,
+          AiLevel.insane || AiLevel.pro => IsmctsBudget.insane,
         };
     _helper = AiAgent(level: subPromptLevel ?? level, seed: rng.nextInt(1 << 30));
   }

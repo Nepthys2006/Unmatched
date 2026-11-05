@@ -15,14 +15,21 @@ import 'dart:math';
 import 'ai_playbook.dart';
 import 'combat.dart';
 import 'defs.dart';
+import 'events.dart';
 import 'game.dart';
 import 'prompt.dart';
 import 'state.dart';
 
+part 'ai_pro.dart';
+
 /// Insane plays its best every time; the others also make careless choices 25% (Hard), 55%
 /// (Medium) or 85% (Easy) of the time: any choice the ground rules allow, but never a BOOST.
 /// In the arena Insane beats Hard 59%, Medium 70% and Easy 82% of games.
-enum AiLevel { easy, medium, hard, insane }
+///
+/// Pro is Insane plus a game plan, the way a seasoned player thinks (ai_pro.dart): build the
+/// hand before engaging, let the opponent commit first, press only with more cards, punish an
+/// opponent who stops defending.
+enum AiLevel { easy, medium, hard, insane, pro }
 
 class AiAgent implements Agent {
   AiAgent({this.level = AiLevel.medium, int? seed, this.heroKnowledge = true}) : _rng = Random(seed);
@@ -33,6 +40,15 @@ class AiAgent implements Agent {
   /// Use the hero playbooks and counterplays (ai_playbook.dart). Off only to measure what they
   /// are worth: `dart run tool/ai_arena.dart --b=insane-plain`.
   final bool heroKnowledge;
+
+  /// After a maneuver BOOST: where each fighter moves to get what the BOOST was for.
+  Map<Fighter, Set<int>> _goals = const {};
+
+  /// The turn this agent BOOSTed a maneuver to reach an attack (the other action attacks).
+  int _reachTurn = -1;
+
+  /// Pro only: the plan for the current action (ai_pro.dart).
+  ProMode _proTurn = ProMode.even;
 
   Playbook? _book(Player p) => heroKnowledge ? playbooks[p.hero.id] : null;
   Counterplay? _counter(Player p) => heroKnowledge ? counterplays[p.hero.id] : null;
@@ -46,7 +62,7 @@ class AiAgent implements Agent {
         AiLevel.easy => 1.8,
         AiLevel.medium => 0.6,
         AiLevel.hard => 0.12,
-        AiLevel.insane => 0.0,
+        AiLevel.insane || AiLevel.pro => 0.0,
       };
 
   double _jitter() => _noise == 0.0 ? 0.0 : (_rng.nextDouble() - 0.5) * _noise;
@@ -58,7 +74,7 @@ class AiAgent implements Agent {
         AiLevel.easy => 0.85,
         AiLevel.medium => 0.55,
         AiLevel.hard => 0.25,
-        AiLevel.insane => 0.0,
+        AiLevel.insane || AiLevel.pro => 0.0,
       };
 
   @override
@@ -76,16 +92,26 @@ class AiAgent implements Agent {
         const {Ask.action, Ask.card, Ask.space, Ask.fighter}.contains(p.ask) &&
         _rng.nextDouble() < _blunder;
     final answer = careless ? (p.optional && _rng.nextInt(n + 1) == n ? const <int>[] : [_rng.nextInt(n)]) : _judge(g, p);
-    return _withinRules(g, p, answer);
+    final out = _withinRules(g, p, answer);
+    // A maneuver's BOOST plan lasts until the next action is chosen.
+    if (p.ask == Ask.action) _goals = const {};
+    return out;
   }
 
-  /// The ground rules [me] plays by: everyone's (ai_playbook.dart), my hero's, and those for
-  /// playing against my opponents' heroes.
+  /// The ground rules [me] plays by: everyone's (ai_playbook.dart), my hero's, those for
+  /// playing against my opponents' heroes, and Pro's hero plays (ai_pro.dart).
   List<GroundRule> rulesFor(Game g, Player me) => [
-        ...groundRules,
+        for (final r in groundRules)
+          if (_isPro && r == maneuverBoostRule)
+            _proManeuverRule
+          else if (_isPro && r == schemeBoostRule)
+            _proSchemeBoostRule
+          else
+            r,
         ...?_book(me)?.rules,
         for (final o in g.players)
           if (o.isEnemyOf(me) && !o.eliminated) ...?_counter(o)?.rules,
+        if (_isPro) ..._proRules(me),
       ];
 
   /// Whether [answer] to [p] keeps to the ground rules (the UMCCC Model checks its own picks).
@@ -132,11 +158,14 @@ class AiAgent implements Agent {
         return [
           _best(n, (i) {
             final a = p.choices[i].value as ActionChoice;
-            return _actionScore(g, p.player, a) + (book?.call(g, p.player, a) ?? 0);
+            return _actionScore(g, p.player, a) +
+                (book?.call(g, p.player, a) ?? 0) +
+                (_isPro ? _proActionBonus(g, p.player, a) : 0);
           })
         ];
       case Ask.yesNo:
-        return [_pickYesNo(g, p)];
+        final play = _isPro ? _proPlays[p.player.hero.id]?.yesNo?.call(this, g, p) : null;
+        return [play ?? _pickYesNo(g, p)];
       case Ask.option:
         return [p.intent == Intent.mulligan ? _pickMulligan(p) : _pickOption(g, p)];
       case Ask.number:
@@ -226,6 +255,7 @@ class AiAgent implements Agent {
       }
     }
 
+    if (_isPro) w += _proPlays[owner.hero.id]?.keep?.call(c, owner) ?? 0;
     return w;
   }
 
@@ -274,6 +304,10 @@ class AiAgent implements Agent {
       case Intent.forceEnemy:
         return [_best(cards.length, (i) => -(cards[i].def.value ?? 0) - _effectBonus(cards[i], attacking: true))];
       default:
+        if (_isPro && p.intent == Intent.gainOwn) {
+          final i = _proPlays[p.player.hero.id]?.takeBack?.call(this, g, p, cards);
+          if (i != null) return [i];
+        }
         if (p.optional && _rng.nextDouble() < 0.1) return const [];
         return [_best(cards.length, (i) => worth(cards[i], p.player))];
     }
@@ -292,6 +326,7 @@ class AiAgent implements Agent {
         .length;
 
     final hasFeint = defHand > 0 && tracker.remainingFeints() > 0;
+    final proMode = _isPro ? _proMode(g, p.player) : null;
     return [
       _best(cards.length, (i) {
         final card = cards[i];
@@ -303,6 +338,10 @@ class AiAgent implements Agent {
         var score = tracker.expectedDamage(defFighter, v) * 2.8 +
             tracker.killChance(defFighter, v) * _killValue(defFighter) +
             _effectBonus(card, attacking: true, me: p.player);
+        if (proMode != null) {
+          score += _proCardBonus(g, p.player, c.attacker.fighter, defFighter, card, proMode) +
+              (_proPlays[p.player.hero.id]?.attackCard?.call(this, g, c, card) ?? 0);
+        }
 
         // High printed values (>= 5) punch through Feint safely
         if (v >= 5 && hasFeint) score += 2.0;
@@ -413,6 +452,7 @@ class AiAgent implements Agent {
         }
       }
 
+      if (_isPro) s += _proPlays[p.player.hero.id]?.defenseCard?.call(this, g, c, card) ?? 0;
       s += _jitter();
       if (s > bestS) {
         bestS = s;
@@ -467,57 +507,26 @@ class AiAgent implements Agent {
       }
     }
 
-    // Maneuver boost: only for something the normal move can't do, paid with the cheapest card
-    // that is big enough to do it. (Boosting whenever the hand was big, or with whichever card
-    // had the best boost for its worth, threw away scheme cards and boosts too small to matter.)
-    if (p.optional) {
-      final hero = me.heroFighter;
-      final foes = g.enemyFighters(me).where((e) => e.onBoard).toList();
-      final most = cards.map(g.boostValueOf).fold(0, max);
-      // The least BOOST that reaches the goal, or null if the normal move already does or no boost will.
-      int? least(Fighter f, bool Function(int s) goal) {
-        if (g.reachable(f, g.moveAllowance(f)).keys.any(goal)) return null;
-        for (var b = 1; b <= most; b++) {
-          if (g.reachable(f, g.moveAllowance(f) + b).keys.any(goal)) return b;
-        }
-        return null;
+    // Maneuver BOOST: only for one of the reasons in the ground rule (ai_playbook.dart), paid
+    // with the cheapest card that does it; then the move goes where the BOOST was for. (Boosting
+    // whenever a card was dead, or to reach an attack, wasted cards and lost games.)
+    if (isManeuverBoost(p)) {
+      final mb = maneuverBoost(g, me, reach: _isPro);
+      final free = _isPro ? _proPlays[me.hero.id]?.freeBoost : null;
+      var ok = [for (var i = 0; i < cards.length; i++) if (mb.allows(g, cards[i]) || (free?.call(g, me, cards[i]) ?? false)) i];
+      // To reach an attack, a card that gets there (rather than the cheapest spare one).
+      final reaching = ok.where((i) => mb.reaches(g, cards[i])).toList();
+      if (reaching.isNotEmpty) {
+        ok = reaching;
+        _reachTurn = g.turnNumber;
       }
-
-      // Cards that buy something: each must leave an attack card to attack with, or get a hurt
-      // hero to a space no enemy can strike next turn.
-      final useful = <int>{};
-      if (g.actions > 0 && foes.isNotEmpty) {
-        for (final f in me.onBoard) {
-          final attacks = me.hand.where((c) => g.canAttackWith(c, f)).toList();
-          if (attacks.isEmpty) continue;
-          final spots = _strikeSpots(g, f, foes);
-          final need = least(f, spots.contains);
-          if (need == null) continue;
-          for (var i = 0; i < cards.length; i++) {
-            if (g.boostValueOf(cards[i]) >= need && attacks.any((a) => a != cards[i])) useful.add(i);
-          }
-        }
-      }
-      if (g.actions == 0 && hero.onBoard && hero.hp <= 6 && foes.isNotEmpty) {
-        final need = least(hero, (s) => foes.every((e) => !_strikeZones(g, e).$2.contains(s)));
-        if (need != null) {
-          for (var i = 0; i < cards.length; i++) {
-            if (g.boostValueOf(cards[i]) >= need) useful.add(i);
-          }
-        }
-      }
-      // Cards that cost nothing: no fighter can play them, or the hand limit discards one anyway.
-      final spare = overHandLimit(g, me);
-      final free = {for (var i = 0; i < cards.length; i++) if (spare || isDeadCard(cards[i], me)) i};
-
-      final pool = useful.isNotEmpty ? useful : free;
-      if (pool.isEmpty) return const [];
-      return [
-        pool.reduce((a, b) {
-          double cost(int i) => (isDeadCard(cards[i], me) ? 0.0 : _boostCost(cards[i], me)) + g.boostValueOf(cards[i]) * 0.01;
-          return cost(b) < cost(a) ? b : a;
-        })
-      ];
+      if (ok.isEmpty) return const [];
+      final i = ok.reduce((a, b) {
+        double cost(int i) => (isDeadCard(cards[i], me) ? 0.0 : _boostCost(cards[i], me)) + g.boostValueOf(cards[i]) * 0.01;
+        return cost(b) < cost(a) ? b : a;
+      });
+      _goals = mb.goals(g, cards[i]);
+      return [i];
     }
 
     // A BOOST that can't be declined: the card with the most boost for its worth.
@@ -535,6 +544,10 @@ class AiAgent implements Agent {
   List<int> _pickCards(Game g, Prompt p) {
     final cards = [for (final ch in p.choices) ch.value as Card];
     final order = List.generate(cards.length, (i) => i);
+    if (_isPro && p.intent == Intent.loseEnemy) {
+      final pick = _proPlays[p.player.hero.id]?.discardTheirs?.call(this, g, p, cards);
+      if (pick != null) return pick;
+    }
     if (p.intent == Intent.boost) {
       final cheap = order.where((i) => worth(cards[i], p.player) < 3.0).toList();
       final keep = max(0, p.player.hand.length - 2);
@@ -602,7 +615,14 @@ class AiAgent implements Agent {
           })
         ];
       default:
-        return [0];
+        // Pro: Skirmish-style moves pick the fighter whose move helps most.
+        var i = _isPro ? _proPickMover(g, p) : null;
+        // Pro: which fighter a maneuver moves first (the hero's plays).
+        if (_isPro && i == null && p.intent == Intent.moveOwn) {
+          final f = _proPlays[me.hero.id]?.moveFirst?.call(this, g, me, fs);
+          if (f != null && fs.contains(f)) i = fs.indexOf(f);
+        }
+        return [i ?? 0];
     }
   }
 
@@ -626,6 +646,21 @@ class AiAgent implements Agent {
     final f = p.subject is Fighter ? p.subject as Fighter : null;
     if (f != null) {
       final own = f.isFriendOf(p.player);
+      // After a maneuver BOOST, go where the BOOST was for (out of the enemy's reach).
+      final goal = own && p.intent == Intent.moveOwn ? _goals[f] : null;
+      if (goal != null && spaces.any(goal.contains)) {
+        _goals = {..._goals}..remove(f);
+        return [_best(spaces.length, (i) => goal.contains(spaces[i]) ? ownSpaceScore(g, f, spaces[i]) : double.negativeInfinity)];
+      }
+      // Pro, moving during combat (Skirmish, Dash): mind whose action comes next.
+      if (_isPro && g.combat != null) {
+        return [
+          _best(spaces.length, (i) {
+            final b = _proBoardAfterMove(g, p.player, f, spaces[i]);
+            return own ? ownSpaceScore(g, f, spaces[i]) + b : b;
+          })
+        ];
+      }
       final i = _best(spaces.length, (i) => own ? ownSpaceScore(g, f, spaces[i]) : -enemySpaceThreat(g, f, spaces[i], p.player));
       return [i];
     }
@@ -657,7 +692,9 @@ class AiAgent implements Agent {
     final defCards = f.owner.hand
         .where((c) => c.def.canDefend && f.owner.alive.any((a) => f.owner.script.fighterMayUse(c, a)))
         .length;
-    final actionsLeft = g.actions;
+    // Pro: the actions I take before they act (during their turn, none or my next turn); on a
+    // holding turn (it won't attack), none (rule 8).
+    final actionsLeft = _isPro ? _proActionsLeft(g, f.owner) : g.actions;
 
     var score = 0.0;
 
@@ -716,6 +753,8 @@ class AiAgent implements Agent {
           // Melee vs Melee
           if (actionsLeft > 0) {
             score -= d * 1.2; // Move toward enemy
+          } else if (_isPro && _proQuietTurn(g, f.owner)) {
+            // Pro, holding (no attack this turn): the distance rules decide (ai_pro.dart, rule 8).
           } else {
             if (f.hp <= 4 || defCards <= 1) {
               // Maintain 2-space gap to prevent free double-attacks
@@ -743,7 +782,8 @@ class AiAgent implements Agent {
         final hit = _tracker(g, f.owner, e.owner).expectedAttack(e, extra: 1);
         if (now.contains(s)) {
           score -= 8 * w * hit;
-        } else if (later.contains(s)) {
+        } else if (later.contains(s) && !(_isPro && _proTheirActions(g, f.owner) < 2)) {
+          // (Pro: with a single action left they can't move and then attack.)
           score -= 4 * w * hit;
         }
       }
@@ -780,6 +820,9 @@ class AiAgent implements Agent {
       if (actionsLeft == 0) score += cp.endTurnAt?.call(g, f, s, e) ?? 0;
       if (f.onBoard) score += cp.moveTo?.call(g, f, s, e) ?? 0;
     }
+
+    // 8. Pro: while building the hand or making distance, stay out of their reach.
+    if (_isPro) score += _proSpaceBonus(g, f, s);
 
     return score;
   }
@@ -1116,6 +1159,10 @@ class AiAgent implements Agent {
   }
 
   int _pickNumber(Game g, Prompt p) {
+    if (_isPro) {
+      final i = _proPlays[p.player.hero.id]?.number?.call(this, g, p);
+      if (i != null) return i;
+    }
     if (p.intent == Intent.harm) return 0; // Min value for harmful number
     return p.choices.length - 1; // Max value for beneficial number
   }
