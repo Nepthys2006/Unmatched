@@ -167,7 +167,7 @@ void main() {
         await boot(t, size, home: const SetupScreen());
         await pumpUntil(t, () => find.text('UMCCC MODEL').evaluate().isNotEmpty);
 
-        for (final l in ['EASY', 'MEDIUM', 'HARD', 'INSANE', 'UMCCC MODEL']) {
+        for (final l in ['EASY', 'MEDIUM', 'HARD', 'INSANE', 'PRO', 'UMCCC MODEL']) {
           expect(find.text(l), findsOneWidget, reason: l);
         }
         bool summaryHas(String s) => find

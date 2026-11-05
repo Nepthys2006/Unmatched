@@ -169,7 +169,10 @@ class Lobby {
     'mode': mode.name,
     'players': players,
     'map': mapId,
-    'ai': ai.name,
+    // Builds older than the Pro level only know the first four, and a name they don't know would
+    // break their lobby: they read 'ai' (Pro shows as Insane there), newer builds read 'aiLevel'.
+    'ai': ai == AiLevel.pro ? AiLevel.insane.name : ai.name,
+    'aiLevel': ai.name,
     'seats': [for (final s in seats) s.toJson()],
   };
 
@@ -177,9 +180,17 @@ class Lobby {
     mode: GameMode.values.byName(m['mode'] as String),
     players: m['players'] as int,
     mapId: m['map'] as String,
-    ai: AiLevel.values.byName(m['ai'] as String),
+    ai: _aiLevel(m['aiLevel']) ?? _aiLevel(m['ai']) ?? AiLevel.insane,
     seats: [for (final s in m['seats'] as List) LobbySeat.fromJson((s as Map).cast<String, Object?>())],
   );
+
+  /// A level this build knows by that name, else null (a newer build's level).
+  static AiLevel? _aiLevel(Object? name) {
+    for (final l in AiLevel.values) {
+      if (l.name == name) return l;
+    }
+    return null;
+  }
 
   /// Heroes already picked by seats other than [seat].
   Set<String> takenBy(int? seat) => {

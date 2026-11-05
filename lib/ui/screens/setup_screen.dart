@@ -34,8 +34,14 @@ class _SetupScreenState extends State<SetupScreen> {
 
   List<MapDef> get _maps => mapsFor(context.services.data, _mode, _players);
 
-  /// A short landscape phone: the AI list needs to be tighter to fit five tiles.
-  bool get _tight => MediaQuery.sizeOf(context).height < 400;
+  /// A landscape phone: the six AI tiles (five levels and the UMCCC Model) only fit when they are
+  /// shorter and only the chosen one shows its description ...
+  bool get _tight => MediaQuery.sizeOf(context).height < 480;
+
+  /// ... and on a short one (under 400 high) none of them does.
+  bool get _tighter => MediaQuery.sizeOf(context).height < 400;
+  double get _aiTileHeight => _tighter ? 34 : (_tight ? 38 : 50);
+  double get _aiTileGap => _tighter ? 3 : (_tight ? 4 : 8);
 
   @override
   void dispose() {
@@ -209,28 +215,30 @@ class _SetupScreenState extends State<SetupScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const SectionLabel('AI difficulty'),
-                // Five tiles don't fit a short landscape phone: shrink them and let only the chosen
-                // one show its description.
+                // Six tiles don't fit a landscape phone: shrink them and let only the chosen one (or,
+                // on a short phone, none) show its description.
                 for (final l in AiLevel.values) ...[
                   ChoiceTile(
                     label: l.label,
-                    sub: _tight && (_umccc || _ai != l) ? null : l.blurb,
+                    sub: _tighter || (_tight && (_umccc || _ai != l)) ? null : l.blurb,
                     accent: l.color,
                     selected: !_umccc && _ai == l,
-                    height: _tight ? 38 : 50,
+                    height: _aiTileHeight,
                     onTap: () => setState(() {
                       _ai = l;
                       _umccc = false;
                     }),
                   ),
-                  SizedBox(height: _tight ? 4 : 8),
+                  SizedBox(height: _aiTileGap),
                 ],
                 ChoiceTile(
                   label: umcccLabel,
-                  sub: _mode != GameMode.duel ? 'Available in 1 v 1 only.' : (_tight && !_umccc ? null : umcccBlurb),
+                  sub: _mode != GameMode.duel
+                      ? 'Available in 1 v 1 only.'
+                      : (_tighter || (_tight && !_umccc) ? null : umcccBlurb),
                   accent: umcccColor,
                   selected: _umccc,
-                  height: _tight ? 38 : 50,
+                  height: _aiTileHeight,
                   onTap: _mode == GameMode.duel ? () => setState(() => _umccc = true) : null,
                 ),
               ],
